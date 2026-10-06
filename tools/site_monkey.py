@@ -211,6 +211,45 @@ def main() -> int:
                             problems.append(f"关系树：只读拖动后节点数变了（{info['count']}→{after['count']}）")
                         if after["canvas"][1] < 120:
                             problems.append("关系树：只读拖动后画布被压没了（疑似空白）")
+
+                        # 点空白：不该整块重绘（节点数与 SVG 结构都不该变）
+                        empty = frame.evaluate("""() => {
+                          const c = document.querySelector('.tree-canvas');
+                          const r = c.getBoundingClientRect();
+                          const before = document.querySelector('.tree-svg').outerHTML.length;
+                          return {x: r.x + 40, y: r.y + r.height - 40, before};
+                        }""")
+                        page.mouse.click(box["x"] + empty["x"], box["y"] + empty["y"])
+                        page.wait_for_timeout(900)
+                        after_empty = frame.evaluate("""() => ({
+                          nodes: document.querySelectorAll('.tree-node').length,
+                          size: document.querySelector('.tree-svg').outerHTML.length,
+                        })""")
+                        same = abs(after_empty["size"] - empty["before"]) < 40
+                        print(f"{'关系树点空白':24s} 节点 {after_empty['nodes']} · SVG 长度变化 {abs(after_empty['size'] - empty['before'])}")
+                        if after_empty["nodes"] != info["count"]:
+                            problems.append("关系树：点空白后节点数变了")
+                        if not same:
+                            problems.append("关系树：点空白触发了整块重绘（看着像刷新）")
+
+                        # 拖动空白：应该平移画布（内层 g 的 transform 变）
+                        drag = frame.evaluate("""() => {
+                          const c = document.querySelector('.tree-canvas');
+                          const r = c.getBoundingClientRect();
+                          const g = document.querySelector('.tree-svg g');
+                          return {x: r.x + 60, y: r.y + r.height - 60, before: g.getAttribute('transform')};
+                        }""")
+                        page.mouse.move(box["x"] + drag["x"], box["y"] + drag["y"])
+                        page.mouse.down()
+                        for step in range(1, 5):
+                            page.mouse.move(box["x"] + drag["x"] + step * 30, box["y"] + drag["y"] - step * 10)
+                            page.wait_for_timeout(90)
+                        page.mouse.up()
+                        page.wait_for_timeout(700)
+                        moved = frame.evaluate("() => document.querySelector('.tree-svg g').getAttribute('transform')")
+                        print(f"{'关系树拖空白=平移':24s} {'已平移' if moved != drag['before'] else '没平移'}")
+                        if moved == drag["before"]:
+                            problems.append("关系树：拖动空白没有平移画布")
                 page.close()
 
         browser.close()
