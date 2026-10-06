@@ -18,11 +18,14 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from world import views as world_views
+from world import relationship as relationship_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/world/", include("world.urls", namespace="world")),
     path("world", world_views.workspace, name="workspace"),
+    # 关系树独立页（模版选择 + 网格画布编辑器），接口在 /api/world/relationship/ 下
+    path("relationship", relationship_views.relationship_page, name="relationship"),
     # 旧地址保留成跳转，别让已经发出去的链接失效
     path("w", RedirectView.as_view(url="/world", permanent=False)),
     path("w/timeline/<int:doc_id>",

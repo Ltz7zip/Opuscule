@@ -4,6 +4,7 @@
 from django.urls import path, re_path
 
 from . import views
+from . import relationship
 
 app_name = "world"
 
@@ -84,6 +85,13 @@ urlpatterns = [
     path("tree-nodes/<int:node_id>", views.tree_node_detail, name="tree-node-detail"),
     path("tree-nodes/<int:node_id>/card", views.tree_node_card, name="tree-node-card"),
     path("tree-edges/<int:edge_id>", views.tree_edge_detail, name="tree-edge-detail"),
+
+    # 关系树独立页（/relationship）自己那套：模版目录 / 新建 / 编辑区状态 / 关系清单
+    path("relationship/templates", relationship.template_collection, name="relationship-templates"),
+    path("relationship/trees", relationship.tree_collection, name="relationship-trees"),
+    path("relationship/trees/<int:doc_id>", relationship.tree_detail, name="relationship-tree"),
+    path("relationship/trees/<int:doc_id>/relations", relationship.tree_relations,
+         name="relationship-tree-relations"),
 
     # 经典地图
     path("maps/<int:doc_id>", views.map_state_view, name="map-state"),

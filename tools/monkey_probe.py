@@ -38,8 +38,18 @@ def flatten(nodes, out=None):
 def main() -> int:
     rounds = int(sys.argv[1]) if len(sys.argv) > 1 else 25
     state = api("/api/world/state")
-    docs = [d for d in flatten(state["documents"]) if d["type"] != "folder"][:8]
-    pages = [f"{BASE}/world"] + [f"{BASE}/world#doc={d['id']}" for d in docs] + [f"{BASE}/world"]
+    everything = [d for d in flatten(state["documents"]) if d["type"] != "folder"]
+    docs = everything[:8]
+    # 关系树是这一页的主角：前 8 篇里未必有，单独保底拉一篇进来
+    for doc in everything:
+        if doc["type"] == "familyTree" and doc not in docs:
+            docs.append(doc)
+            break
+    pages = ([f"{BASE}/world"] + [f"{BASE}/world#doc={d['id']}" for d in docs]
+             # 关系树独立页也拉进来乱点（它有右键菜单 / 拖拽连线这些手势）
+             + [f"{BASE}/relationship"]
+             + [f"{BASE}/relationship?doc={d['id']}" for d in docs if d["type"] == "familyTree"]
+             + [f"{BASE}/world"])
 
     random.seed(7)
     problems: list[str] = []
