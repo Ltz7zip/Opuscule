@@ -98,32 +98,70 @@ body {
 
 .sb-head { padding: var(--mn-3) var(--mn-3) var(--mn-2); gap: var(--mn-2); }
 .sb-search { background: var(--mn-surface-muted); border-radius: 999px; padding: 6px 12px; }
-.sb-icon { background: var(--mn-surface-muted); border-radius: 50%; width: 32px; height: 32px; padding: 0; }
+/* 「展开 / 折叠全部」：32×32 的圆钮。
+   它是 flex 行里的一员，不给 flex: 0 0 auto 就会被旁边的搜索框挤窄——
+   border-radius: 50% + 高 32、宽 9 = 一个竖椭圆（"⇕" 看着像被拉长了）。 */
+.sb-icon {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 32px; min-width: 32px; height: 32px;
+  padding: 0;
+  display: grid; place-items: center;
+  background: var(--mn-surface-muted);
+  border-radius: 50%;
+}
+
+/* 圆形控件（头像 / 圆钮 / 圆点）在 flex 里一律不许被压扁：
+   border-radius: 50% 的盒子宽高一旦不等，圆就变成椭圆。 */
+.wc-avatar, .uc-avatar, .sb-icon, .presence .pr, .tab .t-close,
+.b-dot, .mm-dot, .swatch-btn, .tool-art, .mr-avatar, .vr-index, .gc-art {
+  flex: 0 0 auto;
+}
 
 .sb-tree { padding: var(--mn-1) var(--mn-2) var(--mn-3); }
 .sb-tree::-webkit-scrollbar-thumb { background: var(--mn-border-strong); border-radius: 5px; }
 .row { padding: 7px 10px; margin: 1px 0; border-radius: 10px; }
 .row.is-active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mn-accent) 24%, transparent); }
 
-/* 侧栏底部：三个动作是"药丸"。
-   老版本是 flex + 可收缩，侧栏一窄三个按钮就互相压字（"新建文档"和"文件夹"叠在一起）。
-   现在：flex-basis 取 max-content（按钮天生要占内容那么宽）+ min-width 兜底 + 允许折行，
-   放得下就一行排开，放不下就自动折行——任何一档宽度都不会把文字挤出盒子。 */
+/* 侧栏底部：三个动作是"幽灵按钮"——图标 + 文字，平时没有壳，悬停才浮出圆角底。
+   为什么不做成药丸：280px 的侧栏放不下三个带壳的药丸，硬塞就会折行（看着像坏了），
+   再缩就会互相压字（老版本那处"新建文档 / 文件夹"叠字）。
+   幽灵态一行三个正好放得下；更窄的侧栏（900–1119）只留图标，靠 title 兜住语义。
+   注：minimal.css 末尾的"清底"规则（`.sb-foot button`）本来就会清掉外壳，
+   所以这里必须把幽灵态显式写回来，否则按钮看起来像三行散字。 */
 .sb-foot {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--mn-2);
-  padding: var(--mn-3);
+  align-items: center;
+  gap: var(--mn-1);
+  /* 侧栏本身有 8px 内边距（minimal.css）：这里用负外边距把底栏推到卡片的边上，
+     底部两个圆角交给侧栏的 overflow: hidden 去裁，底栏才不会变成卡里的一张浮片 */
+  margin: 0 calc(-1 * var(--mn-2)) calc(-1 * var(--mn-2));
+  padding: 10px calc(var(--mn-2) + 2px);
   border-top: 1px solid var(--shell-line);
   background: var(--mn-surface-muted);
 }
-.sb-new {
-  flex: 1 1 max-content;
-  min-width: max-content;
+.sb-foot .sb-new {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: max-content;      /* 文字永远在盒子里，挤不下宁可折行 */
+  height: var(--mn-h);
+  padding: 0 4px;              /* 三个加起来 233px：280px 侧栏（内容区 258）一行放得下 */
+  gap: 4px;
   justify-content: center;
-  padding: 0 10px;
+  border: 1px solid transparent;
   border-radius: 999px;
+  background: transparent;
+  color: var(--mn-ink-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
+.sb-foot .sb-new:hover {
+  background: var(--mn-surface);
+  border-color: var(--shell-line);
+  color: var(--mn-ink);
+}
+.sb-foot .sb-new > .icon, .sb-foot .sb-new > span { flex: 0 0 auto; white-space: nowrap; }
 
 /* -------------------------------------------------------- 工作区：一张卡 */
 .workspace {
@@ -257,6 +295,27 @@ body {
 @media (max-width: 1023px) {
   :root { --shell-pad: 8px; --shell-gap: 8px; }
   .workspace, .sidebar { border-radius: var(--shell-radius-sm); }
+}
+
+/* --------------------------------------------- 侧栏宽度 / 底部三个动作 */
+/* 底部三个动作带文字时一共要 ~236px（图标 15 + 文字 + 内边距，见 .sb-new）。
+   侧栏内容区 = 侧栏宽 − 2（边框） − 20（.sb-foot 内边距）：
+     ≥1120：侧栏 280 → 258，放得下，一行三个；
+     900–1119：地方不够，只留图标（按钮的 title 里还写着全名）。 */
+@media (min-width: 1120px) and (max-width: 1439px) {
+  .sidebar { width: 280px; }
+}
+@media (min-width: 900px) and (max-width: 1119px) {
+  .sb-foot .sb-new > span { display: none; }
+  .sb-foot .sb-new { flex: 1 1 auto; padding: 0; }
+}
+
+/* 平板档（640–899）：顶栏放不下"世界名 + 十来个图标 + 账号"，
+   只留世界头像，别让顶栏被迫横向滚（和手机档的处理一致，只是门槛更高一点）。 */
+@media (min-width: 640px) and (max-width: 899px) {
+  .wc-name { display: none; }
+  .world-chip { padding: 0 8px 0 4px; }
+  .tb-right { gap: 4px; }
 }
 
 @media (max-width: 899px) {

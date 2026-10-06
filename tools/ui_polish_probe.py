@@ -96,6 +96,35 @@ AUDIT_JS = r"""
 }
 """
 
+# 盒子几何：圆钮不许被 flex 压成椭圆、侧栏底部那三个动作必须是一行
+SHAPE_JS = r"""
+() => {
+  const problems = [];
+
+  // 1) border-radius: 50% 的盒子，宽高必须相等——不等就是"圆被压成椭圆"
+  //    （侧栏那个 32×32 的「⇕」曾经被挤成 9×32）
+  const circles = [];
+  document.querySelectorAll('button, [class*="avatar"], [class*="icon"], .pr, .b-dot, .mm-dot, .swatch-btn')
+    .forEach((el) => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (!cs.borderRadius.startsWith('50%')) return;
+      if (cs.display === 'none' || cs.visibility === 'hidden') return;
+      if (r.width < 1 || r.height < 1) return;
+      if (Math.abs(r.width - r.height) <= 1.5) return;
+      circles.push(`${el.id || el.className || el.tagName} ${Math.round(r.width)}×${Math.round(r.height)}`);
+    });
+
+  // 2) 侧栏底部三个动作：应该排成一行（竖排 = 折行了，看着像三个散字）
+  const foot = document.querySelector('.sb-foot');
+  const footRows = foot
+    ? new Set([...foot.querySelectorAll('.sb-new')].map((b) => Math.round(b.getBoundingClientRect().top))).size
+    : 0;
+
+  return { circles, footRows };
+}
+"""
+
 
 def main() -> int:
     state = api("/api/world/state")
@@ -131,6 +160,18 @@ def main() -> int:
             page.screenshot(path=str(SHOTS / f"{label}.png"), full_page=full)
             print(f"  截图 → /tmp/ui_shots/{label}.png")
             audit(label)
+            shape(label)
+
+        def shape(label):
+            """盒子几何：圆钮被压成椭圆 / 侧栏底部折行，都算显示错误。"""
+            data = page.evaluate(SHAPE_JS)
+            if data["circles"]:
+                problems.append(f"{label} · 圆钮被压成椭圆：{data['circles']}")
+                print(f"  ⚠ {label} 椭圆：{data['circles']}")
+            for key, text in (("footRows", "侧栏底部三个动作折行了"),):
+                if data[key] > 1:
+                    problems.append(f"{label} · {text}（{data[key]} 行）")
+                    print(f"  ⚠ {label} {text}（{data[key]} 行）")
 
         # ---- 主界面 ----
         graph = by_type.get("graph")
