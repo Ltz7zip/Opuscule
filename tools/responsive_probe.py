@@ -71,9 +71,19 @@ def main() -> int:
                 return { x: Math.round(r.x), w: Math.round(r.width), h: Math.round(r.height) };
               };
               const wide = [];
+              // 顶栏在窄屏是"可横向滚动的一条"（responsive.css 定的）：里面的东西滚出去
+              // 是有意为之，不算溢出——只有**没有滚动容器兜着**的元素才真的看不见。
+              const inScroller = (node) => {
+                for (let p = node.parentElement; p && p !== document.body; p = p.parentElement) {
+                  const cs = getComputedStyle(p);
+                  if ((cs.overflowX === 'auto' || cs.overflowX === 'scroll')
+                      && p.scrollWidth > p.clientWidth + 2) return true;
+                }
+                return false;
+              };
               document.querySelectorAll('.topbar *, .card-view *').forEach((n) => {
                 const r = n.getBoundingClientRect();
-                if (r.width && r.right > window.innerWidth + 2 && n.offsetParent) {
+                if (r.width && r.right > window.innerWidth + 2 && n.offsetParent && !inScroller(n)) {
                   wide.push((n.className || n.tagName) + ':' + Math.round(r.right));
                 }
               });
