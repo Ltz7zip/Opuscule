@@ -1378,7 +1378,8 @@ function attachMentionPicker(node, entry) {
     state.items.forEach((item, index) => {
       const row = el('div', `mention-row${index === state.index ? ' is-active' : ''}`);
       row.appendChild(el('span', 'mr-name', item.name));
-      if (item.entity_type) row.appendChild(el('span', 'mr-kind', item.entity_type));
+      if (item.fuzzy) row.appendChild(el('span', 'mr-kind', item.snippet || '≈ 打错了一点'));
+      else if (item.entity_type) row.appendChild(el('span', 'mr-kind', item.entity_type));
       row.addEventListener('mousedown', (event) => {
         event.preventDefault();
         insert(item);
