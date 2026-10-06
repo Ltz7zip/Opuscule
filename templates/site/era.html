@@ -1,0 +1,57 @@
+{% extends "site/base.html" %}
+{% block title %}{{ era.name }} · {{ world.name }}{% endblock %}
+{% block content %}
+  <nav class="crumbs"><a href="{% url 'site:home' world.published_slug %}">首页</a> / 纪元</nav>
+
+  <header class="era-head era-t-{{ era.theme }}">
+    <h1 class="page-title">{{ era.name }}</h1>
+    {% if era.length_years %}<p class="era-span">跨度 {{ era.length_years|floatformat:"-1" }} 年</p>{% endif %}
+    {% if era.description %}<p class="era-desc">{{ era.description }}</p>{% endif %}
+  </header>
+
+  {% if all_eras|length > 1 %}
+    <nav class="era-switch">
+      {% for item in all_eras %}
+        <a class="era-pill{% if item.id == era.id %} is-on{% endif %} era-t-{{ item.theme }}"
+           href="{% url 'site:era' world.published_slug item.id %}">{{ item.name }}</a>
+      {% endfor %}
+    </nav>
+  {% endif %}
+
+  <section class="era-events">
+    <h2>这个纪元里发生的事</h2>
+    <ol class="era-timeline">
+      {% for row in events %}
+        <li class="era-event">
+          <span class="ee-date">{{ row.date_label }}</span>
+          <span class="ee-body">
+            <a class="ee-title" href="{% url 'site:page' world.published_slug row.document.slug %}">{{ row.title }}</a>
+            {% if row.description %}<span class="ee-desc">{{ row.description }}</span>{% endif %}
+            {% if row.cards %}
+              <span class="ee-cards">
+                {% for card in row.cards %}<a href="{% url 'site:page' world.published_slug card.slug %}">{{ card.name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}
+              </span>
+            {% endif %}
+          </span>
+        </li>
+      {% empty %}
+        <li class="empty">这个纪元还没有事件。可以在工作区的时间线上把事件的「纪元」设成它。</li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  {% if documents %}
+    <section class="section">
+      <h2>属于这个纪元的内容</h2>
+      <div class="grid">
+        {% for doc in documents %}
+          <a class="tile" href="{% url 'site:page' world.published_slug doc.slug %}">
+            {% if doc.cover %}<span class="tile-cover" style="background-image:url('{{ doc.cover }}')"></span>{% endif %}
+            <span class="tile-kind">{{ doc.get_document_type_display }}{% if doc.entity_type %} · {{ doc.entity_type.name }}{% endif %}</span>
+            <span class="tile-name">{{ doc.name }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

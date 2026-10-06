@@ -35,13 +35,14 @@ from .models import (
     DOC_TIMELINE,
     DOC_TREE,
     Document,
+    TimelineEvent,
     World,
     make_slug,
 )
 
 # 哪些文档类型会在站点上拥有自己的页面（对齐 wikiChrome.pages.docTypes 的口径）：
 # 图谱、看板、文件夹这类"工作台视图"不出版。
-SITE_DOC_TYPES = (DOC_CARD, DOC_TIMELINE, DOC_MAP, DOC_CANVAS, DOC_NOTE, DOC_TABLE, DOC_TREE)
+SITE_DOC_TYPES = (DOC_CARD, DOC_TIMELINE, DOC_MAP, DOC_GRAPH, DOC_CANVAS, DOC_NOTE, DOC_TABLE, DOC_TREE)
 
 SITE_DOC_TYPE_SET = set(SITE_DOC_TYPES)
 
@@ -81,16 +82,34 @@ def filter_documents(documents, *, type_slug: str = "", era_id: int = 0):
     return documents
 
 
-def search_documents(world: World, keyword: str, limit: int = 60) -> list[dict]:
+def search_documents(world: World, keyword: str, limit: int = 400) -> list[dict]:
     """发布站点上的全文检索：名称、别名、正文、区块文字、属性值、事件标题。
 
-    只搜"会出版"的文档，游客搜不到草稿。
+    只搜"会出版"的文档，游客搜不到草稿。片段切成 ``parts``（``hit=True`` 的是命中处），
+    模板据此加 ``<mark>``，不用在前端再算一遍。
     """
     keyword = (keyword or "").strip()
     if not keyword:
         return []
     lowered = keyword.lower()
     hits: list[dict] = []
+
+    def split_parts(text: str) -> list[dict]:
+        """把片段按命中处切开（大小写不敏感，全部命中都标）。"""
+        parts, cursor = [], 0
+        low = text.lower()
+        while True:
+            found = low.find(lowered, cursor)
+            if found < 0:
+                break
+            if found > cursor:
+                parts.append({"text": text[cursor:found], "hit": False})
+            parts.append({"text": text[found:found + len(keyword)], "hit": True})
+            cursor = found + len(keyword)
+        if cursor < len(text):
+            parts.append({"text": text[cursor:], "hit": False})
+        return parts or [{"text": text, "hit": False}]
+
     for document in site_documents(world).prefetch_related("events"):
         card = getattr(document, "card", None)
         parts = [document.name]
@@ -110,19 +129,107 @@ def search_documents(world: World, keyword: str, limit: int = 60) -> list[dict]:
             continue
         if position < 0:
             position = 0
-        snippet = haystack[max(0, position - 40):position + len(keyword) + 60].replace("\n", " ").strip()
+        window = haystack[max(0, position - 40):position + len(keyword) + 60].replace("\n", " ").strip()
         hits.append({
             "document": document,
             "name": document.name,
+            "name_hit": lowered in document.name.lower(),
             "type_label": document.get_document_type_display(),
             "type_name": document.entity_type.name if document.entity_type else "",
             "era_name": document.era.name if document.era else "",
-            "snippet": snippet,
+            "snippet": window,
+            "parts": split_parts(window),
             "matched_events": matched_events[:3],
         })
         if len(hits) >= limit:
             break
     return hits
+
+
+def paginate(items: list, page: int = 1, per_page: int = 20) -> dict:
+    """朴素分页（站点搜索结果用）。"""
+    total = len(items)
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(max(1, page), pages)
+    start = (page - 1) * per_page
+    return {
+        "items": items[start:start + per_page],
+        "page": page,
+        "pages": pages,
+        "total": total,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+
+
+def publish_preview(world: World) -> dict:
+    """发布差异预览：这次发布会新增 / 更新 / 下架哪些文档。
+
+    * ``added``：还没上过站点的（pending）
+    * ``changed``：上过但之后改过的（stale）
+    * ``removed``：站点上不再收录的（excluded / unpublished / 已隐藏 / 已删）
+    """
+    from .models import publish_state
+
+    added, changed, removed = [], [], []
+    for document in world.documents.filter(deleted_at__isnull=True).exclude(document_type=DOC_FOLDER):
+        state = publish_state(document)
+        entry = {"id": document.id, "name": document.name, "type": document.document_type,
+                 "state": state, "updated_at": document.updated_at.isoformat() if document.updated_at else None}
+        if state == "pending":
+            added.append(entry)
+        elif state == "stale":
+            changed.append(entry)
+        elif state in ("excluded", "unpublished"):
+            removed.append(entry)
+    for document in world.documents.filter(deleted_at__isnull=False, is_published=True).exclude(document_type=DOC_FOLDER):
+        removed.append({"id": document.id, "name": document.name, "type": document.document_type,
+                        "state": "deleted", "updated_at": None})
+    return {
+        "added": added,
+        "changed": changed,
+        "removed": removed,
+        "summary": {"added": len(added), "changed": len(changed), "removed": len(removed)},
+    }
+
+
+def era_summary(world: World, era) -> dict:
+    """一个纪元在站点上的样子：说明、颜色、以及按时间排好的事件。"""
+    events = (
+        TimelineEvent.objects.filter(document__world=world, era=era)
+        .select_related("document", "featured_card")
+        .order_by("year", "month", "day", "hour", "id")
+    )
+    rows = []
+    for event in events:
+        rows.append({
+            "id": event.id,
+            "title": event.title,
+            "date_label": event.date_label,
+            "description": event.description,
+            "document": event.document,
+            "cards": list(event.linked_cards.all())[:6],
+        })
+    linked_documents = [
+        document for document in site_documents(world)
+        if document.era_id == era.id
+        or (getattr(document, "card", None) is not None
+            and getattr(document.card, "era_mode", "") == "only"
+            and era.id in (document.card.era_ids or []))
+    ]
+    return {"era": era, "events": rows, "documents": linked_documents[:24]}
+
+
+def site_eras(world: World) -> list[dict]:
+    """站点上"有内容"的纪元（有事件、或挂着文档）。"""
+    shown = {item["id"] for item in site_filters(world)["eras"]}
+    rows = []
+    for era in world.eras.order_by("position", "id"):
+        if era.id in shown or TimelineEvent.objects.filter(document__world=world, era=era).exists():
+            rows.append({"id": era.id, "name": era.name, "theme": era.theme,
+                         "description": era.description, "cover": era.cover,
+                         "length_years": era.length_years})
+    return rows
 
 
 def site_filters(world: World) -> dict:

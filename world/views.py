@@ -2859,6 +2859,14 @@ def publish_view(request):
 
 
 @csrf_exempt
+@require_safe
+def publish_preview_view(request):
+    """发布差异预览：这次发布会新增 / 更新 / 下架哪些文档（前端分享面板直接列名字）。"""
+    world = current_world()
+    return json_response(publish_service.publish_preview(world))
+
+
+@csrf_exempt
 @require_http_methods(["POST"])
 def unpublish_view(request):
     """下线站点：内容保留，站点立刻 404。"""

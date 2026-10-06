@@ -237,3 +237,46 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
   .filter-chip { margin-right: 6px; }
   .fc-menu { right: auto; left: 0; }
 }
+
+/* ------------------------------------------------- 纪元页与纪元胶囊 */
+.era-head { margin: 10px 0 18px; }
+.era-span { color: var(--ink-dim, #857c6b); font-size: 13px; margin: 6px 0 0; }
+.era-desc { color: var(--ink-soft, #4a4438); font-size: 15px; line-height: 1.7; margin: 10px 0 0; max-width: 62ch; }
+.era-switch, .era-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 26px; }
+.era-pill {
+  padding: 6px 14px; border-radius: 999px; text-decoration: none; font-size: 13.5px;
+  border: 1px solid var(--line, #e2ddd2); color: inherit; background: var(--surface, #fff);
+}
+.era-pill.is-on { font-weight: 600; }
+.era-t-blue { background: #cee2f5; border-color: #b2c7e8; color: #2f4a7a; }
+.era-t-sky { background: #cae6f2; border-color: #a8d0e4; color: #28566e; }
+.era-t-violet { background: #d8d5f4; border-color: #c2bde8; color: #4b447f; }
+.era-t-red { background: #f9d8d2; border-color: #ecbfb8; color: #7d3a33; }
+.era-t-teal { background: #cdeada; border-color: #b0dbc7; color: #245c46; }
+.era-t-gold { background: #f6e7c2; border-color: #e8d098; color: #7a5a1e; }
+.era-head.era-t-blue, .era-head.era-t-sky, .era-head.era-t-violet,
+.era-head.era-t-red, .era-head.era-t-teal, .era-head.era-t-gold {
+  padding: 18px 20px; border-radius: 16px;
+}
+.era-timeline { list-style: none; padding: 0; margin: 8px 0 0; }
+.era-event { display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line, #e2ddd2); }
+.ee-date { flex: 0 0 190px; color: var(--ink-dim, #857c6b); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ee-body { display: flex; flex-direction: column; gap: 4px; }
+.ee-title { font-family: var(--site-heading); font-size: 18px; }
+.ee-desc { color: var(--ink-soft, #4a4438); font-size: 14px; line-height: 1.6; }
+.ee-cards { color: var(--ink-dim, #857c6b); font-size: 12.5px; }
+
+/* ------------------------------------------------- 搜索：高亮与分页 */
+.hit-snippet mark { background: #f6e7a8; color: inherit; padding: 0 2px; border-radius: 3px; }
+.pager { display: flex; align-items: center; gap: 14px; margin: 22px 0 8px; }
+.pager-btn {
+  padding: 7px 14px; border-radius: 999px; text-decoration: none; font-size: 13.5px;
+  border: 1px solid var(--line, #e2ddd2); color: inherit;
+}
+.pager-btn:hover { border-color: var(--ink-dim, #6b6459); }
+.pager-info { color: var(--ink-dim, #857c6b); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .era-event { flex-direction: column; gap: 4px; }
+  .ee-date { flex: none; }
+}

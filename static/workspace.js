@@ -4425,6 +4425,40 @@ async function publishDialog() {
       body.appendChild(line);
     }
 
+    // 发布差异预览：列清楚这次发布会新增 / 更新 / 下架哪些文档
+    const preview = el('div', 'publish-preview');
+    preview.appendChild(el('p', 'hint', '正在算这次发布会改什么…'));
+    body.appendChild(preview);
+    api('/api/world/publish/preview').then((data) => {
+      preview.innerHTML = '';
+      const groups = [
+        ['新增上线', data.added, 'is-add'],
+        ['内容更新', data.changed, 'is-update'],
+        ['将从站点移除', data.removed, 'is-remove'],
+      ];
+      const total = (data.summary.added + data.summary.changed + data.summary.removed);
+      if (!total) {
+        preview.appendChild(el('p', 'hint', summary.published
+          ? '站点已经是最新的，这次发布不会有变化。'
+          : '第一次发布，站点上会出现下面这些内容。'));
+      }
+      groups.forEach(([label, rows, cls]) => {
+        if (!rows || !rows.length) return;
+        const box = el('div', `pp-group ${cls}`);
+        box.appendChild(el('b', null, `${label}（${rows.length}）`));
+        const list = el('ul', 'pp-list');
+        rows.slice(0, 8).forEach((row) => {
+          const item = el('li');
+          item.appendChild(el('span', null, row.name));
+          item.appendChild(el('span', 'pp-type', row.type));
+          list.appendChild(item);
+        });
+        if (rows.length > 8) list.appendChild(el('li', 'pp-more', `…还有 ${rows.length - 8} 份`));
+        box.appendChild(list);
+        preview.appendChild(box);
+      });
+    }).catch(() => { preview.innerHTML = ''; });
+
     const row = (label, node) => {
       const wrap = el('div', 'form-row');
       wrap.appendChild(el('label', null, label));

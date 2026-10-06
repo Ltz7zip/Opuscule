@@ -12,6 +12,7 @@ app_name = "site"
 urlpatterns = [
     path("<str:slug>/", site_views.home, name="home"),
     path("<str:slug>/search", site_views.search, name="search"),
+    path("<str:slug>/era/<int:era_id>", site_views.era_page, name="era"),
     path("<str:slug>/unlock", site_views.unlock, name="unlock"),
     path("<str:slug>/<str:doc_slug>/", site_views.page, name="page"),
 ]

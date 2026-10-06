@@ -92,6 +92,7 @@ def home(request, slug):
         "active_filter": active,
         "query": keyword,
         "hits": hits,
+        "eras": publish_service.site_eras(world),
     })
     return render(request, "site/home.html", context)
 
@@ -115,10 +116,33 @@ def search(request, slug):
             ).values_list("id", flat=True)
         )
         hits = [hit for hit in hits if hit["document"].id in allowed]
+    paged = publish_service.paginate(hits, page=as_int(request.GET.get("page"), 1), per_page=20)
     context = _site_base(world, request=request)
-    context.update({"query": keyword, "hits": hits, "active_filter": active,
-                    "total_documents": context["sections"] and sum(len(s["documents"]) for s in context["sections"]) or 0})
+    context.update({
+        "query": keyword,
+        "hits": paged["items"],
+        "pager": paged,
+        "active_filter": active,
+        "total_documents": sum(len(section["documents"]) for section in context["sections"]),
+    })
     return render(request, "site/search.html", context)
+
+
+@require_safe
+def era_page(request, slug, era_id):
+    """一个纪元的站点页：说明 + 这个纪元里的事件（按时间排）。"""
+    world = _get_world(slug)
+    gated = _gate(request, world)
+    if gated:
+        return gated
+
+    era = world.eras.filter(pk=as_int(era_id)).first()
+    if era is None:
+        raise Http404("纪元不存在")
+    context = _site_base(world, request=request)
+    context.update(publish_service.era_summary(world, era))
+    context["all_eras"] = publish_service.site_eras(world)
+    return render(request, "site/era.html", context)
 
 
 @require_safe
@@ -138,7 +162,7 @@ def page(request, slug, doc_slug):
         "related": publish_service.related_documents(document),
         "is_timeline": document.document_type == DOC_TIMELINE,
         # 地图 / 关系树 / 图谱：站点上直接把工作区的只读画布嵌进来
-        "canvas_embed": document.document_type in ("map", DOC_TREE, "graph"),
+        "canvas_embed": document.document_type in ("map", DOC_TREE, "graph"),   # 地图 / 关系树 / 图谱都嵌只读画布
         "events": document.events.all() if document.document_type == DOC_TIMELINE else [],
     })
     if context["card"] is not None:

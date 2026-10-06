@@ -40,9 +40,19 @@ def flat(nodes, out=None):
 def main() -> int:
     state = api("/api/world/state")
     docs = flat(state["documents"])
-    card = next(d for d in docs if d["type"] == "card")
     problems: list[str] = []
-    before = len([d for d in docs if d["type"] == "card"])
+
+    # 用一张一次性的草稿卡，别去动演示世界里的内容（探针要能反复跑）
+    card = api("/api/world/documents", "POST", {"type": "card", "name": "选区气泡探针草稿"})
+    api(f"/api/world/cards/{card['id']}", "PUT", {"blocks": [
+        {"id": "b1", "type": "text", "title": "第一段",
+         "text": "Harrowdeep 的城门在夜里会发光，守夜人都记下来了。"},
+        {"id": "b2", "type": "text", "title": "第二段",
+         "text": "Isarra 曾经在这里停留过三天，然后往北去了。"},
+        {"id": "b3", "type": "text", "title": "第三段",
+         "text": "矿带的铁脉一直延伸到 Redwake Harbor。"},
+    ]})
+    before = len([d for d in flat(api("/api/world/state")["documents"]) if d["type"] == "card"])
 
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
@@ -84,6 +94,9 @@ def main() -> int:
         page.screenshot(path=str(SHOTS / "bubble_create.png"))
 
         # 2) 链接卡片（选一段别的文字，链到已有卡片）
+        #    上一步"创建卡片"会把新卡打开，先回到草稿卡
+        page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
+        page.wait_for_timeout(1400)
         select_block(1, 12)
         page.locator(".fb-actions button").nth(1).click()
         page.wait_for_timeout(600)
@@ -109,6 +122,8 @@ def main() -> int:
         browser.close()
 
     print("\n报错：", errors or "（无）")
+    api(f"/api/world/documents/{card['id']}?hard=1", "DELETE")
+
     print("问题：", problems or "（无）")
     return 0
 
