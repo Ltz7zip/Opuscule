@@ -200,7 +200,7 @@ button[data-danger="1"]:hover {
 /* ---------------------------------------------------- ≥1440：宽松一些 */
 @media (min-width: 1440px) {
   .sidebar { width: 280px; }
-  .card-view { max-width: 940px; padding: 40px 44px 120px; }
+  .card-view { padding: 40px 44px 120px; }
 }
 
 /* ------------------------------------------- 1200–1440：顶栏按钮只留图标 */
@@ -227,7 +227,6 @@ button[data-danger="1"]:hover {
   .tb-right .tb-btn#paletteBtn > span { display: inline; }
   .tb-side { min-width: 0; }
   .tb-nav { gap: 2px; }
-  .card-view { max-width: none; }
 }
 
 /* --------------------------------------- 1024–1279：导航也收成图标 + 紧凑间距 */
@@ -294,7 +293,7 @@ button[data-danger="1"]:hover {
   .wc-name { display: none; }
   .world-chip { padding: 4px; border: 0; background: transparent; }
 
-  .card-view { padding: 16px 14px 88px; border-radius: 0; border-left: 0; border-right: 0; margin: 12px 0; }
+  .card-view { padding: 16px 14px 88px; }
   .card-title { font-size: 24px; }
   /* 手机上封面竖着排在标题下方，别把标题挤成一列窄字 */
   .card-head { flex-direction: column; gap: 12px; }
