@@ -81,6 +81,31 @@
 
 ---
 
+
+## 关于 `world/views.py`（2026-10-06 事故与重建）
+
+一次工具脚本写错路径，把 `world/views.py` 覆盖成了 JS 内容；项目当时没有版本控制，
+源码丢失，应用一度靠 `world/__pycache__` 里的字节码（`views.pyc`）继续运行。
+
+现在的状态：**源码已按九批重写完毕，字节码转发已删除**，`world/views.py` 就是唯一实现。
+
+| 批次 | 内容 |
+|---|---|
+| B1 | 基础：`json_response` / `current_world` / `get_*` / `touch_document` / `snapshot_document` / `timeline_state` |
+| B2 | 文档树与卡片：`workspace`（含 `?embed=` 只读嵌入）/ `state` / `document_*` / `card_detail` / `apply_card_payload` |
+| B3 | 类型与属性 CRUD |
+| B4 | 时间线：事件 / 关联卡片 / 历法 / 纪元 / 日历月视图 |
+| B5 | 经典编辑器适配层（时间线 / 条目 / 视野） |
+| B6 | 关系树（变体·成员·关系·派生卡片）/ 地图（图层·标注）/ 世界图谱 |
+| B7 | 工具数据 / 媒体 / 表格双向绑定 / 搜索 / 建议 / 自动识别 / 反链 / 导入导出 |
+| B8 | 账号 / 登录注册页 / 成员与邀请码 / 在线状态 / 版本历史与回滚 |
+| B9 | 地图底图 / 发布与下线 / API 兜底 |
+
+* 每批的验收标准都是 **165 个 Django 测试全绿**，并跑一遍 Playwright 探针；
+* 重建时的对照表留在 [`docs/views_bytcode_inventory.md`](docs/views_bytcode_inventory.md)
+  （从字节码提取的 101 个函数的签名、docstring 与关键字面量）；
+* 期间还**补回了随源码一起丢失的 `?embed=` 只读嵌入分支**（wiki 上地图/关系树的画布嵌入靠它）。
+
 ## 目录结构
 
 ```

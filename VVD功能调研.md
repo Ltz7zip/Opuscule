@@ -919,6 +919,25 @@ VVD 的界面文案有一套非常一致的**降低风险感**的写法，几乎
     对不上返回 409 + 服务端最新内容，界面提示并刷新而不是覆盖。顺带修掉两处因此暴露的真 bug：
     撤销/重做没有更新页面的修订号（导致撤销之后下一次编辑必然冲突）、冲突被当成未捕获异常抛到控制台。
 
+### 13.10 第十二轮：`world/views.py` 事故与九批重建
+
+一次工具脚本写错路径，`world/views.py` 被覆盖成 JS；项目当时没有 git，源码丢失，
+应用靠覆盖前编译的 `views.pyc` 继续运行。处理与重建：
+
+1. **先保命**：从 `__pycache__` 取出完好的 `.pyc`（`manage.py check` 干净、165 测试全过证明它是对的），
+   放成 `world/views.pyc` 走无源码导入，服务不停；
+2. **补版本控制**：`git init` 并**强制把 `views.pyc` 纳入版本库**（`.gitignore` 默认排除 `*.pyc`，
+   而它当时是唯一逻辑副本）；同时把从字节码提取的结构清单 `docs/views_bytcode_inventory.md` 一起入库；
+3. **九批重写**：`views.py` 先写"星号转发"骨架（未重写部分转发到 `views_legacy.pyc`），
+   每批用真实实现覆盖同名函数、跑绿 165 个测试再提交 —— 全程应用不停机；
+4. **收尾**：删掉转发与两个 `.pyc`，源码彻底回归。
+
+重建过程中被测试抓出来的真实行为差异（都按字节码与测试对齐了）：`_table_config` 会猜类型、
+表格行=卡片、`ensure_membership(user, world)` 的参数顺序、`InviteCode` 没有 `used_by`、
+`backlinks` 的键是 `mentions`、`suggestions` 的开关是 `ai_enabled` 且候选名来自
+`autolink.detect_new_names`、`calendar_month` 直接返回网格、经典接口只服务时间线文档、
+CSV 导入按"名称"匹配、multipart 导入的字段名是 `files`。
+
 **顺带落地的、调研文档里点名的小设计**：
 
 * 四向插入区块（`◧ ◨` 把区块放到左/右栏）+ 块级站点可见性开关（§4.1）；

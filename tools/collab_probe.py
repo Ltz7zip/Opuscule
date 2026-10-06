@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -186,7 +187,8 @@ def main() -> int:
         friend_page.wait_for_timeout(1600)
 
         # 为了让版本历史一定有两条，这里用接口各写一次（界面打字会有 90 秒合并）
-        for opener_, mark in ((owner, "所有者这一版"), (friend, "朋友这一版")):
+        stamp = str(int(time.time()))          # 每轮唯一，免得读到上一轮留下的文本
+        for opener_, mark in ((owner, f"所有者这一版{stamp}"), (friend, f"朋友这一版{stamp}")):
             current = api(opener_, f"/api/world/cards/{card['id']}")[1]
             blocks_now = current["card"]["blocks"]
             blocks_now.append({"id": f"v{len(blocks_now)}", "type": "text", "title": mark, "text": mark})
