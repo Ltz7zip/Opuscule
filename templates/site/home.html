@@ -1,0 +1,34 @@
+{% extends "site/base.html" %}
+{% block title %}{{ world.name }}{% endblock %}
+{% block content %}
+  <section class="hero">
+    <h1>{{ world.name }}</h1>
+    {% if world.description %}<p class="hero-sub">{{ world.description }}</p>{% endif %}
+    <p class="hero-stats">{{ sections|length }} 个分区 · 共 {{ total_documents }} 份文档{% if world.genres %} · {{ world.genres|join:"、" }}{% endif %}</p>
+  </section>
+
+  <form class="search-inline" method="get" action="{% url 'site:home' world.published_slug %}">
+    <input type="search" name="q" placeholder="搜索卡片名称…" value="{{ request.GET.q|default:'' }}" />
+    <button type="submit">搜索</button>
+  </form>
+
+  {% for section in sections %}
+    <section class="section" id="{{ section.key|slugify }}">
+      <h2>{{ section.title }}</h2>
+      <div class="grid">
+        {% for doc in section.documents %}
+          {% if not request.GET.q or request.GET.q|lower in doc.name|lower %}
+            <a class="tile" href="{% url 'site:page' world.published_slug doc.slug %}">
+              {% if doc.cover %}<span class="tile-cover" style="background-image:url('{{ doc.cover }}')"></span>{% endif %}
+              <span class="tile-kind">{{ doc.get_document_type_display }}{% if doc.entity_type %} · {{ doc.entity_type.name }}{% endif %}</span>
+              <span class="tile-name">{{ doc.name }}</span>
+              {% if doc.era %}<span class="tile-era">{{ doc.era.name }}</span>{% endif %}
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+  {% empty %}
+    <p class="empty">这个世界还没有发布任何内容。</p>
+  {% endfor %}
+{% endblock %}

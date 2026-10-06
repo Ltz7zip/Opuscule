@@ -1,0 +1,101 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  {% if noindex %}<meta name="robots" content="noindex, nofollow" />{% endif %}
+  <title>{% block title %}{{ world.name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'site.css' %}" />
+</head>
+<body style="--site-primary: {{ theme.primaryColor }}; --site-heading: '{{ theme.headingFont }}', Georgia, serif; --site-body: '{{ theme.bodyFont }}', system-ui, sans-serif;">
+  <header class="nav">
+    <a class="nav-brand" href="{% url 'site:home' world.published_slug %}">{{ world.name }}</a>
+    <nav class="nav-links">
+      <a href="{% url 'site:home' world.published_slug %}">首页</a>
+      {% for section in sections %}
+        <a href="{% url 'site:home' world.published_slug %}#{{ section.key|slugify }}">{{ section.title }}</a>
+      {% endfor %}
+    </nav>
+    <form class="nav-search" action="{% url 'site:home' world.published_slug %}" method="get">
+      <input type="search" name="q" placeholder="搜索这个世界…" value="{{ request.GET.q|default:'' }}" />
+    </form>
+  </header>
+
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="foot">
+    <div>
+      {{ world.name }}{% if world.description %} · {{ world.description }}{% endif %}
+    </div>
+    <div class="foot-meta">
+      发布版本 v{{ world.publish_version }} · {{ audience_label }}
+      {% if world.published_at %} · {{ world.published_at|date:"Y-m-d" }}{% endif %}
+    </div>
+  </footer>
+  <script>
+    // 让时间线区块铺满浏览器宽度：量出当前左边距，直接拉负值（窗口变化时重算）
+    (function () {
+      var boxes = Array.prototype.slice.call(document.querySelectorAll('.timeline-embed'));
+      if (!boxes.length) return;
+      function bleed() {
+        boxes.forEach(function (box) {
+          box.style.marginLeft = '0px';
+          box.style.marginRight = '0px';
+          var rect = box.getBoundingClientRect();
+          var pad = parseFloat(getComputedStyle(box).paddingLeft) || 0;
+          box.style.marginLeft = (-(rect.left - pad)) + 'px';
+          box.style.marginRight = (-(window.innerWidth - rect.right - pad)) + 'px';
+        });
+      }
+      bleed();
+      window.addEventListener('resize', function () {
+        clearTimeout(window.__bleedTimer);
+        window.__bleedTimer = setTimeout(bleed, 120);
+      });
+      window.addEventListener('load', bleed);
+    })();
+
+    // 时间线嵌入的两颗按钮：列表（给读不惯画布的人）与全屏
+    (function () {
+      var box = document.getElementById('timelineEmbed');
+      if (!box) return;
+      var listBtn = document.getElementById('timelineListBtn');
+      var fullBtn = document.getElementById('timelineFullBtn');
+      var list = box.querySelector('.te-list');
+      if (listBtn) listBtn.addEventListener('click', function () {
+        var on = box.classList.toggle('is-list');
+        listBtn.textContent = on ? '画布' : '列表';
+        if (list) list.open = on;
+      });
+      var frame = document.getElementById('timelineFrame');
+      // 时间线内容有多高，iframe 就多高（年代堆叠变高时页面跟着长）
+      window.addEventListener('message', function (event) {
+        if (event.origin !== window.location.origin) return;
+        var data = event.data || {};
+        if (data.type !== 'classic-height' || !frame) return;
+        var height = Math.max(360, Math.min(Number(data.height) || 0, 1600));
+        if (Math.abs((frame.clientHeight || 0) - height) > 4) frame.style.height = height + 'px';
+      });
+      function send(action) {
+        if (frame && frame.contentWindow) {
+          frame.contentWindow.postMessage({ type: 'classic-view', action: action }, window.location.origin);
+        }
+      }
+      document.querySelectorAll('.te-dock-btn[data-view]').forEach(function (btn) {
+        btn.addEventListener('click', function () { send(btn.dataset.view); });
+      });
+      var listBtn2 = document.getElementById('timelineListBtn2');
+      if (listBtn2) listBtn2.addEventListener('click', function () { if (listBtn) listBtn.click(); });
+      var fullBtn2 = document.getElementById('timelineFullBtn2');
+      if (fullBtn2) fullBtn2.addEventListener('click', function () { if (fullBtn) fullBtn.click(); });
+      if (fullBtn) fullBtn.addEventListener('click', function () {
+        var on = box.classList.toggle('is-full');
+        fullBtn.textContent = on ? '退出全屏' : '全屏';
+        if (on && box.scrollIntoView) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    })();
+  </script>
+</body>
+</html>

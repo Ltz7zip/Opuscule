@@ -1,0 +1,437 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>世界观共建 · 时间轴</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0b08'/%3E%3Cpath d='M4 16h24' stroke='%23ece8e1' stroke-width='1.6'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23ece8e1'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="{% static 'style.css' %}" />
+</head>
+<body>
+  <!-- 时间线画布：整块区域就是视频里的「时间线编辑区」 -->
+  <div class="viewport" id="viewport">
+    <div class="bg-ambient" aria-hidden="true"></div>
+    <div class="bg-grid" id="bgGrid" aria-hidden="true"></div>
+
+    <!-- 轴线、刻度、连接线 -->
+    <svg class="axis-svg" id="axisSvg" aria-hidden="true"></svg>
+
+    <!-- 数据加载中的一线微光（贴在轴线上） -->
+    <div class="boot-strip" id="bootStrip" aria-hidden="true"><span></span></div>
+
+    <!-- 纪元色带 -->
+    <div class="layer eras" id="erasLayer"></div>
+    <!-- 时间点（圆点 + 标签） -->
+    <div class="layer events" id="eventsLayer"></div>
+
+    <!-- 悬停：轴线上「新建时间点」 -->
+    <div class="point-marker" id="pointMarker" hidden>
+      <div class="pm-tip" id="pmTip">Month 5, Year -8<span class="tip-action"> · 点击添加</span></div>
+      <button class="pm-plus" id="pmPlus" type="button" aria-label="在此新建时间点">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
+      </button>
+    </div>
+
+    <!-- 悬停：轴线下方「新建时间段」 -->
+    <div class="era-marker" id="eraMarker" hidden>
+      <div class="em-preview" id="emPreview"></div>
+      <div class="em-tip" id="emTip">10 Month 11, Year -14 – 18 Month 4, Year -11<span class="tip-action"> · 点击添加</span></div>
+    </div>
+
+    <!-- 拖拽时跟随指针的日期提示 -->
+    <div class="drag-tip" id="dragTip" hidden></div>
+
+    <!-- 空时间轴时的引导 -->
+    <div class="empty" id="emptyState" hidden>
+      <div class="empty-inner">
+        <svg class="empty-ic" viewBox="0 0 64 40" aria-hidden="true">
+          <path d="M2 20h60" /><circle cx="20" cy="20" r="3.4" /><circle cx="44" cy="20" r="3.4" />
+          <rect x="27" y="26.5" width="18" height="7" rx="3.5" />
+        </svg>
+        <h2 class="empty-title" id="emptyTitle">这条时间轴还是空的</h2>
+        <p class="empty-sub" id="emptySub">把指针移到中间的轴线上，会浮出圆形 <b>+</b>；点一下就在那一刻新建时间点。</p>
+        <div class="empty-acts">
+          <button class="empty-btn is-primary" id="emptyNewEvent" type="button">新建时间点</button>
+          <button class="empty-btn" id="emptyNewEra" type="button">新建时间段</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右键框选：矩形 + 多选工具条 -->
+    <div class="marquee" id="marquee" hidden></div>
+    <div class="sel-bar" id="selBar" hidden>
+      <span class="sel-count" id="selCount">0 已选择</span>
+      <button class="sel-btn" id="selCopy" type="button" title="复制所选" aria-label="复制所选">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" /></svg>
+      </button>
+      <button class="sel-btn" id="selDelete" type="button" title="删除所选" aria-label="删除所选">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" /></svg>
+      </button>
+      <button class="sel-btn" id="selClose" type="button" title="取消选择" aria-label="取消选择">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" /></svg>
+      </button>
+    </div>
+
+    <!-- 右侧缩放控件 -->
+    <div class="zoom-stack" id="zoomStack">
+      <button class="zoom-btn" id="zoomIn" type="button" data-tip="放大　+" aria-label="放大">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M10.2 7.2v6M7.2 10.2h6" />
+        </svg>
+      </button>
+      <button class="zoom-btn" id="zoomOut" type="button" data-tip="缩小　−" aria-label="缩小">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M7.2 10.2h6" />
+        </svg>
+      </button>
+      <button class="zoom-btn" id="zoomFit" type="button" data-tip="适应内容　F" aria-label="适应内容">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8.6V5.6A1.6 1.6 0 0 1 5.6 4h3M15.4 4h3A1.6 1.6 0 0 1 20 5.6v3M20 15.4v3a1.6 1.6 0 0 1-1.6 1.6h-3M8.6 20h-3A1.6 1.6 0 0 1 4 18.4v-3" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- 底部工具条 -->
+    <div class="toolbar" id="toolbar">
+      <button class="tool-btn is-active" data-tool="select" type="button" data-tip="选择　V" aria-label="选择">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.9 18.3 12l-6.2 1.1-2.6 5.7z" /></svg>
+      </button>
+      <button class="tool-btn" data-tool="hand" type="button" data-tip="只拖画面　H" aria-label="拖动画布">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.4 11V5.9a1.45 1.45 0 0 1 2.9 0V11M11.3 10.6V4.9a1.45 1.45 0 0 1 2.9 0v5.7M14.2 10.9V6.4a1.45 1.45 0 0 1 2.9 0V14a6 6 0 0 1-6 6h-.6a5.6 5.6 0 0 1-4.4-2.1l-2.4-3.1a1.5 1.5 0 0 1 2.2-2z" />
+        </svg>
+      </button>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <button class="tool-btn" data-tool="list" type="button" data-tip="列表视图（还没做）" aria-label="列表视图">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3.6" y="4.6" width="16.8" height="4.2" rx="1.2" /><path d="M3.6 12.4h5.6v7h-5.6zM12.2 12.6h8.2M12.2 15.6h8.2M12.2 18.6h8.2" />
+        </svg>
+      </button>
+      <button class="tool-btn" data-tool="calendar" type="button" data-tip="日历设置" aria-label="日历视图">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3.2" y="5.2" width="17.6" height="15.6" rx="2.4" /><path d="M3.2 9.6h17.6M7.9 3.2v4M16.1 3.2v4M11 13.6l1.9-1.2v5.4M10.4 17.8h5" />
+        </svg>
+      </button>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <button class="tool-btn" data-tool="flag" type="button" data-tip="标记（还没做）" aria-label="标记">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 20.4V4.2M6.6 5.2h9.9l-1.9 3.6 1.9 3.6H6.6" /></svg>
+      </button>
+      <button class="tool-btn" data-tool="copy" type="button" data-tip="复制这条记录　⌘D" aria-label="复制所选">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- 右下角帮助 -->
+    <button class="help-btn" id="helpBtn" type="button" data-tip="操作指南　?" aria-label="帮助">?</button>
+
+    <!-- 自动保存状态：改写库时短暂出现 -->
+    <div class="save-chip" id="saveChip" hidden role="status" aria-live="polite">
+      <span class="sc-dot" aria-hidden="true"></span><span id="saveChipText">已保存</span>
+    </div>
+
+    <!-- 首次使用的引导（只出现一次，或点了「知道了」就不再出现） -->
+    <div class="coach" id="coach" hidden>
+      <span class="coach-text">
+        <span class="coach-msg">把指针移到<b>轴线</b>上可新建时间点，移到<b>轴线下方</b>可拖出时间段</span>
+        <button class="coach-close" id="coachClose" type="button">知道了</button>
+      </span>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastText"></span></div>
+  </div>
+
+  <!-- ===================== 记录编辑弹层（时间点 / 纪元共用） ===================== -->
+  <div class="editor" id="editor" hidden role="dialog" aria-modal="true" aria-label="编辑记录">
+    <div class="ed-cover" id="edCover" data-filled="false">
+      <button class="ed-cover-hit" id="edCoverBtn" type="button" title="设置封面" aria-label="设置封面">
+        <svg class="ed-cover-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.4v15.2M4.4 12h15.2" /></svg>
+      </button>
+      <span class="ed-cover-badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8z" /></svg>
+      </span>
+    </div>
+
+    <div class="ed-title" id="edTitle" contenteditable="true" spellcheck="false" data-placeholder="未命名"></div>
+
+    <button class="ed-del" id="edDelete" type="button" title="删除" aria-label="删除">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" />
+      </svg>
+    </button>
+
+    <div class="ed-dates">
+      <button class="ed-date" id="edStart" type="button">
+        <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="16" rx="2.4" /><path d="M3 9.6h18M7.8 3v4M16.2 3v4M11.2 13v4.6h2.6" />
+        </svg>
+        <span class="ed-date-text" id="edStartText">Month 5, Year -8</span>
+      </button>
+      <button class="ed-date" id="edEnd" type="button" hidden>
+        <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15.4M13.4 6 19.4 12l-6 6" /></svg>
+        <span class="ed-date-text" id="edEndText">Month 5, Year -8</span>
+      </button>
+    </div>
+
+    <div class="ed-desc" id="edDesc" contenteditable="true" spellcheck="false" data-placeholder="描述"></div>
+
+    <hr class="ed-divider" />
+
+    <button class="ed-cards" id="edCards" type="button">
+      <svg class="ed-cards-ic" id="edCardsIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.2v13.6M5.2 12h13.6" /></svg>
+      <span id="edCardsText">添加卡片</span>
+    </button>
+  </div>
+
+  <!-- 配色（点封面弹出；录屏里没有展示这一步，为保留功能补的） -->
+  <div class="palette" id="palette" hidden role="dialog" aria-label="配色">
+    <button class="palette-swatch t-blue" data-theme="blue" type="button" title="灰蓝"></button>
+    <button class="palette-swatch t-sky" data-theme="sky" type="button" title="湛蓝"></button>
+    <button class="palette-swatch t-violet" data-theme="violet" type="button" title="紫罗兰"></button>
+    <button class="palette-swatch t-red" data-theme="red" type="button" title="暗红"></button>
+    <button class="palette-swatch t-teal" data-theme="teal" type="button" title="青绿"></button>
+    <button class="palette-swatch t-gold" data-theme="gold" type="button" title="鎏金"></button>
+  </div>
+
+  <!-- ===================== 日期选择面板 ===================== -->
+  <div class="date-pop" id="datePop" hidden role="dialog" aria-label="选择日期">
+    <div class="dp-cols">
+      <div class="dp-col" id="dpYear" data-col="year"><div class="dp-scroll"></div></div>
+      <div class="dp-col" id="dpMonth" data-col="month"><div class="dp-scroll"></div></div>
+      <div class="dp-col" id="dpDay" data-col="day"><div class="dp-scroll"></div></div>
+    </div>
+  </div>
+
+  <!-- ===================== 日历设置（对齐录屏的 日历设置 面板） ===================== -->
+  <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-label="日历设置">
+    <div class="st-body" id="stBody">
+      <div class="st-header">
+        <h2 class="st-title">日历设置</h2>
+      </div>
+
+      <div class="st-pad">
+        <h3 class="st-section">时间线范围</h3>
+        <button class="st-field" id="stRangeStart" type="button">
+          <span class="st-label">开始</span>
+          <span class="st-value" id="stRangeStartText">21年1月1日</span>
+          <svg class="st-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 9.4 12 15l5.6-5.6" /></svg>
+        </button>
+        <button class="st-field" id="stRangeEnd" type="button">
+          <span class="st-label">结束</span>
+          <span class="st-value" id="stRangeEndText">120年12月30日</span>
+          <svg class="st-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 9.4 12 15l5.6-5.6" /></svg>
+        </button>
+
+        <button class="st-row-btn" id="stFit" type="button">适应数据</button>
+
+        <hr class="st-divider" />
+
+        <div class="st-head-row">
+          <h3 class="st-section">日历</h3>
+          <span class="st-hint">相同的数据，不同的视角</span>
+        </div>
+        <div class="st-seg" id="stPerspective">
+          <button class="st-seg-item is-active" data-value="earth" type="button">地球</button>
+          <button class="st-seg-item" data-value="custom" type="button">自定义</button>
+        </div>
+
+        <h4 class="st-label-row">事件精度</h4>
+        <div class="st-seg" id="stPrecision">
+          <button class="st-seg-item" data-value="year" type="button">年</button>
+          <button class="st-seg-item is-active" data-value="month" type="button">月</button>
+          <button class="st-seg-item" data-value="day" type="button">日</button>
+          <button class="st-seg-item" data-value="time" type="button">时间</button>
+        </div>
+
+        <div class="st-custom" id="stCustom" hidden>
+          <h4 class="st-label-row">时间线开始</h4>
+          <div class="st-seg" id="stOrigin">
+            <button class="st-seg-item is-active" data-value="open" type="button">开放过去</button>
+            <button class="st-seg-item" data-value="zero" type="button">0 年</button>
+          </div>
+          <div class="st-duo">
+            <span class="st-label">零点前</span><span class="st-value-sm">BBY</span>
+            <span class="st-label">零点后</span><span class="st-value-sm">ABY</span>
+          </div>
+          <div class="st-field is-static">
+            <span class="st-label">每天小时数</span>
+            <span class="st-value" id="stHours">24</span>
+          </div>
+          <div class="st-chip" id="stMonthChip">通用 12 × 30</div>
+        </div>
+
+        <h3 class="st-section">卫星</h3>
+        <div class="st-sat">
+          <span class="st-value-sm" id="stSatellites">无卫星</span>
+          <button class="st-pill" id="stAddSatellite" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>添加卫星
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="st-footer">
+      <span class="st-format">事件显示为<b id="stSample">50年7月</b></span>
+      <button class="st-btn" id="stCancel" type="button">取消</button>
+      <button class="st-btn is-primary" id="stApply" type="button">应用</button>
+    </div>
+  </div>
+
+  <!-- ===================== 操作指南 ===================== -->
+  <div class="scrim" id="scrim" hidden></div>
+  <div class="help-panel" id="helpPanel" hidden role="dialog" aria-modal="true" aria-label="操作指南">
+    <div class="hp-head">
+      <h2 class="hp-title">操作指南</h2>
+      <button class="hp-close" id="helpClose" type="button" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" /></svg>
+      </button>
+    </div>
+    <div class="hp-body">
+      <section class="hp-sec">
+        <h3 class="hp-sec-title">鼠标 · 触控板</h3>
+        <ul class="hp-list">
+          <li><kbd>悬停轴线</kbd><span>浮出圆形 <b>+</b>，点一下在该时刻新建<b>时间点</b></span></li>
+          <li><kbd>悬停轴线下方</kbd><span>浮出虚线色带，点一下新建<b>时间段</b>（纪元）</span></li>
+          <li><kbd>拖拽色带 / 两端</kbd><span>整段平移 / 改这条纪元的起止</span></li>
+          <li><kbd>拖拽空白处</kbd><span>平移画布（按住轴线下方拖也可以）</span></li>
+          <li><kbd>滚轮 / 触控板</kbd><span>左右移动时间轴；<b>⌘/Ctrl</b> + 滚轮（或双指捏合）缩放</span></li>
+          <li><kbd>右键框选</kbd><span>拉出选框，松手选中相交的记录</span></li>
+          <li><kbd>拖动选中项</kbd><span>整组一起平移</span></li>
+        </ul>
+      </section>
+      <section class="hp-sec">
+        <h3 class="hp-sec-title">键盘</h3>
+        <ul class="hp-list">
+          <li><kbd>?</kbd><span>打开 / 关闭这份指南</span></li>
+          <li><span class="hp-keys"><kbd>V</kbd><kbd>H</kbd></span><span>选择模式 / 只拖画面模式</span></li>
+          <li><span class="hp-keys"><kbd>+</kbd><kbd>−</kbd><kbd>F</kbd></span><span>放大 / 缩小 / 适应内容</span></li>
+          <li><kbd>← →</kbd><span>左右平移（按住 <b>Shift</b> 走得更快）</span></li>
+          <li><kbd>⌘Z</kbd><span>撤销删除或复制</span></li>
+          <li><kbd>⌘D</kbd><span>复制当前选中的记录</span></li>
+          <li><kbd>Delete</kbd><span>删除选中的记录（可以撤销）</span></li>
+          <li><kbd>Esc</kbd><span>关掉浮层 / 取消框选 / 中断拖拽</span></li>
+        </ul>
+      </section>
+      <section class="hp-sec">
+        <h3 class="hp-sec-title">编辑卡片</h3>
+        <ul class="hp-list">
+          <li><kbd>标题 · 描述</kbd><span>边打边存，停顿半秒或点到别处就落库</span></li>
+          <li><kbd>封面方块</kbd><span>纪元点它换配色；时间点暂无封面</span></li>
+          <li><kbd>日期行</kbd><span>点开年 / 月 / 日选择器，精确到天</span></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== 无边框内容卡（悬停详情） ===================== -->
+  <div class="hint-card" id="hintCard" hidden></div>
+
+  {% if classic_readonly %}
+  <script>window.CLASSIC_READONLY = true;
+    {% if classic_paper %}window.CLASSIC_PAPER = true;{% endif %}</script>
+  {% endif %}
+  {% if classic_api_base %}
+  <!--
+    嵌进工作区时（/w/timeline/<id>）：把编辑器写死的接口地址改写到某条时间线文档上。
+    编辑器自身逻辑保持不变，转换规则见 world/classic.py。
+  -->
+  <script>
+    (function () {
+      var base = "{{ classic_api_base|escapejs }}";
+      var orig = window.fetch;
+      function map(url) {
+        if (url === "/api/timeline") return base;
+        if (url === "/api/view") return base + "/view";
+        if (url.indexOf("/api/items") === 0) return base + "/items" + url.slice("/api/items".length);
+        return url;
+      }
+      window.fetch = function (input, init) {
+        // 只读模式（发布站点里嵌的时候）：写操作直接吞掉，返回一个假的成功响应，
+        // 免得编辑器弹一堆"保存失败"。界面上编辑入口也会被 CSS 藏起来。
+        if (window.CLASSIC_READONLY) {
+          var method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
+          var url = typeof input === "string" ? input : (input && input.url) || "";
+          if (method !== "GET" && url.indexOf("/api/") === 0) {
+            return Promise.resolve(new Response(JSON.stringify({ ok: true, readonly: true }),
+              { status: 200, headers: { "Content-Type": "application/json" } }));
+          }
+        }
+        if (typeof input === "string") return orig.call(this, map(input), init);
+        if (input && input.url) {
+          var mapped = map(input.url);
+          if (mapped !== input.url) return orig.call(this, new Request(mapped, input), init);
+        }
+        return orig.call(this, input, init);
+      };
+      if (window.CLASSIC_READONLY) {
+        // 发布站点是"看"的地方：把编辑相关的东西藏掉，只留画布、平移缩放与列表视图
+        document.addEventListener("DOMContentLoaded", function () {
+          document.body.classList.add("is-readonly");
+          if (window.CLASSIC_PAPER) document.body.classList.add("is-paper");
+        });
+        // 发布站点的底部工具条通过 postMessage 控制缩放（iframe 里点不到外面的按钮）
+        window.addEventListener("message", function (event) {
+          if (event.origin !== window.location.origin) return;
+          var data = event.data || {};
+          if (data.type !== "classic-view") return;
+          var map = { "in": "zoomIn", "out": "zoomOut", "fit": "zoomFit" };
+          var node = document.getElementById(map[data.action]);
+          if (node) node.click();
+        });
+        // 内容有多高就报多高：站点据此把 iframe 撑开，年代多了也不会被压扁
+        function reportHeight() {
+          if (window.parent === window) return;
+          var viewport = document.getElementById("viewport");
+          if (!viewport) return;
+          var bottom = 0;
+          [".ev", ".era", ".axis-line"].forEach(function (sel) {
+            document.querySelectorAll(sel).forEach(function (node) {
+              var rect = node.getBoundingClientRect();
+              if (rect.height > 0) bottom = Math.max(bottom, rect.bottom);
+            });
+          });
+          var axis = document.querySelector(".axis-line");
+          var axisTop = axis ? axis.getBoundingClientRect().top : 0;
+          // 轴线以上的标签也要算进来，再加一点呼吸空间
+          // 底部要给悬浮工具条留位置（约 64px），再加一点呼吸空间
+          var height = Math.max(bottom + 110, axisTop + 240, 400);
+          window.parent.postMessage({ type: "classic-height", height: Math.round(height) }, window.location.origin);
+        }
+        // 缩成一团的年代带（宽 < 70px）在只读视图里读不出内容，藏掉免得叠在一起
+        function tidyEras() {
+          document.querySelectorAll(".era").forEach(function (node) {
+            var width = node.getBoundingClientRect().width;
+            if (width > 0 && width < 70) node.style.display = "none";
+          });
+        }
+        var reportTimer = null;
+        function scheduleReport() {
+          if (reportTimer) clearTimeout(reportTimer);
+          reportTimer = setTimeout(function () { tidyEras(); reportHeight(); }, 220);
+        }
+        window.addEventListener("load", scheduleReport);
+        window.addEventListener("resize", scheduleReport);
+        document.addEventListener("DOMContentLoaded", function () {
+          if (window.MutationObserver) {
+            var layers = document.getElementById("viewport");
+            if (layers) new MutationObserver(scheduleReport).observe(layers, { childList: true, subtree: true });
+          }
+        });
+
+        // 载入后自动适应内容：读者一进来就该看到全貌，而不是缩在角落里
+        window.addEventListener("load", function () {
+          setTimeout(function () {
+            var fit = document.getElementById("zoomFit");
+            if (fit) fit.click();
+            var coach = document.getElementById("coach");
+            if (coach) coach.hidden = true;
+          }, 260);
+        });
+      }
+    })();
+  </script>
+  {% endif %}
+  <script src="{% static 'script.js' %}"></script>
+</body>
+</html>

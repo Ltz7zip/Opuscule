@@ -1,0 +1,115 @@
+{% extends "site/base.html" %}
+{% block title %}{{ document.name }} · {{ world.name }}{% endblock %}
+{% block content %}
+  <article class="page">
+    <nav class="crumbs">
+      <a href="{% url 'site:home' world.published_slug %}">首页</a> /
+      <span>{{ document.entity_type.name|default:document.get_document_type_display }}</span>
+    </nav>
+
+    <header class="page-head">
+      <div>
+        <h1>{{ document.name }}</h1>
+        <p class="page-kind">
+          {{ document.get_document_type_display }}{% if document.entity_type %} · {{ document.entity_type.name }}{% endif %}
+          {% if document.era %} · {{ document.era.name }}{% endif %}
+        </p>
+        {% if card.aliases %}
+          <p class="page-aka">亦称为：{{ card.aliases|join:"、" }}</p>
+        {% endif %}
+      </div>
+      {% if document.cover %}<div class="page-cover" style="background-image:url('{{ document.cover }}')"></div>{% endif %}
+    </header>
+
+    {% if canvas_embed %}
+      <section class="canvas-embed">
+        <iframe src="/world?embed={{ document.id }}&readonly=1"
+                title="{{ document.name }}" loading="lazy"></iframe>
+      </section>
+    {% endif %}
+
+    {% if properties %}
+      <table class="props">
+        {% for entry in properties %}
+          <tr><th>{{ entry.name }}</th><td>{{ entry.display }}</td></tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+
+    {% if is_timeline %}
+      <section class="timeline-embed" id="timelineEmbed">
+        <div class="te-bar">
+          <h2>时间线</h2>
+          <div class="te-actions">
+            <button type="button" class="te-btn" id="timelineListBtn">列表</button>
+            <button type="button" class="te-btn" id="timelineFullBtn">全屏</button>
+          </div>
+        </div>
+        <div class="te-frame-wrap">
+          <iframe class="te-frame" id="timelineFrame"
+                  src="/world/timeline/{{ document.id }}?readonly=1&paper=1"
+                  title="{{ document.name }} 时间线" loading="lazy"></iframe>
+          <div class="te-dock" role="toolbar" aria-label="时间线操作">
+          <button type="button" class="te-dock-btn" data-view="out" aria-label="缩小">−</button>
+          <button type="button" class="te-dock-btn" data-view="in" aria-label="放大">＋</button>
+          <button type="button" class="te-dock-btn" data-view="fit" aria-label="适应内容">适应</button>
+          <span class="te-dock-sep"></span>
+          <button type="button" class="te-dock-btn" id="timelineListBtn2">列表</button>
+          <button type="button" class="te-dock-btn" id="timelineFullBtn2">全屏</button>
+        </div>
+        </div>
+        {% if events %}
+          <details class="te-list">
+            <summary>用列表看这 {{ events|length }} 个事件</summary>
+            <ol>
+              {% for event in events %}
+                <li>
+                  <span class="ev-date">{{ event.date_label }}</span>
+                  <span class="ev-title">{{ event.title }}</span>
+                  {% if event.linked_cards.all %}
+                    <span class="ev-links">
+                      {% for linked in event.linked_cards.all %}
+                        <a href="{% url 'site:page' world.published_slug linked.slug %}">{{ linked.name }}</a>{% if not forloop.last %}、{% endif %}
+                      {% endfor %}
+                    </span>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ol>
+          </details>
+        {% endif %}
+      </section>
+    {% else %}
+      {% for block in card.blocks %}
+        {% if not block.hidden %}
+          {% if block.title %}<h2>{{ block.title }}</h2>{% endif %}
+          {% if block.type == 'divider' %}
+            <hr />
+          {% elif block.type == 'callout' %}
+            <aside class="callout">{{ block.text }}</aside>
+          {% elif block.type == 'quote' %}
+            <blockquote>{{ block.text }}</blockquote>
+          {% elif block.text %}
+            <p>{{ block.text|linebreaksbr }}</p>
+          {% endif %}
+        {% endif %}
+      {% empty %}
+        <p class="empty">这张卡片还没有正文。</p>
+      {% endfor %}
+    {% endif %}
+
+    {% if related %}
+      <section class="related">
+        <h2>相关</h2>
+        <ul>
+          {% for item in related %}
+            <li>
+              <a href="{% url 'site:page' world.published_slug item.slug %}">{{ item.name }}</a>
+              <span class="rel-reason">{{ item.reason }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  </article>
+{% endblock %}

@@ -1,0 +1,3 @@
+# 后端依赖（原 Flask 版本已完全移除，不再需要 flask / flask-cors / flask-sqlalchemy）
+# 安装：.venv/bin/pip install -r requirements.txt
+Django==6.1.1
