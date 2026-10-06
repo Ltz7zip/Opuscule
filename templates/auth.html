@@ -1,0 +1,103 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title }} · 世界工作区</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0b08'/%3E%3Cpath d='M6 20c4-6 8-6 12 0s6 4 8 2' stroke='%23e0a83c' stroke-width='2' fill='none'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="{% static 'minimal.css' %}" />
+  <link rel="stylesheet" href="{% static 'responsive.css' %}" />
+  <style>
+    body { display: grid; place-items: center; min-height: 100dvh; background: var(--mn-surface-sunken); }
+    .auth-card {
+      width: min(420px, 92vw); padding: 28px;
+      background: var(--mn-surface); border: 1px solid var(--mn-border);
+      border-radius: var(--mn-radius-lg); box-shadow: var(--mn-shadow-pop);
+      animation: mn-pop var(--mn-dur) var(--mn-ease) both;
+    }
+    .auth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .auth-mark {
+      width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
+      background: var(--mn-primary); color: var(--mn-primary-ink); font-weight: 600;
+    }
+    .auth-card h1 { font-size: 20px; margin: 10px 0 4px; }
+    .auth-card p.lead { color: var(--mn-ink-dim); font-size: 12.5px; line-height: 1.7; margin-bottom: 18px; }
+    .field { display: grid; gap: 6px; margin-bottom: 12px; }
+    .field label { font-size: 12.5px; color: var(--mn-ink-muted); }
+    .field-hint { font-size: 12px; color: var(--mn-ink-dim); }
+    .field input {
+      height: 38px; padding: 0 12px; font: inherit; font-size: 13px;
+      background: var(--mn-surface); color: var(--mn-ink);
+      border: 1px solid var(--mn-border); border-radius: var(--mn-radius-sm);
+    }
+    .field input:focus { outline: none; border-color: var(--mn-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-accent) 22%, transparent); }
+    .auth-actions { display: flex; gap: 8px; align-items: center; margin-top: 18px; }
+    .auth-error {
+      margin: 4px 0 12px; padding: 10px 12px; font-size: 12.5px;
+      color: var(--mn-danger); background: color-mix(in srgb, var(--mn-danger) 10%, transparent);
+      border: 1px solid color-mix(in srgb, var(--mn-danger) 30%, transparent); border-radius: var(--mn-radius-sm);
+    }
+    .auth-note { margin-top: 16px; font-size: 12px; color: var(--mn-ink-dim); line-height: 1.7; }
+    .auth-switch { margin-top: 14px; font-size: 12.5px; }
+    .auth-switch a { color: var(--mn-accent); }
+  </style>
+</head>
+<body>
+  <form class="auth-card" method="post" action="{{ form_action }}">
+    {% csrf_token %}
+    <div class="auth-brand">
+      <span class="auth-mark">{{ initial|default:"W" }}</span>
+      <b>{{ world_name|default:"世界工作区" }}</b>
+    </div>
+    <h1>{{ page_title }}</h1>
+    <p class="lead">{{ page_lead }}</p>
+
+    {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
+
+    <div class="field">
+      <label for="username">用户名</label>
+      <input id="username" name="username" autocomplete="username" required autofocus
+             value="{{ username|default:'' }}" />
+    </div>
+    {% if mode == 'register' %}
+      <div class="field">
+        <label for="display_name">显示名（可选）</label>
+        <input id="display_name" name="display_name" autocomplete="name" />
+      </div>
+    {% endif %}
+    <div class="field">
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password"
+             autocomplete="{% if mode == 'register' %}new-password{% else %}current-password{% endif %}" required />
+    </div>
+    {% if mode == 'register' %}
+      <div class="field">
+        <label for="invite">邀请码{% if needs_setup %}（第一个账号不需要）{% endif %}</label>
+        <input id="invite" name="invite" {% if not needs_setup %}required{% endif %}
+               value="{{ invite|default:'' }}"
+               placeholder="{% if needs_setup %}你是第一个账号，直接成为所有者{% else %}向世界所有者索取{% endif %}" />
+        {% if invite_hint %}<span class="field-hint">{{ invite_hint }}</span>{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="auth-actions">
+      <button class="mini-btn is-primary" type="submit">{{ submit_label }}</button>
+      {% if mode == 'login' %}
+        <a class="mini-btn" href="/register">注册</a>
+      {% else %}
+        <a class="mini-btn" href="/login">已有账号</a>
+      {% endif %}
+      <a class="mini-btn" href="/world">先看看</a>
+    </div>
+
+    <p class="auth-note">
+      {% if needs_setup %}
+        这是第一次启动：注册的第一个账号会成为这个世界的所有者，
+        之后注册都需要所有者发的邀请码。
+      {% else %}
+        登录后才能编辑；没登录也能浏览工作区，发布出来的站点一直是公开的。
+      {% endif %}
+    </p>
+  </form>
+</body>
+</html>

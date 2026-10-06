@@ -1,0 +1,144 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>世界工作区</title>
+  <link rel="manifest" href="{% static 'manifest.webmanifest' %}" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0b08'/%3E%3Cpath d='M6 20c4-6 8-6 12 0s6 4 8 2' stroke='%23e0a83c' stroke-width='2' fill='none'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="{% static 'workspace.css' %}" />
+  <!-- Minimal 设计语言（桌面 Minimalist 设计系统的 token：灰阶主色 / 12-16px 圆角 / 4px 栅格 / 扁平） -->
+  <link rel="stylesheet" href="{% static 'minimal.css' %}" />
+  <!-- 响应式 / 动效 / 空状态 / 无障碍 -->
+  <link rel="stylesheet" href="{% static 'responsive.css' %}" />
+</head>
+<body{% if embed_doc %} class="is-embed" data-embed-doc="{{ embed_doc }}" data-embed-readonly="{{ embed_readonly|yesno:'1,0' }}"{% endif %}>
+  <!-- 世界主题（字体 / 主色 / 颗粒）由 JS 从 /api/world/state 读出来写进 :root -->
+  <div class="grain" id="grain" aria-hidden="true"></div>
+
+  <a class="skip-link" href="#panels">跳到正文</a>
+  <div class="app" id="app">
+    <!-- ---------------------------------------------------------------- 顶栏 -->
+    <header class="topbar">
+      <div class="tb-side">
+        <button class="world-chip" id="worldChip" type="button" title="世界菜单" aria-label="世界菜单">
+          <span class="wc-avatar" id="worldAvatar">·</span>
+          <span class="wc-name" id="worldName">载入中…</span>
+        </button>
+      </div>
+
+      <nav class="tb-nav" id="tbNav">
+        <button class="tb-view is-active" type="button" data-nav="world">世界</button>
+        <button class="tb-view" type="button" data-nav="wiki">维基</button>
+        <button class="tb-view" type="button" data-nav="new-timeline">新建 Timeline</button>
+        <button class="tb-view" type="button" data-nav="new-card">新建卡片</button>
+      </nav>
+
+      <div class="tb-side tb-right">
+        <button class="tb-btn is-icon" id="sidebarBtn" type="button" title="收起 / 展开侧栏（⌘B）">侧栏</button>
+        <button class="tb-btn is-icon" id="undoBtn" type="button" title="撤销（⌘Z）" disabled>撤销</button>
+        <button class="tb-btn is-icon" id="redoBtn" type="button" title="重做（⇧⌘Z）" disabled>重做</button>
+        <span class="tb-divider"></span>
+        <button class="tb-btn" id="paletteBtn" type="button" title="命令面板">⌘K</button>
+        <button class="tb-btn" id="suggestBtn" type="button" title="值得添加的东西">建议</button>
+        <button class="tb-btn" id="exchangeBtn" type="button" title="导入 / 导出">导入导出</button>
+        <button class="tb-btn" id="typesBtn" type="button">类型</button>
+        <button class="tb-btn" id="erasBtn" type="button">纪元</button>
+        <button class="tb-btn" id="themeBtn" type="button">主题</button>
+        <button class="tb-btn" id="trashBtn" type="button">回收站</button>
+        <span class="tb-divider"></span>
+        <span class="era-slot" id="eraChipSlot"></span>
+        <div class="presence" id="presence" aria-label="谁在这里"></div>
+        <button class="user-chip" id="userChip" type="button" aria-label="账号菜单">
+          <span class="uc-avatar" id="userAvatar">·</span>
+          <span class="uc-name" id="userName">…</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ---------------------------------------------------------- 侧栏 + 工作区 -->
+    <div class="body">
+      <aside class="sidebar" id="sidebar">
+        <div class="sb-head">
+          <div class="sb-search">
+            <input id="sbSearch" type="search" placeholder="搜索文档…" autocomplete="off" />
+            <kbd>⌘K</kbd>
+          </div>
+          <button class="sb-icon" id="sbMenu" type="button" title="展开 / 折叠全部">⇕</button>
+        </div>
+        <div class="sb-tree" id="sbTree" role="tree"></div>
+        <div class="sb-foot">
+          <button class="sb-new" id="newDocBtn" type="button">＋ 新建文档</button>
+          <button class="sb-new sb-new-ghost" id="newFolderBtn" type="button" title="新建文件夹">＋ 文件夹</button>
+          <button class="sb-new sb-new-ghost" id="templateBtn" type="button" title="用引导模板新建（角色 / 地点 / 事件）">模板</button>
+        </div>
+      </aside>
+
+      <main class="workspace" id="workspace">
+        <div class="readonly-bar" id="readonlyBar" hidden>
+          <span class="ro-icon" aria-hidden="true"></span>
+          <span id="readonlyText">你现在是只读模式</span>
+          <span class="ro-actions">
+            <a class="mini-btn is-primary" href="/login">登录</a>
+            <a class="mini-btn" href="/register">用邀请码注册</a>
+          </span>
+        </div>
+        <div class="panels" id="panels"></div>
+        <div class="empty-hint" id="emptyHint">
+          <div class="eh-art" id="ehArt" aria-hidden="true"></div>
+          <h2>还没有打开任何文档</h2>
+          <p>从左侧点一张卡片，或者按 <kbd>⌘K</kbd> 搜索。<br />不知道从哪开始？用引导模板问几个问题就能起一张卡。</p>
+          <div class="eh-actions">
+            <button class="mini-btn is-primary" id="ehGuide" type="button">用模板新建…</button>
+            <button class="mini-btn" id="ehCard" type="button">新建卡片</button>
+            <button class="mini-btn" id="ehTimeline" type="button">新建时间线</button>
+            <button class="mini-btn" id="ehImport" type="button">导入 Markdown</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 右键菜单 / 命令面板 / 模态框 / 提示 -->
+  <div class="ctx" id="ctxMenu" hidden></div>
+
+  <div class="palette" id="palette" hidden>
+    <div class="pl-box" role="dialog" aria-label="命令面板">
+      <input id="plInput" type="text" placeholder="输入命令或搜索…" autocomplete="off" />
+      <div class="pl-list" id="plList"></div>
+      <div class="pl-foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>↵</kbd> 打开</span><span><kbd>esc</kbd> 关闭</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="md-box" role="dialog" aria-modal="true" aria-labelledby="mdTitle">
+      <header class="md-head">
+        <h2 id="mdTitle">标题</h2>
+        <button class="md-close" id="mdClose" type="button" aria-label="关闭">✕</button>
+      </header>
+      <div class="md-body" id="mdBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastText"></span></div>
+
+  <!-- 屏幕阅读器播报（视觉上不可见） -->
+  <div class="sr-only" id="srStatus" role="status" aria-live="assertive"></div>
+
+  <!-- 手机上的底部导航：顶栏在小屏只剩图标，常用动作放到底部更好按 -->
+  <nav class="bottom-nav" aria-label="移动端导航">
+    <button type="button" data-mobile="world">世界</button>
+    <button type="button" data-mobile="search">搜索</button>
+    <button type="button" data-mobile="new">新建</button>
+    <button type="button" data-mobile="suggest">建议</button>
+    <button type="button" data-mobile="user">我的</button>
+  </nav>
+
+  <script src="{% static 'icons.js' %}"></script>
+  <script src="{% static 'workspace.js' %}"></script>
+</body>
+</html>
