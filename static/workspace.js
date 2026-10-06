@@ -4275,10 +4275,8 @@ async function runPalette(query) {
       S.docs.delete(doc.id);
       await openDoc(doc.id);
     } },
-    { kind: '动作', name: '新建关系树（选模版）', run: () => {
-      window.open('/relationship', '_blank', 'noopener');
-    } },
-    { kind: '动作', name: '新建关系树（直接建一棵）', run: async () => { await createDoc('familyTree'); } },
+    // 新建一棵空树，面板里直接就是模版选择（不用再另开标签页）
+    { kind: '动作', name: '新建关系树', run: async () => { await createDoc('familyTree'); } },
     { kind: '动作', name: '新建地图', run: async () => { await createDoc('map'); } },
     { kind: '动作', name: '分享与发布', run: () => publishDialog() },
     { kind: '动作', name: '类型与属性', run: () => typeManager() },
@@ -4406,10 +4404,15 @@ async function setEraDialog(node) {
 
 /* ============================================================ 新建 / 回收站 */
 async function createDoc(type, parent = null) {
-  const name = window.prompt(type === 'folder' ? '文件夹名称' : '文档名称',
-    type === 'timeline' ? '世界时间线' : type === 'folder' ? '新文件夹' : '未命名');
-  if (name === null) return;
-  const body = { type, name: name.trim() || '未命名' };
+  // 关系树不在这里问名字：下一步就是模版选择，名字跟着模版走（建完还能改）
+  let name = '新建关系树';
+  if (type !== 'familyTree') {
+    name = window.prompt(type === 'folder' ? '文件夹名称' : '文档名称',
+      type === 'timeline' ? '世界时间线' : type === 'folder' ? '新文件夹' : '未命名');
+    if (name === null) return;
+    name = name.trim() || '未命名';
+  }
+  const body = { type, name };
   if (parent) body.parent = parent;
   if (type === 'card') {
     const type_ = S.types.find((t) => !t.hidden) || S.types[0];
@@ -4715,7 +4718,7 @@ function bindEvents() {
     openCtx(event.clientX, event.clientY, [
       { label: '新建卡片', run: () => createDoc('card') },
       { label: '新建时间线', run: () => createDoc('timeline') },
-      { label: '新建关系树', run: () => window.open('/relationship', '_blank', 'noopener') },
+      { label: '新建关系树', run: () => createDoc('familyTree') },
       { label: '新建文件夹', run: () => createDoc('folder') },
     ]);
   });
@@ -6220,6 +6223,23 @@ function onCanvasMessage(event) {
     // 在被嵌的工作区里弹 toast 读者根本看不见（整块工作区外壳都是藏起来的）
     if (isEmbedded()) { postToHost('ws-node-hint', data); return; }
     toast(`${data.name || '这位成员'}：还没有关联卡片`);
+    return;
+  }
+  if (data.type === 'ws-doc-changed') {        // 面板里刚选完模版 / 改过内容
+    // 只刷"文档树的元信息"和标签页标题——**千万别把 S.docs 里的条目删掉**：
+    // 那等于把这篇文档从打开的标签页里摘出去，下一次 renderPanels() 就不会
+    // 再认领那个 iframe，嵌入的编辑器会被当成垃圾清掉（然后就白屏了）。
+    reloadTree().then(() => {
+      const names = new Map();
+      (function walk(nodes) {
+        (nodes || []).forEach((node) => { names.set(node.id, node.name); walk(node.children); });
+      })(S.tree);
+      S.docs.forEach((entry) => {
+        const fresh = names.get(entry.document.id);
+        if (fresh && fresh !== entry.document.name) entry.document.name = fresh;
+      });
+      renderPanels();
+    });
     return;
   }
   if (data.type !== 'ws-open-doc') return;

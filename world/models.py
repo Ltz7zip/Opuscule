@@ -932,6 +932,21 @@ class TreeVariant(models.Model):
         merged["relations"] = relations
         self.settings = merged
 
+    @property
+    def is_setup(self) -> bool:
+        """这棵树**选过模版**了吗。
+
+        新建一棵关系树时它先是"没配过"的状态（关系清单、画布落点都还没有），
+        这时候打开应该先给模版选择，而不是一片空画布。选完（哪怕选的是"从空白开始"）
+        就打上这个标记——用户明确要了空白，就不该每次都再问一遍。
+        """
+        return bool((self.settings or {}).get("setup"))
+
+    def mark_setup(self) -> None:
+        merged = dict(self.settings or {})
+        merged["setup"] = True
+        self.settings = merged
+
     def fork(self, name: str = "") -> "TreeVariant":
         """复制一份（对齐 "New variant (forks the current one)"）。"""
         clone = TreeVariant.objects.create(
@@ -970,6 +985,7 @@ class TreeVariant(models.Model):
             "settings": self.settings if isinstance(self.settings, dict) else {},
             "node_count": self.nodes.count(),
             "relations": self.relations(),
+            "setup": self.is_setup,
         }
         payload["resolved_labels"] = {kind: self.label_for(kind) for kind, _ in TREE_EDGE_KINDS}
         if with_graph:

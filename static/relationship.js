@@ -33,6 +33,7 @@
     pickTemplate: 'family',
     draftRelations: [],       // 图2 左侧那份（还没落库）
     docId: parseInt(app.dataset.doc, 10) || 0,
+    pendingDoc: 0,            // 已经建好、但还没选模版的那棵树（面板里选完就地配置它）
     doc: null,
     variant: null,
     nodes: [],
@@ -251,6 +252,8 @@
 
   function renderExisting() {
     var host = $('rtExisting');
+    // 嵌在工作区面板里时不列"已有关系树"：左边那条侧栏就是文档树，重复了
+    if (EMBED) { host.innerHTML = ''; $('rtExisting').parentNode.hidden = true; return; }
     host.innerHTML = '';
     if (!S.trees.length) {
       host.innerHTML = '<p class="rt-existing-empty">还没有关系树</p>';
@@ -272,10 +275,13 @@
     var item = S.templates.filter(function (t) { return t.id === templateId; })[0] || S.templates[0];
     if (!item) return;
     S.pickTemplate = item.id;
+    // 面板里正在配的是哪一篇，标题上写清楚
+    $('rtSideTitle').textContent = S.pendingDoc && S.doc ? S.doc.name : '关系树';
     S.draftRelations = (item.relations || []).map(function (relation) {
       return { kind: relation.kind, label: relation.label, hint: relation.hint || '', style: relation.style || '', enabled: true };
     });
     $('rtTemplateCaption').textContent = item.name + ' 关系';
+    $('rtCreate').textContent = S.pendingDoc ? '用这个模版' : '创建关系树';
     $('rtWithDemo').parentNode.style.display = item.id === 'blank' ? 'none' : '';
     renderRelationList();
     renderPreview($('rtTemplateCanvas'), item.id);
@@ -335,14 +341,31 @@
 
   $('rtCreate').addEventListener('click', function () {
     var button = $('rtCreate');
-    button.disabled = true;
     var item = S.templates.filter(function (t) { return t.id === S.pickTemplate; })[0] || {};
+    var withDemo = $('rtWithDemo').checked;
+    button.disabled = true;
+
+    // 面板里那棵树已经建好了，这一步是"就地配模版"；独立页那一步才是真新建
+    if (S.pendingDoc) {
+      api(API + '/relationship/trees/' + S.pendingDoc + '/setup', {
+        method: 'POST',
+        body: { template: S.pickTemplate, relations: S.draftRelations, with_demo: withDemo }
+      }).then(function () {
+        tellHostDocumentChanged();
+        return openEditor(S.pendingDoc);
+      }).catch(function (err) {
+        button.disabled = false;
+        toast(err.message || '配置失败', 4000);
+      });
+      return;
+    }
+
     api(API + '/relationship/trees', {
       method: 'POST',
       body: {
         template: S.pickTemplate,
         name: item.name ? item.name + '关系树' : '关系树',
-        with_demo: $('rtWithDemo').checked
+        with_demo: withDemo
       }
     }).then(function (data) {
       // 用户在左边改过的关系清单要带过去（改名 / 停用 / 新加 / 删掉）
@@ -356,6 +379,12 @@
       toast(err.message || '创建失败', 4000);
     });
   });
+
+  /* 刚配好模版：告诉宿主"这篇文档变了"，让它刷新侧栏 / 标题 */
+  function tellHostDocumentChanged() {
+    if (window.parent === window || !S.docId) return;
+    window.parent.postMessage({ type: 'ws-doc-changed', id: S.docId }, window.location.origin);
+  }
 
   /* ================================================== 预览：示意小画布 */
   /* 预览和编辑区共用同一套走线算法，所以"看到的"就是"建出来的"。 */
@@ -454,8 +483,23 @@
   }
 
   /* ==================================================== 编辑区：载入与渲染 */
+  /* 打开一篇关系树。**没选过模版的空树先给模版选择**——不管是在独立页打开，
+     还是在工作区面板里打开，都不该把人直接丢到一片空画布上。 */
   function openEditor(docId) {
     api(API + '/relationship/trees/' + docId).then(function (data) {
+      var empty = !(data.variant.nodes || []).length && !(data.variant.edges || []).length;
+      if (empty && !data.variant.setup && !READONLY) {
+        S.pendingDoc = docId;
+        S.docId = docId;
+        S.doc = data.document;
+        S.grid = data.grid || S.grid;
+        $('rtDocName').textContent = S.doc.name;
+        $('rtOpenFull').href = '/relationship?doc=' + docId;
+        renderPicker();
+        showScreen('picker');
+        return;
+      }
+      S.pendingDoc = null;
       S.docId = docId;
       S.doc = data.document;
       S.grid = data.grid || S.grid;

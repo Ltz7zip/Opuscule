@@ -32,9 +32,13 @@ from .relations import (
     TREE_TEMPLATES,
     grid_payload,
     relation_style,
+    template,
     template_payload,
     template_relations,
 )
+
+#: 这些名字是"还没起过名"的意思，选完模版可以顺手替掉
+DEFAULT_TREE_NAMES = {"", "未命名", "新建关系树", "关系树"}
 
 
 def relationship_page(request):
@@ -133,7 +137,8 @@ def tree_collection(request):
         name="Main",
         kind=template_id,
         position=0,
-        settings={"relations": template_relations(template_id)},
+        # setup：这一步就是"选模版"，选完就打标记，以后打开不再问
+        settings={"relations": template_relations(template_id), "setup": True},
     )
 
     # "同时放入示例人物"：把模版示意图那棵树真的落成数据，省得对着空画布发愣
@@ -184,6 +189,57 @@ def _seed_demo(variant: TreeVariant, template_id: str) -> None:
             label=item.get("label") or "",
             style=item.get("style") or relation_style(item["kind"]),
         )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def tree_setup(request, doc_id):
+    """给**已经存在**的空树选模版（工作区面板里那一步）。
+
+    和 ``POST /trees`` 的区别只在"树是新建的还是现成的"：那边建文档 + 变体，
+    这边把现成的空变体就地配上模版（关系清单 + 可选的示例人物），并打上 setup 标记。
+    已经有人物或关系的树不再允许重配——那会把用户画好的东西冲掉。
+    """
+    world = world_views.current_world()
+    document = world_views.get_document(world, doc_id)
+    if document is None:
+        return world_views.json_response(world_views.DOC_NOT_FOUND, status=404)
+    if document.document_type != DOC_TREE:
+        return world_views.error("这个文档不是关系树")
+
+    variant = _variant_or_default(document)
+    if variant.nodes.exists() or variant.edges.exists():
+        return world_views.error("这棵树已经有内容了，不能再用模版重配")
+
+    payload = world_views.parse_json(request)
+    template_id = world_views.as_text(payload.get("template"), 20) or "family"
+    if template_id not in {item["id"] for item in TREE_TEMPLATES}:
+        template_id = "family"
+
+    # 名字还是默认的就跟着模版起一个（"家庭关系树"）；用户自己改过就不动
+    if document.name in DEFAULT_TREE_NAMES:
+        document.name = f"{template(template_id)['name']}关系树"
+        document.save(update_fields=["name"])
+
+    variant.kind = template_id
+    relations = payload.get("relations")
+    variant.set_relations(
+        _clean_relations(relations) if isinstance(relations, list)
+        else template_relations(template_id)
+    )
+    variant.mark_setup()
+    variant.save()
+
+    if payload.get("with_demo") and template_id != "blank":
+        _seed_demo(variant, template_id)
+
+    world_views.touch_document(document, label="选择关系树模版", author=request.user)
+    return world_views.json_response({
+        "document": document.to_payload(),
+        "variant": variant.to_payload(with_graph=True),
+        "grid": grid_payload(),
+        "summary": _tree_summary(document),
+    })
 
 
 # --------------------------------------------------------------------------- #

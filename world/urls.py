@@ -92,6 +92,8 @@ urlpatterns = [
     path("relationship/trees/<int:doc_id>", relationship.tree_detail, name="relationship-tree"),
     path("relationship/trees/<int:doc_id>/relations", relationship.tree_relations,
          name="relationship-tree-relations"),
+    path("relationship/trees/<int:doc_id>/setup", relationship.tree_setup,
+         name="relationship-tree-setup"),
 
     # 经典地图
     path("maps/<int:doc_id>", views.map_state_view, name="map-state"),
