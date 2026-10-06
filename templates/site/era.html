@@ -9,6 +9,11 @@
     {% if era.description %}<p class="era-desc">{{ era.description }}</p>{% endif %}
   </header>
 
+  <p class="era-actions">
+    <a class="te-btn" href="{% url 'site:home' world.published_slug %}?era={{ era.id }}">只看这个纪元的内容（网格）</a>
+    <a class="te-btn" href="{% url 'site:home' world.published_slug %}">回到全部</a>
+  </p>
+
   {% if all_eras|length > 1 %}
     <nav class="era-switch">
       {% for item in all_eras %}

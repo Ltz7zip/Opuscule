@@ -49,7 +49,7 @@ def _site_base(world: World, sections=None, request=None) -> dict:
         "sections": publish_service.site_sections(world) if sections is None else sections,
         "noindex": world.audience != "public",
         "site_types": filters["types"],
-        "site_eras": filters["eras"],
+        "site_eras": publish_service.site_eras(world),
         "query": ((request.GET.get("q") or "").strip() if request is not None else ""),
         "active_filter": (_active_filter(request, world) if request is not None
                           else {"type_slug": "", "era_id": 0, "label": "全部", "active": False}),
@@ -116,12 +116,14 @@ def search(request, slug):
             ).values_list("id", flat=True)
         )
         hits = [hit for hit in hits if hit["document"].id in allowed]
+    similar = publish_service.suggest_similar(world, keyword) if (keyword and not hits) else []
     paged = publish_service.paginate(hits, page=as_int(request.GET.get("page"), 1), per_page=20)
     context = _site_base(world, request=request)
     context.update({
         "query": keyword,
         "hits": paged["items"],
         "pager": paged,
+        "similar": similar,
         "active_filter": active,
         "total_documents": sum(len(section["documents"]) for section in context["sections"]),
     })

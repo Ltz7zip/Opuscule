@@ -1746,6 +1746,8 @@ def graph_view(request):
         center=as_int(request.GET.get("center"), 0) or None,
         depth=clamp_int(request.GET.get("depth"), 1, 3),
         limit=clamp_int(request.GET.get("limit"), 1, 400),
+        # 只读访客（含发布站点里嵌的画布）只画已发布的节点
+        published_only=not permissions.can_edit(request.user, world),
     )
     center_doc = get_document(world, request.GET.get("center")) if request.GET.get("center") else None
     payload["center_name"] = center_doc.name if center_doc is not None else ""
@@ -2854,7 +2856,7 @@ def publish_view(request):
     payload = parse_json(request)
     audience = as_text(payload.get("audience"), 20) or None
     password = payload.get("password")
-    publish_service.publish(world, audience=audience, password=password)
+    publish_service.publish(world, audience=audience, password=password, author=request.user)
     return json_response({"publish": world.publish_summary(), "version": world.publish_version})
 
 
@@ -2864,6 +2866,15 @@ def publish_preview_view(request):
     """发布差异预览：这次发布会新增 / 更新 / 下架哪些文档（前端分享面板直接列名字）。"""
     world = current_world()
     return json_response(publish_service.publish_preview(world))
+
+
+@csrf_exempt
+@require_safe
+def publish_log_view(request):
+    """发布记录（最近在前）：每次发布会动了哪些文档。"""
+    world = current_world()
+    logs = world.publish_logs.all()[:30]
+    return json_response({"logs": [log.to_payload() for log in logs]})
 
 
 @csrf_exempt

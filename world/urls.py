@@ -98,6 +98,7 @@ urlpatterns = [
 
     # 发布
     path("publish/preview", views.publish_preview_view, name="publish-preview"),
+    path("publish/log", views.publish_log_view, name="publish-log"),
     path("publish", views.publish_view, name="publish"),
     path("unpublish", views.unpublish_view, name="unpublish"),
 

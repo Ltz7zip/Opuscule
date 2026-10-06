@@ -4328,6 +4328,12 @@ function renderGraph(entry) {
         renderPanels();
         return;
       }
+      // 嵌在发布站点里时，点节点应该跳到那张卡的站点页面，而不是在工作区里开面板
+      if (isEmbedded()) {
+        const target = findNode(node.id);
+        postToHost('ws-open-doc', { id: node.id, name: node.name, slug: target ? target.slug : '' });
+        return;
+      }
       openDoc(node.id);
     });
     group.addEventListener('dblclick', () => { ui.center = node.id; renderPanels(); });
@@ -4424,6 +4430,26 @@ async function publishDialog() {
         `已上线 ${counts.live || 0} · 有改动未发布 ${counts.stale || 0} · 尚未上线 ${counts.pending || 0} · 已排除 ${counts.excluded || 0}`);
       body.appendChild(line);
     }
+
+    // 发布记录：每次发布动了什么（最近几条）
+    const logBox = el('details', 'publish-log');
+    logBox.appendChild(el('summary', null, '发布记录'));
+    body.appendChild(logBox);
+    api('/api/world/publish/log').then((data) => {
+      if (!data.logs || !data.logs.length) {
+        logBox.appendChild(el('p', 'hint', '还没有发布记录。'));
+        return;
+      }
+      data.logs.slice(0, 6).forEach((log) => {
+        const row = el('div', 'pl-row');
+        row.appendChild(el('b', null, `v${log.version}`));
+        row.appendChild(el('span', 'pl-time', new Date(log.created_at).toLocaleString()));
+        row.appendChild(el('span', 'pl-who', log.author));
+        row.appendChild(el('span', 'pl-diff',
+          `+${log.added_count} ~${log.changed_count} -${log.removed_count}`));
+        logBox.appendChild(row);
+      });
+    }).catch(() => {});
 
     // 发布差异预览：列清楚这次发布会新增 / 更新 / 下架哪些文档
     const preview = el('div', 'publish-preview');
@@ -6468,6 +6494,17 @@ function revealWriteControls(show) {
   // 插入条 / 新建类按钮：只读时整块收起来，界面干净，也不会误导
   $$('.insert-bar, .block-menu-add, .tool-add-row').forEach((node) => { node.hidden = !show; });
   document.documentElement.classList.toggle('is-readonly-mode', !show);
+}
+
+/** 嵌在发布站点里吗？（/world?embed=<id>） */
+function isEmbedded() {
+  return Boolean(document.body.dataset.embedDoc);
+}
+
+/** 跟宿主页面（发布站点）说一句话。 */
+function postToHost(type, payload) {
+  if (window.parent === window) return;
+  window.parent.postMessage({ type, ...(payload || {}) }, window.location.origin);
 }
 
 /** 写操作的统一闸门：没权限就别发请求，直接告诉用户为什么。 */
