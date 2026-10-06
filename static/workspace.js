@@ -139,7 +139,10 @@ function applyTheme(theme) {
   const root = document.documentElement.style;
   if (!theme) return;
   // 极简语言的表面色跟着世界主题的明暗走（浅色 = Minimal 的纸白，深色 = #0a0a0a/#171717）
-  document.documentElement.dataset.theme = theme.mode === 'light' ? 'light' : 'dark';
+  // 嵌进发布站点时强制浅色：站点是纸面风格，嵌一块深色画布会非常突兀
+  const forcedMode = isEmbedded() ? 'light' : (theme.mode === 'light' ? 'light' : 'dark');
+  document.documentElement.dataset.theme = forcedMode;
+  if (isEmbedded()) document.body.classList.add('is-paper');
   if (theme.primaryColor) {
     root.setProperty('--primary', theme.primaryColor);
     root.setProperty('--primary-ink', readableInk(theme.primaryColor));
@@ -443,6 +446,7 @@ function closeTab(panelIndex, id) {
 }
 
 function renderPanels() {
+  setTimeout(tagEmbedControls, 0);      // 面板画完再标记嵌入时要藏的控件
   const host = $('#panels');
   // 面板要重建了：先把现有正文/标题节点标记为"退休"，再清空并重画。
   // 这样它们接下来触发的 input / blur 保存不会再拿旧内容覆盖掉新结构
@@ -523,6 +527,14 @@ function renderPanels() {
             const treeCanvas = body.querySelector('.tree-canvas');
             if (!treeCanvas) return;
             fitTree(entry, treeCanvas);
+          });
+        }
+        // 嵌在站点里时"适应视野"要等画布尺寸稳定（iframe 高度是站点给的，会晚一步到位）
+        if (isEmbedded()) {
+          requestAnimationFrame(() => {
+            const treeCanvas = body.querySelector('.tree-canvas');
+            if (!treeCanvas) return;
+            [120, 420, 900].forEach((delay) => setTimeout(() => fitTree(entry, treeCanvas), delay));
           });
         }
       }
@@ -3288,6 +3300,7 @@ function renderTreeTool(entry) {
 
   /* 工具条 */
   const bar = el('div', 'tree-bar');
+  if (isEmbedded()) bar.classList.add('is-embed-bar');
   const variantBox = el('div', 'variant-tabs');
   state.variants.forEach((item) => {
     const tab = el('button', `variant-tab${item.id === variant.id ? ' is-active' : ''}`,
@@ -3299,7 +3312,7 @@ function renderTreeTool(entry) {
     });
     variantBox.appendChild(tab);
   });
-  const addVariant = el('button', 'variant-tab', '＋ 变体');
+  const addVariant = el('button', 'variant-tab tree-tool-edit', '＋ 变体');
   addVariant.title = '新建变体（可选择复制当前这棵）';
   addVariant.addEventListener('click', async () => {
     const name = window.prompt('新变体名称', `Variant ${state.variants.length + 1}`);
@@ -3321,6 +3334,7 @@ function renderTreeTool(entry) {
   });
   kindSelect.value = variant.kind;
   kindSelect.title = '起步模板：会改掉默认的关系名';
+  kindSelect.classList.add('tree-tool-edit');
   kindSelect.addEventListener('change', async () => {
     await api(`/api/world/tree-variants/${variant.id}`, { method: 'PUT', body: { kind: kindSelect.value } });
     await loadTree(entry);
@@ -3343,7 +3357,7 @@ function renderTreeTool(entry) {
     renderPanels();
   }, ui.mode === 'pan'));
 
-  const labelMode = el('button', 'mini-btn', `关系名：${{ hover: '悬停显示', always: '总是显示', never: '隐藏' }[ui.labels]}`);
+  const labelMode = el('button', 'mini-btn tree-tool-edit', `关系名：${{ hover: '悬停显示', always: '总是显示', never: '隐藏' }[ui.labels]}`);
   labelMode.addEventListener('click', () => {
     ui.labels = ui.labels === 'hover' ? 'always' : ui.labels === 'always' ? 'never' : 'hover';
     renderPanels();
@@ -3434,6 +3448,18 @@ function renderTreeTool(entry) {
     group.setAttribute('class', `tree-node${selected ? ' is-selected' : ''}`);
 
     const rect = document.createElementNS(svgNS, 'rect');
+
+      // 左侧色条：让只读视图也有颜色（分组色优先，否则按世代轮换一套柔和色）
+      const accent = document.createElementNS(svgNS, 'rect');
+      const palette = ['#7aa5e6', '#7fc8a5', '#eb968c', '#e6c378', '#afA5eb', '#78bee6'];
+      const accentColor = node.group_color || palette[Math.abs(node.generation || 0) % palette.length];
+      accent.setAttribute('class', 'node-accent');
+      accent.setAttribute('x', '6');
+      accent.setAttribute('y', '16');
+      accent.setAttribute('width', '3');
+      accent.setAttribute('height', '46');
+      accent.setAttribute('rx', '2');
+      accent.setAttribute('fill', accentColor);
     if (node.image) {
       const avatar = document.createElementNS(svgNS, 'image');
       avatar.setAttribute('href', node.image);
@@ -3450,6 +3476,7 @@ function renderTreeTool(entry) {
     rect.setAttribute('stroke-width', selected ? '2' : '1');
     if (node.deceased) rect.setAttribute('stroke-dasharray', '4 3');
     group.appendChild(rect);
+    group.appendChild(accent);
 
     if (node.card) {
       const link = document.createElementNS(svgNS, 'text');
@@ -3550,6 +3577,13 @@ function renderTreeTool(entry) {
 }
 
 /** 把整棵树缩放到视野中央（只在首次打开时做一次）。 */
+/** 嵌进站点时：树画好之后自动适应一次视野（只在第一次，之后交给读者自己缩放）。 */
+function autoFitTree(entry, canvas) {
+  if (!isEmbedded() || entry.treeFitted) return;
+  entry.treeFitted = true;
+  setTimeout(() => fitTree(entry, canvas), 60);
+}
+
 function fitTree(entry, canvas) {
   const ui = entry.treeUi;
   const nodes = (entry.tree && entry.tree.active.nodes) || [];
@@ -3690,6 +3724,7 @@ function renderMapTool(entry) {
 
   /* 工具条 */
   const bar = el('div', 'map-bar');
+  if (isEmbedded()) bar.classList.add('is-embed-bar');
   const tools = [['select', '☝ 选择'], ['pin', '📍 图钉'], ['zone', '⬠ 区域'], ['label', 'T 文字']];
   tools.forEach(([value, label]) => {
     const button = el('button', `mini-btn${ui.tool === value ? ' is-primary' : ''}`, label);
@@ -6487,12 +6522,30 @@ const WRITE_CONTROLS = [
   '#cardEraBtn', '#coverBtn', '#memberInviteBtn', '#publishBtn', '#tableAddRowBtn',
 ];
 
+/* 发布站点里嵌的画布：按按钮文字认出"改内容"的入口并藏掉。
+   比逐个加类名稳 —— 三个工具条（关系树 / 地图 / 图谱）都能覆盖。 */
+const EMBED_HIDE_WORDS = ['成员', '选择', '平移', '图钉', '区域', '文字', '底图', '上传',
+                          '关系名', '变体', '新建', '添加', '删除', '清空'];
+
+function tagEmbedControls() {
+  if (!isEmbedded()) return;
+  $$('.is-embed-bar button, .is-embed-bar select').forEach((node) => {
+    const text = (node.textContent || '').trim();
+    const shouldHide = EMBED_HIDE_WORDS.some((word) => text.includes(word));
+    node.classList.toggle('embed-hide', shouldHide);
+  });
+}
+
 function revealWriteControls(show) {
   WRITE_CONTROLS.forEach((selector) => {
     $$(selector).forEach((node) => { node.hidden = !show; });
   });
   // 插入条 / 新建类按钮：只读时整块收起来，界面干净，也不会误导
   $$('.insert-bar, .block-menu-add, .tool-add-row').forEach((node) => { node.hidden = !show; });
+  // 关系树 / 地图 / 图谱的编辑控件（变体、成员、关系名、＋/－、选择模式…）
+  $$('.variant-tab.is-add, .tree-tool-edit, .map-tool-edit, .graph-tool-edit').forEach((node) => {
+    node.hidden = !show;
+  });
   document.documentElement.classList.toggle('is-readonly-mode', !show);
 }
 
