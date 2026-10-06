@@ -97,6 +97,7 @@ urlpatterns = [
     path("graph", views.graph_view, name="graph"),
 
     # 发布
+    path("publish/preview", views.publish_preview_view, name="publish-preview"),
     path("publish", views.publish_view, name="publish"),
     path("unpublish", views.unpublish_view, name="unpublish"),
 

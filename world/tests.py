@@ -1880,3 +1880,63 @@ class SiteBrowseTests(BaseWorldCase):
         empty = self.client.get(f"/s/{self.slug}/search")
         self.assertEqual(empty.status_code, 200)
         self.assertIn("输入关键词", empty.content.decode())
+
+
+class SiteEraAndPreviewTests(BaseWorldCase):
+    """纪元站点页 + 发布差异预览 + 搜索分页高亮。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+        self.era = Era.objects.create(world=self.world, name="青铜纪", theme="teal", length_years=120)
+        timeline = Document.objects.create(world=self.world, document_type=DOC_TIMELINE, name="年表")
+        TimelineEvent.objects.create(document=timeline, title="城门落成", era=self.era,
+                                     precision="year", year=12)
+        TimelineEvent.objects.create(document=timeline, title="无关的事", precision="year", year=90)
+        from . import publish
+        publish.publish(self.world, audience="public")
+        self.slug = self.world.published_slug
+
+    def test_era_page_lists_only_its_events(self):
+        page = self.client.get(f"/s/{self.slug}/era/{self.era.id}")
+        self.assertEqual(page.status_code, 200)
+        body = page.content.decode()
+        self.assertIn("青铜纪", body)
+        self.assertIn("城门落成", body)
+        self.assertNotIn("无关的事", body)
+
+    def test_home_shows_era_pills(self):
+        home = self.client.get(f"/s/{self.slug}/").content.decode()
+        self.assertIn("纪元", home)
+        self.assertIn("青铜纪", home)
+
+    def test_unknown_era_is_404(self):
+        self.assertEqual(self.client.get(f"/s/{self.slug}/era/999999").status_code, 404)
+
+    def test_search_highlights_and_paginates(self):
+        found = self.client.get(f"/s/{self.slug}/search?q=城门")
+        body = found.content.decode()
+        self.assertIn("<mark>", body)
+        self.assertIn("城门", body)
+
+    def test_search_paginates_twenty_per_page(self):
+        for index in range(25):
+            self.make_card(name=f"批量{index:02d}共同词")
+        from . import publish
+        publish.publish(self.world, audience="public")
+        first = self.client.get(f"/s/{self.slug}/search?q=共同词").content.decode()
+        self.assertIn("第 1 / 2 页", first)
+        second = self.client.get(f"/s/{self.slug}/search?q=共同词&page=2").content.decode()
+        self.assertIn("第 2 / 2 页", second)
+
+    def test_publish_preview_reports_changes(self):
+        preview = self.client.get("/api/world/publish/preview").json()
+        self.assertIn("added", preview)
+        self.assertIn("changed", preview)
+        self.assertIn("removed", preview)
+        # 刚发布过：现在没有待上线的；新建一张卡之后它就出现在 added 里
+        self.assertEqual(preview["summary"]["added"], 0)
+        self.make_card(name="发布之后才写的")
+        again = self.client.get("/api/world/publish/preview").json()
+        names = [row["name"] for row in again["added"]]
+        self.assertIn("发布之后才写的", names)

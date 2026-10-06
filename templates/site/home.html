@@ -18,6 +18,17 @@
     <p class="search-count">「{{ query }}」找到 {{ hits|length }} 条结果 · <a href="{% url 'site:search' world.published_slug %}?q={{ query|urlencode }}">看完整结果</a></p>
   {% endif %}
 
+  {% if eras %}
+    <section class="section" id="eras">
+      <h2>纪元</h2>
+      <div class="era-row">
+        {% for item in eras %}
+          <a class="era-pill era-t-{{ item.theme }}" href="{% url 'site:era' world.published_slug item.id %}">{{ item.name }}</a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
   {% for section in sections %}
     <section class="section" id="{{ section.key|slugify }}">
       <h2>{{ section.title }}</h2>
