@@ -1,0 +1,33 @@
+{% extends "site/base.html" %}
+{% block title %}搜索「{{ query }}」· {{ world.name }}{% endblock %}
+{% block content %}
+  <nav class="crumbs"><a href="{% url 'site:home' world.published_slug %}">首页</a> / 搜索</nav>
+  <h1 class="page-title">搜索</h1>
+
+  <form class="search-inline" method="get" action="{% url 'site:search' world.published_slug %}">
+    <input type="search" name="q" placeholder="搜名称、正文、属性、事件…" value="{{ query }}" autofocus />
+    {% if active_filter.type_slug %}<input type="hidden" name="type" value="{{ active_filter.type_slug }}" />{% endif %}
+    {% if active_filter.era_id %}<input type="hidden" name="era" value="{{ active_filter.era_id }}" />{% endif %}
+    <button type="submit">搜索</button>
+  </form>
+
+  {% if query %}
+    <p class="search-count">「{{ query }}」找到 {{ hits|length }} 条结果{% if active_filter.active %}（限 {{ active_filter.label }}）{% endif %}</p>
+    <ul class="hit-list">
+      {% for hit in hits %}
+        <li class="hit">
+          <a class="hit-name" href="{% url 'site:page' world.published_slug hit.document.slug %}">{{ hit.name }}</a>
+          <span class="hit-meta">{{ hit.type_label }}{% if hit.type_name %} · {{ hit.type_name }}{% endif %}{% if hit.era_name %} · {{ hit.era_name }}{% endif %}</span>
+          {% if hit.snippet %}<p class="hit-snippet">{{ hit.snippet }}</p>{% endif %}
+          {% if hit.matched_events %}
+            <p class="hit-events">事件：{% for title in hit.matched_events %}<span class="hit-event">{{ title }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+          {% endif %}
+        </li>
+      {% empty %}
+        <li class="empty">没找到。「{{ query }}」换个说法，或者清掉筛选再试。</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">输入关键词开始搜索。名称、别名、正文、区块文字、属性值和事件标题都会被搜到。</p>
+  {% endif %}
+{% endblock %}

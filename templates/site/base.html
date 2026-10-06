@@ -16,8 +16,11 @@
         <a href="{% url 'site:home' world.published_slug %}#{{ section.key|slugify }}">{{ section.title }}</a>
       {% endfor %}
     </nav>
-    <form class="nav-search" action="{% url 'site:home' world.published_slug %}" method="get">
-      <input type="search" name="q" placeholder="搜索这个世界…" value="{{ request.GET.q|default:'' }}" />
+    {% include "site/_filter.html" %}
+    <form class="nav-search" action="{% url 'site:search' world.published_slug %}" method="get">
+      <input type="search" name="q" placeholder="搜索这个世界…" value="{{ query }}" />
+      {% if active_filter.type_slug %}<input type="hidden" name="type" value="{{ active_filter.type_slug }}" />{% endif %}
+      {% if active_filter.era_id %}<input type="hidden" name="era" value="{{ active_filter.era_id }}" />{% endif %}
     </form>
   </header>
 
@@ -35,6 +38,22 @@
     </div>
   </footer>
   <script>
+    // 筛选 chip 的展开/收起（点外面或按 Esc 关掉）
+    (function () {
+      var chip = document.querySelector('[data-filter]');
+      if (!chip) return;
+      var btn = chip.querySelector('.fc-btn');
+      var menu = chip.querySelector('.fc-menu');
+      function close() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        menu.hidden = !menu.hidden;
+        btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+      });
+      document.addEventListener('click', close);
+      document.addEventListener('keydown', function (event) { if (event.key === 'Escape') close(); });
+    })();
+
     // 让时间线区块铺满浏览器宽度：量出当前左边距，直接拉负值（窗口变化时重算）
     (function () {
       var boxes = Array.prototype.slice.call(document.querySelectorAll('.timeline-embed'));

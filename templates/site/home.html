@@ -7,28 +7,32 @@
     <p class="hero-stats">{{ sections|length }} 个分区 · 共 {{ total_documents }} 份文档{% if world.genres %} · {{ world.genres|join:"、" }}{% endif %}</p>
   </section>
 
-  <form class="search-inline" method="get" action="{% url 'site:home' world.published_slug %}">
-    <input type="search" name="q" placeholder="搜索卡片名称…" value="{{ request.GET.q|default:'' }}" />
+  <form class="search-inline" method="get" action="{% url 'site:search' world.published_slug %}">
+    <input type="search" name="q" placeholder="搜名称、正文、属性、事件…" value="{{ query|default:'' }}" />
+    {% if active_filter.type_slug %}<input type="hidden" name="type" value="{{ active_filter.type_slug }}" />{% endif %}
+    {% if active_filter.era_id %}<input type="hidden" name="era" value="{{ active_filter.era_id }}" />{% endif %}
     <button type="submit">搜索</button>
   </form>
+
+  {% if query %}
+    <p class="search-count">「{{ query }}」找到 {{ hits|length }} 条结果 · <a href="{% url 'site:search' world.published_slug %}?q={{ query|urlencode }}">看完整结果</a></p>
+  {% endif %}
 
   {% for section in sections %}
     <section class="section" id="{{ section.key|slugify }}">
       <h2>{{ section.title }}</h2>
       <div class="grid">
         {% for doc in section.documents %}
-          {% if not request.GET.q or request.GET.q|lower in doc.name|lower %}
             <a class="tile" href="{% url 'site:page' world.published_slug doc.slug %}">
               {% if doc.cover %}<span class="tile-cover" style="background-image:url('{{ doc.cover }}')"></span>{% endif %}
               <span class="tile-kind">{{ doc.get_document_type_display }}{% if doc.entity_type %} · {{ doc.entity_type.name }}{% endif %}</span>
               <span class="tile-name">{{ doc.name }}</span>
               {% if doc.era %}<span class="tile-era">{{ doc.era.name }}</span>{% endif %}
             </a>
-          {% endif %}
         {% endfor %}
       </div>
     </section>
   {% empty %}
-    <p class="empty">这个世界还没有发布任何内容。</p>
+    <p class="empty">{% if active_filter.active %}这个筛选下没有内容，<a href="{% url 'site:home' world.published_slug %}">看全部</a>。{% else %}这个世界还没有发布任何内容。{% endif %}</p>
   {% endfor %}
 {% endblock %}
