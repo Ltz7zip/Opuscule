@@ -37,15 +37,22 @@ from .relations import (
 
 
 def relationship_page(request):
-    """关系树页面。``?doc=<id>`` 直接进编辑区，不带就停在模版选择那一步。"""
+    """关系树页面。``?doc=<id>`` 直接进编辑区，不带就停在模版选择那一步。
+
+    明暗跟工作区走同一条规则（``world.theme.mode``，非 light 即 dark），
+    这样从工作区点「全屏编辑」跳过来不会有"闪一下换了皮肤"的割裂感。
+    """
+    world = world_views.current_world()
     doc_id = world_views.as_int(request.GET.get("doc"), 0)
     document = None
     if doc_id:
-        document = world_views.get_document(world_views.current_world(), doc_id)
+        document = world_views.get_document(world, doc_id)
         if document is not None and document.document_type != DOC_TREE:
             document = None
+    theme = world.theme_config if isinstance(world.theme_config, dict) else {}
     return render(request, "relationship.html", {
         "doc_id": document.id if document is not None else 0,
+        "theme_mode": "light" if theme.get("mode") == "light" else "dark",
     })
 
 

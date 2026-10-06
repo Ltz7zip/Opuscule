@@ -87,35 +87,42 @@
   }
 
   /* ================================================================== 图标 */
-  var ICONS = {
-    parent: '<circle cx="9" cy="7" r="3.2"/><path d="M3.5 19c.5-3 2.8-4.8 5.5-4.8"/><path d="M17 13v7M13.5 16.5h7"/>',
-    child: '<circle cx="9" cy="7" r="3.2"/><path d="M3.5 19c.5-3 2.8-4.8 5.5-4.8"/><path d="M17 20v-7M13.5 16.5h7"/>',
-    spouse: '<path d="M12 20s-7-4.4-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.6-7 9-7 9z"/>',
-    ex: '<path d="M12 20s-7-4.4-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.6-7 9-7 9z"/><path d="M4 4l16 16"/>',
-    sibling: '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 19c.4-2.6 2.4-4.2 5-4.2s4.6 1.6 5 4.2M13 19c.4-2.6 1.6-4.2 3-4.2s2.6 1.6 3 4.2"/>',
-    half_sibling: '<circle cx="7" cy="8" r="2.6"/><circle cx="17" cy="8" r="2.6"/><path d="M2.5 19c.4-2.4 2.2-3.9 4.5-3.9"/><path d="M21.5 19c-.4-2.4-2.2-3.9-4.5-3.9"/><path d="M10 5.5h4"/>',
-    adoptive: '<path d="M12 20s-7-4.4-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.6-7 9-7 9z"/><path d="M9.5 12.5l2 2 3.5-4"/>',
-    step: '<circle cx="9" cy="7" r="3.2"/><path d="M3.5 19c.5-3 2.8-4.8 5.5-4.8"/><path d="M15 14.5h5M17.5 12v5"/>',
-    custom: '<path d="M12 5v14M5 12h14"/>'
+  /* 图标一律来自设计系统那一套（static/icons.js，Lucide 线条 / 24×24 / stroke 2 /
+     currentColor）。这里只负责把"关系种类"和"模版"映射到图标名——
+     自己再画一套的话，粗细和圆角迟早跟程序里其它地方对不上。 */
+  var RELATION_ICONS = {
+    parent: 'user-plus',
+    child: 'baby',
+    spouse: 'heart',
+    ex: 'heart-crack',
+    sibling: 'users',
+    half_sibling: 'users',
+    adoptive: 'heart-handshake',
+    step: 'shuffle',
+    custom: 'plus'
   };
 
-  function icon(kind) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
-      'stroke-linecap="round" stroke-linejoin="round">' + (ICONS[kind] || ICONS.custom) + '</svg>';
+  function relationIcon(kind) {
+    if (RELATION_ICONS[kind]) return RELATION_ICONS[kind];
+    return String(kind).indexOf('custom') === 0 ? 'plus' : 'network';
   }
 
-  /* 图1 模版图标 */
-  var TEMPLATE_ICONS = {
-    house: '<path d="M4 10.5L12 4l8 6.5V20H4z"/><path d="M9.5 20v-5h5v5"/>',
-    building: '<path d="M5 20V5.5A1.5 1.5 0 016.5 4h7A1.5 1.5 0 0115 5.5V20"/><path d="M15 10h3.5A1.5 1.5 0 0120 11.5V20"/><path d="M3 20h18"/><path d="M8 8h4M8 12h4M8 16h4"/>',
-    shield: '<path d="M12 3.5l7 2.6v5.6c0 4.2-2.9 7.4-7 8.8-4.1-1.4-7-4.6-7-8.8V6.1z"/><path d="M9.5 12.2l1.9 1.9 3.6-4"/>',
-    crown: '<path d="M4 17.5h16"/><path d="M4.5 8l3.6 3L12 5.5l3.9 5.5 3.6-3-1.6 7H6.1z"/>',
-    plus: '<path d="M12 5v14M5 12h14"/>'
-  };
+  function icon(kind) {
+    return iconHtml(relationIcon(kind), 17);
+  }
 
+  /* 模版的图标名由后端给（house / building / shield / crown / plus），
+     这里只做一次存在性兜底——查不到就退成加号，绝不让页面出现空白方块。 */
   function templateIcon(name) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-      'stroke-linecap="round" stroke-linejoin="round">' + (TEMPLATE_ICONS[name] || TEMPLATE_ICONS.plus) + '</svg>';
+    return iconHtml(ICONS[name] ? name : 'plus', 19);
+  }
+
+  /* 模板里的 <span data-icon="..."> 统一在启动时填成真图标，省得 HTML 里抄一串 path */
+  function hydrateIcons(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('[data-icon]'), function (host) {
+      if (host.firstElementChild) return;
+      host.innerHTML = iconHtml(host.dataset.icon, parseInt(host.dataset.iconSize, 10) || 16);
+    });
   }
 
   /* ========================================================= 几何：正交走线 */
@@ -190,6 +197,7 @@
 
   /* ================================================================= 首屏 */
   function boot() {
+    hydrateIcons(document);
     Promise.all([
       api(API + '/relationship/templates'),
       api(API + '/relationship/trees')
@@ -281,8 +289,10 @@
       row.className = 'rt-relation-row' + (relation.enabled === false ? ' is-off' : '');
       row.innerHTML = icon(relation.kind) + '<b>' + esc(relation.label) + '</b>' +
         '<button type="button" class="rt-relation-btn" data-act="toggle" title="' +
-        (relation.enabled === false ? '启用' : '暂时停用（快捷菜单里不再出现）') + '">−</button>' +
-        '<button type="button" class="rt-relation-btn is-danger" data-act="remove" title="删除这条关系">×</button>';
+        (relation.enabled === false ? '启用' : '暂时停用（快捷菜单里不再出现）') + '">' +
+        iconHtml('minus', 16) + '</button>' +
+        '<button type="button" class="rt-relation-btn is-danger" data-act="remove" title="删除这条关系">' +
+        iconHtml('x', 16) + '</button>';
 
       row.querySelector('[data-act="toggle"]').addEventListener('click', function () {
         relation.enabled = relation.enabled === false;
@@ -378,8 +388,7 @@
       if (!a || !b) return;
       var path = document.createElementNS(svgNS, 'path');
       path.setAttribute('d', pathFrom(routePoints(a, b)));
-      path.setAttribute('class', 'rt-edge' + (edge.kind === 'spouse' ? ' rt-edge--spouse' : '') +
-        (edge.style === 'dashed' ? ' rt-edge--dashed' : ''));
+      path.setAttribute('class', edgeClass(edge));
       layer.appendChild(path);
 
       if (edge.label) {
@@ -504,6 +513,14 @@
     return S.labels[kind] || '';
   }
 
+  /* 关系线的外观。结构保持安静：一律灰阶，只靠"实/虚 + 粗细"区分，
+     颜色留给交互（选中、悬停、正在拖的那条）。 */
+  function edgeClass(edge) {
+    return 'rt-edge'
+      + (edge.kind === 'spouse' ? ' rt-edge--strong' : '')
+      + (edge.style === 'dashed' ? ' rt-edge--dashed' : '');
+  }
+
   function renderEdges() {
     var svg = $('rtEdges');
     var layer = svg.querySelector('g') || svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
@@ -515,8 +532,7 @@
       if (!a || !b) return;
       var path = document.createElementNS(ns, 'path');
       path.setAttribute('d', pathFrom(routePoints(a, b)));
-      path.setAttribute('class', 'rt-edge' + (edge.kind === 'spouse' ? ' rt-edge--spouse' : '') +
-        (edge.style === 'dashed' ? ' rt-edge--dashed' : ''));
+      path.setAttribute('class', edgeClass(edge));
       path.setAttribute('data-edge', edge.id);
       path.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
       path.addEventListener('click', function (event) {
