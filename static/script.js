@@ -310,10 +310,10 @@
   function setNodeText(item, n) {
     if (item.kind === 'era') {
       var label = item.title || '未命名';
-      if (n.title.textContent !== label) n.title.textContent = label;
+      if (n.title && n.title.textContent !== label) n.title.textContent = label;
     } else {
       var text = item.title || '未命名';
-      if (n.pill.textContent !== text) n.pill.textContent = text;
+      if (n.pill && n.pill.textContent !== text) n.pill.textContent = text;
     }
   }
 

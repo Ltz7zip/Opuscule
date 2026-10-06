@@ -294,3 +294,14 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
 /* 纪元页顶部的两个跳转按钮 */
 .era-actions { display: flex; gap: 8px; margin: 4px 0 16px; }
 .era-actions .te-btn { text-decoration: none; display: inline-flex; align-items: center; height: 30px; }
+
+
+/* 画布里的轻提示（例如成员没有关联卡片） */
+.canvas-hint {
+  position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 12px);
+  padding: 8px 16px; border-radius: 999px; font-size: 13px;
+  background: rgba(27, 23, 16, .9); color: #faf7f0;
+  opacity: 0; pointer-events: none; transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 40;
+}
+.canvas-hint.is-on { opacity: 1; transform: translate(-50%, 0); }
