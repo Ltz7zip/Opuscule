@@ -3385,8 +3385,10 @@ function renderTreeTool(entry) {
     const list = rows.get(gen) || [];
     list.push(node);
     rows.set(gen, list);
-    node._px = node.x || index * 190;
-    node._py = gen * 150;
+    // 嵌入站点时排得松一些：留白多一点，读起来像时间线那样透气
+    const spread = isEmbedded() ? 1.3 : 1;
+    node._px = (node.x || index * 190) * spread;
+    node._py = gen * 150 * spread;
   });
 
   rows.forEach((list, gen) => {
@@ -3611,8 +3613,10 @@ function fitTree(entry, canvas) {
   const ui = entry.treeUi;
   const nodes = (entry.tree && entry.tree.active.nodes) || [];
   if (!nodes.length) { ui.fitted = true; return; }
-  const xs = nodes.map((n, i) => n.x || i * 190);
-  const ys = nodes.map((n) => (n.generation || 0) * 150);
+  // 和渲染时用同一套间距（嵌入时 1.3 倍），否则算出来的包围盒偏小、底行会被裁
+  const spread = isEmbedded() ? 1.3 : 1;
+  const xs = nodes.map((n, i) => (n.x || i * 190) * spread);
+  const ys = nodes.map((n) => (n.generation || 0) * 150 * spread);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs) + 156;
   const minY = Math.min(...ys);
@@ -3621,7 +3625,9 @@ function fitTree(entry, canvas) {
   const height = Math.max(1, maxY - minY);
   const cw = canvas.clientWidth || 900;
   const ch = canvas.clientHeight || 520;
-  const scale = clamp(Math.min((cw - 90) / width, (ch - 90) / height), 0.4, 1.25);
+  // 嵌入站点时留白给足：节点卡不该贴着画布边缘（否则底行会被裁掉）
+  const pad = isEmbedded() ? 168 : 90;
+  const scale = clamp(Math.min((cw - pad) / width, (ch - pad) / height), 0.4, 1.25);
   ui.zoom = scale;
   ui.offset = {
     x: (cw - width * scale) / 2 - minX * scale,

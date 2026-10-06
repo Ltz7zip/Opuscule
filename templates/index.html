@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>世界观共建 · 时间轴</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0b08'/%3E%3Cpath d='M4 16h24' stroke='%23ece8e1' stroke-width='1.6'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23ece8e1'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="{% static 'style.css' %}" />
+  <link rel="stylesheet" href="{% static 'style.css' %}?v={{ static_version }}" />
 </head>
 <body>
   <!-- 时间线画布：整块区域就是视频里的「时间线编辑区」 -->
@@ -432,6 +432,6 @@
     })();
   </script>
   {% endif %}
-  <script src="{% static 'script.js' %}"></script>
+  <script src="{% static 'script.js' %}?v={{ static_version }}"></script>
 </body>
 </html>
