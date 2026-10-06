@@ -30,6 +30,12 @@
 > 旧的那套"简版"渲染器删掉了——以后只有一份实现，新功能自动两边都有。
 > 新建一棵关系树时**面板里就是模版选择**（选模版 → 挑关系 → 用这个模版），
 > 选完就地配好这一篇，不用另开标签页。
+>
+> **2026-10-07 外壳换成"悬浮圆角面板"**：侧栏、工作区、面板标签、二级工具条都收进圆角卡片，
+> 卡片之间留缝、整块浮在世界背景上（新增 `static/shell.css`，最后加载、只改壳）。
+> 顺带修掉两处"文字出框"：侧栏底部三个按钮互相压字、窄屏下顶栏图标按钮被压成 8px。
+> 探针留在文档树里的一批 "自动点测XXX" 一次性文档也收进了回收站
+> （`tools/clean_probe_docs.py`，软删，随时还原）。见「外壳：悬浮圆角面板」。
 
 ---
 
@@ -309,6 +315,12 @@
 （`world/context.py` 取静态目录最新的 mtime，`lru_cache` 缓存），文件一改 URL 就变，浏览器必然重新拉。
 
 > 如果你在浏览器里看到的行为和刚改的代码不符：先**硬刷新一次**（⌘⇧R）。之后版本号会自动兜住。
+
+> ⚠️ **Django 6.1 的模板加载器默认就是带缓存的**：`Engine` 会把 loader 包一层
+> `django.template.loaders.cached.Loader`（与 `DEBUG` 无关，源码里那一支是无条件走的）。
+> 所以**改完 `.html` 必须重启 `runserver`**，不然模板还是进程启动时那一份；
+> `static_version` 又是 `lru_cache` 的进程内值，也得重启才会变。
+> 起服务时若带了 `--noreload`，改 `.py` 同样不会自动重启——改了没生效先看这两条。
 
 ## 画布嵌入的样式（地图 / 关系树 / 图谱）
 
@@ -595,6 +607,39 @@ worldbuilding_timeline/
 * 旧的暗色 token（`--ink / --panel / --line …`）在 `minimal.css` 里被别名到 Minimal 的表面色阶梯，
   这样明暗切换是整体的，不会只变一半。
 
+### 外壳：悬浮圆角面板（`static/shell.css`）
+
+`minimal.css` 管的是"里面的东西长什么样"，**外壳的几何**单独放在 `static/shell.css`，
+加载顺序在 `workspace.css → minimal.css → responsive.css` **之后**：只覆盖，不动结构，
+也不碰那一版逐像素校对过的经典编辑器（`static/style.css`）。
+
+| 位置 | 做法 |
+| --- | --- |
+| 页面底 | 世界背景（没配背景就是 `--mn-surface-sunken`）+ 一层很淡的环境光；环境光画在 `body` 的 `background-image` 上，**不用 fixed 浮层**（见下面的坑） |
+| 留白 / 缝隙 | `--shell-pad: 10px`、`--shell-gap: 10px`（≤1023px 用 8，手机用 6） |
+| 侧栏 / 工作区 | 18px 圆角卡片 + 1px 边框 + 一道顶边高光（`--shell-rim`）+ 柔和投影（`--shell-shadow`），取代横贯整屏的分隔线 |
+| 顶栏 | 透明，浮在背景上的一排药丸（世界 chip / 导航 / 按钮）；窄屏横向滚动，不挤压 |
+| 面板标签 | 卡片自己的页眉，标签是 10px 圆角小片，当前页签带强调色下划线 |
+| 二级工具条 | `.tl-frame-bar / .tree-bar / .map-bar / .graph-controls` 收成内嵌的圆角条，不再贴边 |
+| 只读提示条 | 顶部浮起的圆角条，两边留白，不贴满整条边 |
+| 不许挤扁 | 药丸统一 `flex: 0 0 auto` / `min-width: max-content`：挤不下就折行或让容器滚动 |
+
+两个踩过的坑写进了文件注释：
+
+1. **侧栏底部那三个按钮**（`新建文档 / 文件夹 / 用模板新建`）原来是 `flex: 1 1 auto` +
+   `min-width: 0`，280px 的侧栏根本放不下，于是三者互相压字（截图里"新建文档"和"文件夹"叠在一起）。
+   现在 `flex-basis: max-content` + `min-width: max-content` + 允许折行。
+2. **窄屏顶栏**的图标按钮会被 `flex-shrink` 压成 8px，图标和字一起挤出盒子。
+   现在顶栏容器 `overflow-x: auto`，按钮本身不参与收缩。
+3. **别给 `.app` 加 `z-index`**：那会造出层叠上下文，把手机端侧栏抽屉（`fixed; z-index: 60`）
+   压到遮罩（挂在 `body` 下的 `z-index: 55`）**底下**——抽屉还在，但点不动。
+   环境光因此走 `body` 背景，而不是 `body::after` 那种 fixed 浮层。
+   `tools/ui_polish_probe.py` 里有一条 `elementFromPoint` 断言守着这件事。
+
+嵌入发布站点时（`body.is-embed`）这层壳会自己关掉（外面已经有纸面容器了），
+打印时同样退出。`tools/ui_polish_probe.py` 会把每个浮层、每个断点都过一遍，
+逐元素比对 `scrollWidth / clientWidth` 与子元素外溢，发现"文字出框"就报错退出。
+
 ### 账号 / 协作 / 版本历史
 
 **注册与登录**：`/register`（第一个账号直接成为**所有者**，之后注册需要所有者发的**邀请码**）、
@@ -825,7 +870,9 @@ worldbuilding_timeline/
 .venv/bin/python tools/wysiwyg_probe.py       # 富文本：/ 菜单、格式条、是否真的落库
 .venv/bin/python tools/editing_probe.py      # 拖拽排序 / 撤销重做 / 块菜单 / 块评论
 .venv/bin/python tools/round7_probe.py       # 列表视图与标记 / 导入导出 / 建议 / 快捷键 / 撤销历史
-.venv/bin/python tools/tools_probe.py        # 表格双向绑定 + 11 种工具类文档
+.venv/bin/python tools/tools_probe.py        # 表格双向绑定 + 11 种工具类文档（跑完把自己建的收进回收站，REUSE=1 则保留）
+.venv/bin/python tools/ui_polish_probe.py    # 外观巡检：逐屏截图 + 每个浮层/断点的"文字出框"审计
+.venv/bin/python tools/clean_probe_docs.py   # 把探针留下的"自动点测XXX"文档收进回收站（--apply 才真动）
 .venv/bin/python tools/collab_probe.py       # 账号 / 邀请码 / 只读 / 在线状态 / 版本回滚
 .venv/bin/python tools/calendar_era_probe.py # 日历视图（月相、事件）与纪元分支
 .venv/bin/python tools/responsive_probe.py   # 六个屏幕尺寸：截图 + 横向溢出检查

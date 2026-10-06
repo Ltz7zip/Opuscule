@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
-"""工具类文档的验证：表格双向绑定 + 看板 / 画布 / 词典 / 待办 / 骰子 / 雷达 / 章节 / 嵌入。"""
+"""工具类文档的验证：表格双向绑定 + 看板 / 画布 / 词典 / 待办 / 骰子 / 雷达 / 章节 / 嵌入。
+
+跑完会把自己建的占用文档收进回收站；想留着看效果就 REUSE=1。
+"""
 from __future__ import annotations
-import json, pathlib, sys, urllib.request
+import json, os, pathlib, sys, urllib.request
 from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
+REUSE = os.environ.get("REUSE") == "1"
 SHOTS = pathlib.Path("/tmp/ux_shots"); SHOTS.mkdir(exist_ok=True)
 opener = make_opener(); ensure_login(opener)
 
@@ -22,11 +26,15 @@ def flat(ns, out=None):
         out.append(n); flat(n.get("children") or [], out)
     return out
 
+created = []
+
 def make_doc(kind, name):
     existing = [d for d in flat(api("/api/world/state")["documents"]) if d["type"] == kind]
     if existing:
         return existing[0]
-    return api("/api/world/documents", "POST", {"type": kind, "name": name})
+    doc = api("/api/world/documents", "POST", {"type": kind, "name": name})
+    created.append(doc)          # 记下来，收尾时清理
+    return doc
 
 problems = []
 state = api("/api/world/state")
@@ -104,6 +112,20 @@ with sync_playwright() as p:
     if not data.get("columns"):
         problems.append("看板没有把列存下来")
     b.close()
+
+# 收尾：这个探针是拿**真实数据库**当试验场的，跑完必须把自己建的占位文档收进回收站，
+# 否则左侧文档树里会堆一排 "自动点测XXX"，看着像一堆没人用的功能入口。
+# 只删这次新建的（已有的同名文档是用户的东西，不动）；REUSE=1 时连新建的都留着。
+if not REUSE:
+    for doc in created:
+        try:
+            req = urllib.request.Request(f"{BASE}/api/world/documents/{doc['id']}", method="DELETE")
+            with opener.open(req, timeout=20) as response:
+                response.read()
+        except Exception as exc:                       # 清理失败不该掩盖探针结果
+            print("清理失败：", doc["id"], exc)
+    if created:
+        print(f"已把 {len(created)} 篇点测文档收进回收站（回收站里点「还原」就能拿回来）")
 
 print("报错：", errs[:2] or "（无）")
 print("问题：", problems or "（无）")

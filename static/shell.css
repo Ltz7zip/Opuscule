@@ -1,0 +1,302 @@
+/* ==========================================================================
+   工作区外壳  —  悬浮圆角面板
+   --------------------------------------------------------------------------
+   加载顺序在 workspace.css / minimal.css / responsive.css **之后**：
+   这一层只改"外壳"的几何与质感（留白、圆角、边框、缝隙），内容层不动。
+
+   三条规则贯穿全篇：
+     · 页面底 = 世界背景（没配背景就是 surface-sunken），面板 = 浮在上面的一摞圆角卡片；
+     · 卡片之间靠 --shell-gap 的缝隙分开，不再用横贯整屏的分隔线；
+     · 控件一律"圆角矩形 / 药丸"，而且**不许被挤扁**（flex: 0 0 auto）：
+       挤不下就换行、或者让容器滚动，永远不把文字挤出盒子。
+   ========================================================================== */
+
+:root {
+  --shell-pad: 10px;                 /* 面板离窗口边缘的留白 */
+  --shell-gap: 10px;                 /* 面板与面板之间的缝 */
+  --shell-radius: 18px;              /* 大面片一档圆角 */
+  --shell-radius-sm: 12px;           /* 卡片里的小面片 */
+  --shell-top-height: 52px;          /* 顶栏高度（responsive.css 的抽屉也按它定位） */
+  --shell-top: calc(var(--shell-pad) + var(--shell-top-height) + var(--shell-gap));
+  --shell-surface: var(--mn-surface);
+  --shell-line: var(--mn-border);
+  --shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 10px 28px rgba(0, 0, 0, 0.07);
+  --shell-rim: inset 0 1px 0 rgba(255, 255, 255, 0.7);   /* 卡片顶边的一道高光 */
+  --shell-glow: 18%;                 /* 环境光强度：深色底要亮一点才看得出层次 */
+}
+:root[data-theme="dark"] {
+  --shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 14px 36px rgba(0, 0, 0, 0.42);
+  --shell-rim: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --shell-glow: 30%;
+}
+
+/* ------------------------------------------------------------ 底 + 环境光 */
+/* 一层很淡的环境光：纯色底上给点纵深，纯装饰。
+   注意它必须画在**页面背景**上，而不是 body::after 那种 fixed 浮层——
+   给 .app 加 z-index 会造出层叠上下文，把移动端抽屉（fixed z-index:60）压到
+   遮罩（body 下的 z-index:55）底下，抽屉就点不动了。
+   世界主题自带背景图时，JS 会写 body 的行内 background-image，这层光自然让位。 */
+body {
+  background-color: var(--mn-surface-sunken);
+  background-image:
+    radial-gradient(46% 42% at 8% 2%, color-mix(in srgb, var(--mn-accent) var(--shell-glow), transparent), transparent 72%),
+    radial-gradient(44% 40% at 96% 98%, color-mix(in srgb, var(--mn-accent) 70%, transparent), transparent 74%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.app {
+  padding: var(--shell-pad);
+  gap: var(--shell-gap);
+}
+
+/* ------------------------------------------------------------------ 顶栏 */
+/* 顶栏不再是一条横贯的分隔线，而是浮在背景上的一排圆角控件 */
+.topbar {
+  height: var(--shell-top-height);
+  padding: 0 2px;
+  background: transparent;
+  border-bottom: 0;
+  box-shadow: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.topbar::-webkit-scrollbar { display: none; }
+
+/* 顶栏里的每个控件都不许被挤扁：挤不下宁可能横向滚 */
+.tb-side, .tb-nav, .tb-right { flex: 0 0 auto; }
+.tb-btn, .tb-view, .world-chip, .user-chip, .era-chip, .presence { flex: 0 0 auto; }
+.tb-right { gap: 6px; }
+.tb-btn.is-icon { width: var(--mn-h); padding: 0; justify-content: center; }
+
+.world-chip {
+  height: var(--mn-h-lg);
+  padding: 0 14px 0 5px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: var(--mn-shadow);
+}
+.world-chip:hover { background: var(--mn-surface-muted); }
+.wc-avatar { border-radius: 50%; }
+
+.tb-view.is-active { box-shadow: var(--mn-shadow); }
+.tb-btn { background: var(--shell-surface); }
+.tb-btn:hover { background: var(--mn-surface-muted); }
+
+/* ------------------------------------------------------------ 侧栏：一张卡 */
+.body { gap: var(--shell-gap); }
+
+.sidebar {
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-right: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius);
+  overflow: hidden;
+  box-shadow: var(--shell-shadow), var(--shell-rim);
+}
+
+.sb-head { padding: var(--mn-3) var(--mn-3) var(--mn-2); gap: var(--mn-2); }
+.sb-search { background: var(--mn-surface-muted); border-radius: 999px; padding: 6px 12px; }
+.sb-icon { background: var(--mn-surface-muted); border-radius: 50%; width: 32px; height: 32px; padding: 0; }
+
+.sb-tree { padding: var(--mn-1) var(--mn-2) var(--mn-3); }
+.sb-tree::-webkit-scrollbar-thumb { background: var(--mn-border-strong); border-radius: 5px; }
+.row { padding: 7px 10px; margin: 1px 0; border-radius: 10px; }
+.row.is-active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mn-accent) 24%, transparent); }
+
+/* 侧栏底部：三个动作是"药丸"。
+   老版本是 flex + 可收缩，侧栏一窄三个按钮就互相压字（"新建文档"和"文件夹"叠在一起）。
+   现在：flex-basis 取 max-content（按钮天生要占内容那么宽）+ min-width 兜底 + 允许折行，
+   放得下就一行排开，放不下就自动折行——任何一档宽度都不会把文字挤出盒子。 */
+.sb-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mn-2);
+  padding: var(--mn-3);
+  border-top: 1px solid var(--shell-line);
+  background: var(--mn-surface-muted);
+}
+.sb-new {
+  flex: 1 1 max-content;
+  min-width: max-content;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: 999px;
+}
+
+/* -------------------------------------------------------- 工作区：一张卡 */
+.workspace {
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius);
+  overflow: hidden;
+  box-shadow: var(--shell-shadow), var(--shell-rim);
+}
+.panels { border-radius: inherit; }
+.panel { border-right: 0; border-left: 0; }
+.panel + .panel { border-left: 1px solid var(--shell-line); }
+
+/* 分割条：视觉上是一条 1px 细线，命中区仍然是 7px（拖得动） */
+.panel-grip {
+  position: relative;
+  flex: 0 0 7px;
+  background: transparent;
+}
+.panel-grip::before {
+  content: '';
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+  transform: translateX(-50%);
+  background: var(--mn-border);
+  transition: background-color var(--mn-dur-fast, 140ms) ease, width var(--mn-dur-fast, 140ms) ease;
+}
+.panel-grip:hover::before { width: 3px; background: var(--mn-accent); }
+
+/* ------------------------------------------------------------ 面板与标签 */
+/* 标签条不再横贯整屏：它是卡片自己的页眉，标签本身是圆角小片 */
+.panel-tabs {
+  height: 46px;
+  padding: 0 var(--mn-2);
+  gap: var(--mn-1);
+  background: var(--mn-surface-muted);
+  border-bottom: 1px solid var(--shell-line);
+}
+.tab {
+  height: var(--mn-h);
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--mn-ink-muted);
+}
+.tab:hover { background: var(--mn-surface); border-color: var(--shell-line); color: var(--mn-ink); }
+.tab.is-active {
+  background: var(--mn-surface);
+  border-color: var(--shell-line);
+  color: var(--mn-ink);
+  box-shadow: inset 0 -2px 0 var(--mn-accent);
+}
+.tab .t-icon { display: grid; place-items: center; color: var(--mn-icon); }
+.tab.is-active .t-icon { color: var(--mn-accent); }
+.tab .t-close {
+  width: 18px; height: 18px; display: grid; place-items: center;
+  border-radius: 50%; font-size: 11px;
+}
+.tab .t-close:hover { background: var(--mn-surface-sunken); color: var(--mn-ink); }
+.panel-body { background: var(--mn-surface); }
+
+/* 面板里的二级工具条：也是圆角卡片，浮在内容上方，不再是一条横线 */
+.tl-frame-bar, .tree-bar, .map-bar, .graph-controls {
+  margin: var(--mn-2);
+  padding: var(--mn-1) var(--mn-2);
+  background: var(--mn-surface-muted);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius-sm);
+}
+.tl-frame-body, .tl-frame-wrap, .tree-wrap, .map-wrap, .graph-wrap { border-radius: 0 0 var(--shell-radius) var(--shell-radius); }
+.tl-frame-hint { margin-left: auto; padding-right: var(--mn-1); }
+
+/* 标签条 / 工具条里的按钮统一尺寸，谁也不许被挤扁 */
+.panel-tabs button, .tl-frame-bar button, .tree-bar button, .map-bar button,
+.graph-controls button, .seg, .seg-btn { flex: 0 0 auto; }
+
+/* 画布类内容：跟着卡片一起圆角 */
+.tl-canvas, .tree-frame, .map-canvas, .graph-canvas { border-radius: 0 0 var(--shell-radius) var(--shell-radius); }
+
+/* 浮在画布上的小工具条 / 提示条：圆角 + 细边框，跟整体一套语法 */
+.tl-tools, .tl-zoom, .tl-panel, .tl-drawer, .tl-event-card,
+.graph-tip, .node-bar, .map-node-bar {
+  border-radius: var(--shell-radius-sm);
+  border-color: var(--shell-line);
+}
+.node-bar, .map-node-bar {
+  margin: var(--mn-2);
+  border: 1px solid var(--shell-line);
+  background: var(--mn-surface-muted);
+}
+.graph-tip { left: var(--mn-3); right: var(--mn-3); bottom: var(--mn-3); }
+
+/* 只读提示条：圆角浮条，别贴满整条边 */
+.readonly-bar {
+  top: var(--mn-2); left: var(--mn-2); right: var(--mn-2);
+  border: 1px solid color-mix(in srgb, var(--mn-warning) 34%, transparent);
+  border-radius: var(--shell-radius-sm);
+  box-shadow: var(--mn-shadow);
+}
+
+/* 卡片视图：跟外壳同一档圆角，别两套语言 */
+.card-view, .tool-view, .folder-view, .cal-view { border-radius: var(--shell-radius); }
+.insert-bar { border-radius: 999px; }
+
+/* ------------------------------------------------- 按钮一致性 / 不许挤扁 */
+/* workspace.css 里有些按钮是定宽或可收缩的，遇上长中文标签就会"文字出框"。
+   这里统一：不参与收缩 + 内容宽兜底（min-width），挤不下就折行或让容器滚动。
+   注意：标签页 .tab 不在此列——它自带 max-width + 省略号，硬撑成 max-content
+   反而会让长文档名把整条标签栏顶开。 */
+.mini-btn, .tb-btn, .sb-new, .insert-btn, .icon-btn, .link-btn, .tl-mini,
+.sel-btn, .badge, .chip, .tl-tool {
+  min-width: max-content;
+  flex-shrink: 0;
+}
+.mini-btn.is-small, .icon-btn.is-icon, .tb-btn.is-icon { min-width: 0; }
+.mini-btn.is-small { padding: 0 9px; }
+.badge, .chip { min-width: 0; }
+
+/* 图标 + 文字的药丸：图标不要被压扁，文字也不要换行 */
+.mini-btn > .icon, .tb-btn > .icon, .sb-new > .icon, .insert-btn > .icon,
+.icon-btn > .icon, .tb-view > .icon, .tab > .t-icon { flex: 0 0 auto; }
+.mini-btn > span, .tb-btn > span, .sb-new > span, .tb-view > span { white-space: nowrap; }
+
+/* 命令面板 / 弹窗里的按钮同理 */
+.pl-item .pi-kind, .pl-item .pi-snippet { flex: 0 0 auto; }
+.md-body .mini-btn, .md-body .icon-btn { flex: 0 0 auto; }
+
+/* 表单里并排的控件：让输入框收缩，按钮不收缩，别把按钮压成一条线 */
+.form-row .mini-btn, .tool-actions .mini-btn, .tl-row-actions .mini-btn { flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------ 手机 */
+@media (max-width: 1023px) {
+  :root { --shell-pad: 8px; --shell-gap: 8px; }
+  .workspace, .sidebar { border-radius: var(--shell-radius-sm); }
+}
+
+@media (max-width: 899px) {
+  /* 侧栏变抽屉：定位要跟着外壳留白走，否则会跟顶栏错位 */
+  .sidebar {
+    top: var(--shell-top);
+    left: var(--shell-pad);
+    bottom: var(--shell-pad);
+    border-radius: var(--shell-radius-sm);
+    border-right: 1px solid var(--shell-line);
+  }
+  .sb-backdrop { inset: var(--shell-top) 0 0 0; }
+}
+
+@media (max-width: 639px) {
+  :root { --shell-pad: 6px; --shell-gap: 6px; }
+  .topbar { padding: 0; }
+  .bottom-nav {
+    left: var(--shell-pad); right: var(--shell-pad); bottom: var(--shell-pad);
+    border: 1px solid var(--shell-line);
+    border-radius: var(--shell-radius-sm);
+  }
+  .sidebar { bottom: calc(58px + var(--shell-gap) + env(safe-area-inset-bottom, 0px)); }
+  .card-view { border-radius: var(--shell-radius-sm); border: 1px solid var(--shell-line); margin: var(--mn-3) var(--mn-2); }
+}
+
+@media (max-height: 620px) {
+  :root { --shell-top-height: 46px; }
+}
+
+/* ------------------------------------------------------------ 嵌入站点时 */
+/* 工作区被嵌进发布站点（iframe）时不该再套一层壳：外面已经有纸面容器了 */
+body.is-embed { background: transparent; background-image: none; }
+body.is-embed .app { padding: 0; gap: 0; }
+body.is-embed .workspace,
+body.is-embed .panel { border: 0; border-radius: 0; box-shadow: none; }
+
+/* ------------------------------------------------------------------ 打印 */
+@media print {
+  body { background-image: none; }
+  .app { padding: 0; gap: 0; }
+  .workspace { border: 0; box-shadow: none; }
+}
