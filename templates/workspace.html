@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
   <!-- 响应式 / 动效 / 空状态 / 无障碍 -->
   <link rel="stylesheet" href="{% static 'responsive.css' %}?v={{ static_version }}" />
+  <!-- 外壳：悬浮圆角面板（留白 / 圆角 / 缝隙 / 按钮不许被挤扁）——最后加载，只改壳 -->
+  <link rel="stylesheet" href="{% static 'shell.css' %}?v={{ static_version }}" />
 </head>
 <body{% if embed_doc %} class="is-embed" data-embed-doc="{{ embed_doc }}" data-embed-readonly="{{ embed_readonly|yesno:'1,0' }}"{% endif %}>
   <!-- 世界主题（字体 / 主色 / 颗粒）由 JS 从 /api/world/state 读出来写进 :root -->
