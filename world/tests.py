@@ -25,6 +25,7 @@ from .models import (
     DOC_CARD,
     DOC_FOLDER,
     DOC_TIMELINE,
+    DOC_TREE,
     Calendar,
     Card,
     Document,
@@ -799,6 +800,51 @@ class RelationshipPageTests(BaseWorldCase):
         document = self._new_tree("family")["document"]
         with_doc = self.client.get(f"/relationship?doc={document['id']}")
         self.assertContains(with_doc, f'data-doc="{document["id"]}"')
+
+    def test_empty_tree_asks_for_a_template_before_showing_the_canvas(self):
+        """空树先给模版选择：不管在独立页打开还是在工作区面板里打开。"""
+        created = self._new_tree("family", with_demo=False)
+        # 独立页建出来的树是"已经选过模版"的
+        self.assertTrue(created["variant"]["setup"])
+        self.assertEqual(len(created["variant"]["relations"]), 8)
+
+        # 工作区那样先建一篇空文档 → 变体还没配过
+        document = Document.objects.create(world=self.world, document_type=DOC_TREE, name="新建关系树")
+        state = self.client.get(f"/api/world/relationship/trees/{document.id}").json()
+        self.assertFalse(state["variant"]["setup"])
+        self.assertEqual(state["variant"]["nodes"], [])
+
+        # 就地配模版
+        configured = self.post_json(f"/api/world/relationship/trees/{document.id}/setup", {
+            "template": "royal", "with_demo": True,
+            "relations": [{"kind": "liege", "label": "领主"}, {"kind": "vassal", "label": "封臣"}],
+        }).json()
+        self.assertTrue(configured["variant"]["setup"])
+        self.assertEqual(configured["variant"]["kind_label"], "皇家宫廷")
+        self.assertEqual([item["label"] for item in configured["variant"]["relations"]],
+                         ["领主", "封臣"])
+        self.assertEqual(len(configured["variant"]["nodes"]), 7)
+        # 名字还是默认的，就跟着模版起一个
+        document.refresh_from_db()
+        self.assertEqual(document.name, "皇家宫廷关系树")
+
+        # 配过之后不能再重配（那会把画好的东西冲掉）
+        again = self.client.post(f"/api/world/relationship/trees/{document.id}/setup",
+                                 data=json.dumps({"template": "family"}), content_type="application/json")
+        self.assertEqual(again.status_code, 400)
+
+    def test_setup_keeps_a_user_chosen_name(self):
+        document = Document.objects.create(world=self.world, document_type=DOC_TREE, name="我的家谱")
+        self.post_json(f"/api/world/relationship/trees/{document.id}/setup", {"template": "family"})
+        document.refresh_from_db()
+        self.assertEqual(document.name, "我的家谱")
+
+    def test_setup_rejects_non_tree_documents(self):
+        card_doc, _ = self.make_card(name="卡片")
+        response = self.client.post(f"/api/world/relationship/trees/{card_doc.id}/setup",
+                                    data=json.dumps({"template": "family"}),
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 400)
 
     def test_embed_and_readonly_flags(self):
         """面板 / 站点是用 iframe 嵌这一页的：embed 去外壳，且默认只读。"""

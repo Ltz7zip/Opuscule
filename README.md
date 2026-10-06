@@ -28,6 +28,8 @@
 >
 > **2026-10-07 再进一步**：工作区（`/world`）的关系树面板**直接嵌这一页**，
 > 旧的那套"简版"渲染器删掉了——以后只有一份实现，新功能自动两边都有。
+> 新建一棵关系树时**面板里就是模版选择**（选模版 → 挑关系 → 用这个模版），
+> 选完就地配好这一篇，不用另开标签页。
 
 ---
 
@@ -182,6 +184,7 @@
 | POST | `/api/world/relationship/trees` | 按模版建一棵（`with_demo` 可顺手把示例人物放进去） |
 | GET | `/api/world/relationship/trees/<doc_id>` | 编辑区完整状态（人物 + 关系 + 可用关系 + 网格） |
 | PUT | `/api/world/relationship/trees/<doc_id>/relations` | 整份替换可用关系清单（图2 左侧那一列） |
+| POST | `/api/world/relationship/trees/<doc_id>/setup` | 给**已有**的空树就地选模版（面板里那一步） |
 
 人物与关系的增删改沿用原来那套 `tree-nodes` / `tree-edges` 接口——同一份数据模型，
 没必要为这页再抄一遍。**关系清单**存在 `TreeVariant.settings["relations"]` 里，
@@ -240,6 +243,32 @@
 做法很土但很稳：重建前先把带 `is-live-embed` 的元素**挪到常驻文档的 staging 容器**里（还在文档里，
 所以不会重载），重建时由渲染函数按 key 认领回去，这一轮没被认领的（文档关掉了）才真正删掉。
 见 `workspace.js` 的 `parkLiveEmbeds` / `liveEmbed` / `sweepLiveEmbeds`。
+
+#### 面板里也能选模版
+
+新建一棵关系树时它先是"**没配过**"的状态（`TreeVariant.settings.setup` 没置位），
+这时候打开——不管是在独立页还是在工作区面板里——**先给模版选择，而不是一片空画布**：
+
+```
+命令面板 / 侧栏右键「新建关系树」
+  └── 建一篇空文档 → 开进面板 → 面板里就是模版选择（选模版 → 挑关系 → 用这个模版）
+```
+
+选完那一步走的是 `POST /api/world/relationship/trees/<doc_id>/setup`：**就地**配这篇文档
+（写 kind、写关系清单、置 `setup`、可选地把模版示意图落成示例人物），**不新建第二篇**。
+按钮文案也跟着变——面板里是「用这个模版」，独立页（还没有文档）才是「创建关系树」。
+
+几条分寸：
+
+* 名字还是默认的（`未命名` / `新建关系树` / `关系树`）就跟着模版起一个（"皇家宫廷关系树"）；
+  用户自己改过就不动。
+* 已经有人物或关系的树**不允许**再配模版（那会把画好的东西冲掉），接口直接 400。
+* 选了「从空白开始」也算选过：置 `setup`，以后不再问——用户明确要了空白，不该每次再问一遍。
+* 嵌在面板里时不列「已有关系树」：左边那条侧栏就是文档树，重复了。
+
+配完那一刻，嵌入页给宿主发一条 `ws-doc-changed`，工作区刷新文档树与标签页标题。
+**注意这个回调里千万别把 `S.docs` 里的条目删掉**——那等于把这篇文档从打开的标签页里摘出去，
+下一次 `renderPanels()` 就不会再认领那个 iframe，嵌入的编辑器会被当成垃圾清掉（然后白屏）。
 
 #### 只读
 
@@ -762,8 +791,8 @@ worldbuilding_timeline/
   "非婚生直系"默认虚线。
 * **面板**：`renderTreeFrame()` 出一个 `<iframe class="tree-frame">`；它是"活着的嵌入"
   （`liveEmbed`），面板重绘不会把它重载。工作区自己不再画树。
-* 命令面板里两条入口：「新建关系树（选模版）」开独立页走模版选择，「新建关系树（直接建一棵）」
-  就地建一棵空的（进面板就是空画布 + 该模版的现成关系）。
+* 命令面板与侧栏右键的「新建关系树」都是**就地建一篇空的**，然后面板里直接进模版选择
+  （见上文「面板里也能选模版」）。不在这里问文档名——名字跟着模版走。
 
 ### 经典地图（Classic map）
 
@@ -800,7 +829,7 @@ worldbuilding_timeline/
 .venv/bin/python tools/collab_probe.py       # 账号 / 邀请码 / 只读 / 在线状态 / 版本回滚
 .venv/bin/python tools/calendar_era_probe.py # 日历视图（月相、事件）与纪元分支
 .venv/bin/python tools/responsive_probe.py   # 六个屏幕尺寸：截图 + 横向溢出检查
-.venv/bin/python tools/relationship_probe.py  # 关系树：模版 / 网格吸附 / 右键 / 加号连线 / 工作区集成（45 项）
+.venv/bin/python tools/relationship_probe.py  # 关系树：模版 / 网格吸附 / 右键 / 加号连线 / 面板选模版 / 只读（57 项）
 .venv/bin/python tools/monkey_probe.py 25     # 猴子测试：每页随机乱点 N 次，统计报错与 5xx
 ```
 

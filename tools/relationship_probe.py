@@ -11,9 +11,11 @@
 6. 卡片四面加号：点一下弹关系菜单（图6），选一条就长出一个人；
 7. 拖加号连线：按住加号拖到另一张卡上，连出一条线；
 8. 关系线不被网格约束：线端点落在卡片锚点上，允许不是网格整数倍；
-9. 工作区集成：/world 的关系树面板里嵌的就是这一页，点人能开出那张卡，
+9. 面板里选模版：新建的空树在工作区面板里先给模版选择，选完**就地**配好这棵树
+   （不另开标签页、不新建第二篇文档）；
+10. 工作区集成：/world 的关系树面板里嵌的就是这一页，点人能开出那张卡，
    而且面板重绘不会把 iframe 重新载入（画布状态不丢）；
-10. 只读嵌入：写入口整个不出现，点人只发消息不改数据。
+11. 只读嵌入：写入口整个不出现，点人只发消息不改数据。
 
 用法：先跑 ``manage.py runserver 8000``，再 ``.venv/bin/python tools/relationship_probe.py``。
 """
@@ -240,8 +242,50 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     check(not errors, f"整轮操作没有 JS 报错（{errors[:3]}）")
 
-    # ---------------------------------------------- 9) 工作区：面板里嵌的就是这一页
-    print("\n[9] 工作区集成（/world 的关系树面板）")
+    # ------------------------------------------- 9) 面板里选模版（效果图那一屏）
+    print("\n[9] 面板里选模版")
+    page.goto(f"{BASE}/world", wait_until="networkidle")
+    page.wait_for_timeout(1400)
+    before_docs = api("/api/world/relationship/trees")["trees"].__len__()
+    page.keyboard.press("Meta+k")
+    page.wait_for_timeout(400)
+    page.fill("#plInput", "新建关系树")
+    page.wait_for_timeout(400)
+    page.locator(".pl-item", has_text="新建关系树").first.click()
+    page.wait_for_timeout(2600)
+    check(page.locator("iframe.tree-frame").count() == 1, "新建后直接进面板（没有另开标签页）")
+    picker_frame = page.frame_locator("iframe.tree-frame")
+    check(picker_frame.locator('[data-screen="picker"]').is_visible(),
+          "空树的面板里先给的是模版选择，而不是一片空画布")
+    check(picker_frame.locator(".rt-template-item").count() == 5, "五个模版都在")
+    check(picker_frame.locator("#rtExisting").is_visible() is False,
+          "嵌在面板里时不列「已有关系树」（左边侧栏就是文档树）")
+    check(picker_frame.locator("#rtPickerCanvas .rt-node").count() == 9,
+          "右侧预览就是选中模版的样例树")
+    picker_frame.locator(".rt-template-item").nth(3).click()      # 皇家宫廷
+    page.wait_for_timeout(400)
+    check(picker_frame.locator("#rtPickerCanvas .rt-node").count() == 7, "换模版后预览跟着换")
+    page.screenshot(path=str(SHOTS / "9-panel-picker.png"))
+
+    picker_frame.locator("#rtContinue").click()
+    page.wait_for_timeout(500)
+    check(picker_frame.locator(".rt-relation-row").count() == 8, "第二步给出该模版自带的 8 条关系")
+    check(picker_frame.locator("#rtCreate").inner_text().strip() == "用这个模版",
+          "面板里那一步是「就地配模版」，不是「新建一篇」")
+    page.screenshot(path=str(SHOTS / "10-panel-template.png"))
+
+    picker_frame.locator("#rtCreate").click()
+    page.wait_for_timeout(2600)
+    check(picker_frame.locator('[data-screen="editor"]').is_visible(), "配好后进编辑区")
+    check(picker_frame.locator("#rtNodes .rt-node").count() == 7, "示例人物落了进去")
+    check(api("/api/world/relationship/trees")["trees"].__len__() == before_docs + 1,
+          "只新建了这一篇文档，没有多出来第二篇")
+    check("皇家宫廷" in page.locator(".tab.is-active").inner_text(),
+          f"标签页标题跟着模版走（实际「{page.locator('.tab.is-active').inner_text().splitlines()[0]}」）")
+    page.screenshot(path=str(SHOTS / "11-panel-editor.png"))
+
+    # ---------------------------------------------- 10) 工作区：面板里嵌的就是这一页
+    print("\n[10] 工作区集成（/world 的关系树面板）")
     page.goto(f"{BASE}/world#doc={doc_id}", wait_until="networkidle")
     page.wait_for_timeout(2200)
     check(page.locator("iframe.tree-frame").count() == 1, "面板里嵌了一个 tree-frame iframe")
@@ -266,8 +310,8 @@ with sync_playwright() as p:
     check(alive == "alive", "面板重绘没有把 iframe 重新载入（画布状态留着）")
     page.screenshot(path=str(SHOTS / "7-workspace-embed.png"))
 
-    # ---------------------------------------------- 10) 只读嵌入
-    print("\n[10] 只读嵌入（读者看到的）")
+    # ---------------------------------------------- 11) 只读嵌入
+    print("\n[11] 只读嵌入（读者看到的）")
     page.goto(f"{BASE}/relationship?doc={doc_id}&embed=1&readonly=1", wait_until="networkidle")
     page.wait_for_timeout(1000)
     check(page.locator('[data-action="add-person"]').is_visible() is False, "「添加人物」不出现")

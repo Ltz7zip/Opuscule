@@ -77,10 +77,12 @@
 .rt-body.is-embed .rt-screen { border: 0; border-radius: 0; }
 .rt-body.is-embed .rt-topbar { padding: 0 var(--mn-3); }
 .rt-body.is-embed .rt-canvas-wrap { margin: var(--mn-2); }
-/* 嵌在宿主里时"回到模版选择"没有意义——那会把宿主的面板整个换掉；
-   反过来，"在新标签页全屏编辑"只有嵌着的时候才有意义。 */
+/* 面板左侧本来就是文档树，"已有关系树"这一块在嵌入时是重复信息 */
+.rt-body.is-embed .rt-side-foot { display: none; }
+/* 嵌在宿主里时，编辑区顶栏那个"回模版选择"没有意义——那会把宿主的面板整个换掉；
+   但**模版关系屏**的返回箭头是有用的（面板里也是"选模版 → 挑关系"两步，
+   箭头就是退回上一步）。"在新标签页全屏编辑"则只有嵌着的时候才有意义。 */
 .rt-body.is-embed .rt-topbar-back { display: none; }
-.rt-body.is-embed .rt-side-head--back .rt-back { display: none; }
 .rt-embed-only { display: none; }
 .rt-body.is-embed .rt-embed-only { display: inline-flex; align-items: center; text-decoration: none; }
 /* 读者（只读嵌入）不需要"去编辑器"的入口，也不需要看着"已保存"发呆 */
