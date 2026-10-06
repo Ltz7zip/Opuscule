@@ -11,6 +11,7 @@ app_name = "site"
 # 所以这里用 str 转换器而不是 <slug:>（后者只吃 [-a-zA-Z0-9_]）。
 urlpatterns = [
     path("<str:slug>/", site_views.home, name="home"),
+    path("<str:slug>/search", site_views.search, name="search"),
     path("<str:slug>/unlock", site_views.unlock, name="unlock"),
     path("<str:slug>/<str:doc_slug>/", site_views.page, name="page"),
 ]

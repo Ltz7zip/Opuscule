@@ -6409,12 +6409,31 @@ function applyViewer(viewer) {
             : '只读模式：登录后才能编辑（发布出来的站点一直是公开的）。');
     }
   }
-  // 只读时把正文的可编辑关掉（重画之后 renderPanels 会再兜一次）
+  // 只读时把正文的可编辑关掉（重画之后 renderPanels 会再兜一次），
+  // 并把写操作入口整个藏起来——"点了才提示登录"对读者是骗点击
+  revealWriteControls(Boolean(viewer.can_edit));
   if (!viewer.can_edit) disableEditing();
 }
 
 function disableEditing() {
   $$('[contenteditable="true"]').forEach((node) => node.setAttribute('contenteditable', 'false'));
+}
+
+/* 只读时要"藏起来"的写操作入口（不是靠点了再提示——那是骗点击）。
+   新增写按钮时记得加进这张表，否则游客点得到、点了才被拦。 */
+const WRITE_CONTROLS = [
+  '#undoBtn', '#redoBtn', '#exchangeBtn', '#newDocBtn', '#newFolderBtn', '#templateBtn',
+  '#mapUploadBtn', '#mapBgBtn', '#insertBlockBtn', '#addEventBtn', '#calendarEditBtn',
+  '#cardEraBtn', '#coverBtn', '#memberInviteBtn', '#publishBtn', '#tableAddRowBtn',
+];
+
+function revealWriteControls(show) {
+  WRITE_CONTROLS.forEach((selector) => {
+    $$(selector).forEach((node) => { node.hidden = !show; });
+  });
+  // 插入条 / 新建类按钮：只读时整块收起来，界面干净，也不会误导
+  $$('.insert-bar, .block-menu-add, .tool-add-row').forEach((node) => { node.hidden = !show; });
+  document.documentElement.classList.toggle('is-readonly-mode', !show);
 }
 
 /** 写操作的统一闸门：没权限就别发请求，直接告诉用户为什么。 */

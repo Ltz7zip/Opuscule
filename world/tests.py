@@ -10,6 +10,8 @@ import json
 
 from django.test import TestCase
 
+from . import publish
+
 from timeline.models import TimelineItem, TimelineView
 
 from .models import (
@@ -1834,3 +1836,47 @@ class EditConflictTests(BaseWorldCase):
         third = self.client.get(f"/api/world/cards/{self.document.id}").json()["revision"]
         self.assertGreater(third, second)
         self.assertGreater(second, first)
+
+
+class SiteBrowseTests(BaseWorldCase):
+    """只读站点的浏览体验：筛选 chip 与全文搜索。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+        self.card, _ = self.make_card(name="Harrowdeep",
+                                      blocks=normalize_blocks([{"type": "text", "title": "概览",
+                                                                "text": "深处有一扇青铜门"}]))
+        publish.publish(self.world, audience="public")
+        self.slug = self.world.published_slug
+
+    def test_filter_chip_lists_types_and_eras(self):
+        home = self.client.get(f"/s/{self.slug}/").content.decode()
+        self.assertIn("filter-chip", home)
+        self.assertIn("按类型", home)
+        self.assertIn("全部", home)
+
+    def test_filter_by_type_narrows_the_grid(self):
+        all_home = self.client.get(f"/s/{self.slug}/")
+        typed = self.client.get(f"/s/{self.slug}/?type={self.card.entity_type_id}")
+        self.assertEqual(typed.status_code, 200)
+        self.assertLessEqual(len(typed.content), len(all_home.content) + 400)
+        self.assertIn("Harrowdeep", typed.content.decode())
+
+    def test_site_search_finds_body_text_not_just_titles(self):
+        found = self.client.get(f"/s/{self.slug}/search?q=青铜门")
+        self.assertEqual(found.status_code, 200)
+        self.assertIn("Harrowdeep", found.content.decode())
+        self.assertIn("青铜门", found.content.decode())
+
+    def test_site_search_ignores_unpublished_documents(self):
+        hidden, _ = self.make_card(name="还没发布的秘密")
+        hidden.is_published = False
+        hidden.save(update_fields=["is_published"])
+        missed = self.client.get(f"/s/{self.slug}/search?q=秘密")
+        self.assertNotIn("还没发布的秘密", missed.content.decode())
+
+    def test_search_page_without_query_is_friendly(self):
+        empty = self.client.get(f"/s/{self.slug}/search")
+        self.assertEqual(empty.status_code, 200)
+        self.assertIn("输入关键词", empty.content.decode())

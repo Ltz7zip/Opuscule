@@ -704,3 +704,13 @@ body.is-embed .empty-hint { display: none !important; }
 body.is-embed .body, body.is-embed .workspace, body.is-embed .panels, body.is-embed .panel { display: block; }
 body.is-embed .panel { border: 0; }
 body.is-embed .tree-canvas, body.is-embed .map-canvas, body.is-embed .graph-canvas { height: 100%; }
+
+
+/* ============================================ 只读模式（游客 / 观众） */
+/* 写操作的入口由 JS 统一隐藏（见 WRITE_CONTROLS）；这里再兜一层，
+   防止某个面板重画时把按钮又画回来。 */
+html[data-can-edit="0"] .insert-bar,
+html[data-can-edit="0"] .block-menu-add,
+html[data-can-edit="0"] .tool-add-row { display: none !important; }
+html[data-can-edit="0"] .block-tools { opacity: 0 !important; pointer-events: none !important; }
+html[data-can-edit="0"] .card-view .prop-row .prop-input { pointer-events: none; }

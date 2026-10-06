@@ -196,3 +196,44 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
   border-radius: 16px; background: var(--surface, #fff);
 }
 @media (max-width: 720px) { .canvas-embed iframe { height: 380px; } }
+
+/* ------------------------------------------------------- 筛选 chip */
+.filter-chip { position: relative; margin-right: 10px; }
+.fc-btn {
+  display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  cursor: pointer; font: inherit; font-size: 13px; color: var(--ink, #1b1710);
+  background: var(--surface, #fff); border: 1px solid var(--line, #e2ddd2); border-radius: 999px;
+}
+.fc-btn:hover { border-color: var(--ink-dim, #6b6459); }
+.fc-icon { opacity: .6; }
+.fc-caret { opacity: .5; font-size: 10px; }
+.fc-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 20;
+  min-width: 200px; max-height: 60vh; overflow: auto; padding: 6px;
+  background: var(--surface, #fff); border: 1px solid var(--line, #e2ddd2);
+  border-radius: 14px; box-shadow: 0 12px 30px rgba(27, 23, 16, .14);
+}
+.fc-group { padding: 8px 10px 4px; font-size: 11.5px; color: var(--ink-dim, #857c6b); }
+.fc-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 7px 10px; border-radius: 9px; color: inherit; text-decoration: none; font-size: 13.5px;
+}
+.fc-item:hover { background: rgba(27, 23, 16, .05); }
+.fc-item.is-on { background: rgba(27, 23, 16, .07); font-weight: 600; }
+.fc-count { color: var(--ink-dim, #857c6b); font-size: 12px; }
+
+/* ------------------------------------------------------- 搜索结果 */
+.crumbs { color: var(--ink-dim, #857c6b); font-size: 13px; margin: 4px 0 14px; }
+.search-count { color: var(--ink-dim, #857c6b); font-size: 13.5px; margin: 10px 0 18px; }
+.hit-list { list-style: none; padding: 0; margin: 0; }
+.hit { padding: 16px 0; border-bottom: 1px solid var(--line, #e2ddd2); }
+.hit-name { font-family: var(--site-heading); font-size: 19px; }
+.hit-meta { display: block; color: var(--ink-dim, #857c6b); font-size: 12.5px; margin-top: 4px; }
+.hit-snippet { margin: 8px 0 0; color: var(--ink-soft, #4a4438); font-size: 14px; line-height: 1.6; }
+.hit-events { margin: 6px 0 0; color: var(--ink-dim, #857c6b); font-size: 12.5px; }
+.hit-event { padding: 2px 8px; border: 1px solid var(--line, #e2ddd2); border-radius: 999px; }
+
+@media (max-width: 720px) {
+  .filter-chip { margin-right: 6px; }
+  .fc-menu { right: auto; left: 0; }
+}

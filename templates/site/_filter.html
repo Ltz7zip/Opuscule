@@ -1,0 +1,26 @@
+{# 筛选 chip（对齐 VVD 左上角那颗下拉）：按类型 / 按纪元筛站点内容 #}
+<div class="filter-chip" data-filter>
+  <button type="button" class="fc-btn" aria-expanded="false" aria-haspopup="true">
+    <span class="fc-icon" aria-hidden="true">▤</span>
+    <span class="fc-label">{{ active_filter.label|default:"全部" }}</span>
+    <span class="fc-caret" aria-hidden="true">▾</span>
+  </button>
+  <div class="fc-menu" hidden>
+    <a class="fc-item{% if not active_filter.active %} is-on{% endif %}"
+       href="{% url 'site:home' world.published_slug %}">全部<span class="fc-count">{{ total_documents|default:'' }}</span></a>
+    {% if site_types %}
+      <div class="fc-group">按类型</div>
+      {% for item in site_types %}
+        <a class="fc-item{% if active_filter.type_slug == item.slug %} is-on{% endif %}"
+           href="{% url 'site:home' world.published_slug %}?type={{ item.slug }}">{{ item.name }}<span class="fc-count">{{ item.count }}</span></a>
+      {% endfor %}
+    {% endif %}
+    {% if site_eras %}
+      <div class="fc-group">按纪元</div>
+      {% for item in site_eras %}
+        <a class="fc-item{% if active_filter.era_id == item.id %} is-on{% endif %}"
+           href="{% url 'site:home' world.published_slug %}?era={{ item.id }}">{{ item.name }}<span class="fc-count">{{ item.count }}</span></a>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
