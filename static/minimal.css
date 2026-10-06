@@ -317,6 +317,14 @@ body {
   border: 1px solid var(--mn-border);
   background: var(--mn-surface-muted);
 }
+/* 卡片编辑器里的封面框不描边：它是"封面图该待的位置"，不是一张卡片——
+   空态用一块浅底兜住就好，悬停提亮文字提示这里能点。
+   （发布站点的 .page-cover、时间线事件卡的 .ec-cover 不动。） */
+.card-view .card-cover { border: 0; }
+.card-view .card-cover:hover { background: var(--mn-surface-sunken); color: var(--mn-ink-muted); }
+.cover-empty { display: grid; gap: 2px; padding: 0 10px; text-align: center; }
+.cover-empty b { font-weight: 500; font-size: 12px; color: var(--mn-ink-muted); }
+.cover-empty span { font-size: 11px; color: var(--mn-ink-dim); }
 .badge {
   padding: 4px 10px;
   border: 1px solid var(--mn-border);
@@ -678,6 +686,23 @@ body {
   box-shadow: var(--mn-shadow-pop);
   width: max-content;
   max-width: 100%;
+}
+/* 工具条里的按键不再各自描一圈边：容器已经有一圈，再套一圈就是"双层描边"。
+   悬停改用底色浮起，照样看得出能点（主按钮保留自己的实心底）。 */
+.insert-bar > button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--mn-ink-muted);
+}
+.insert-bar > button:hover {
+  border-color: transparent;
+  background: var(--mn-surface-muted);
+  color: var(--mn-ink);
+}
+.insert-bar > button.is-primary {
+  background: var(--mn-primary);
+  border-color: transparent;
+  color: var(--mn-primary-ink);
 }
 
 /* 提及 / 链接：用强调色，一眼看出"这里能点" */

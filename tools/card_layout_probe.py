@@ -94,6 +94,48 @@ MEASURE_JS = r"""
 }
 """
 
+# 编辑区里"只该有一圈边"的地方：多出来的描边、被裁掉的文字都算问题
+FRAMES_JS = r"""
+() => {
+  // 只算"画得出来"的边：宽度 > 0 且颜色不是全透明
+  // （透明边是保留几何的常用做法，视觉上等于没边）
+  const border = (el) => {
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    const widths = ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth']
+      .map((k) => parseFloat(cs[k]) || 0);
+    const colors = ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'];
+    const transparent = colors.every((k) => {
+      const m = cs[k].match(/rgba?\(([^)]+)\)/);
+      if (!m) return false;
+      const parts = m[1].split(',').map((v) => parseFloat(v));
+      return parts.length > 3 && parts[3] === 0;
+    });
+    return transparent ? 0 : widths.reduce((a, b) => Math.max(a, b), 0);
+  };
+  const cover = document.querySelector('.card-view .card-cover');
+  const empty = cover && cover.querySelector('.cover-empty');
+  const clipped = [];
+  if (empty) {
+    const b = cover.getBoundingClientRect();
+    empty.querySelectorAll('b, span').forEach((n) => {
+      const r = n.getBoundingClientRect();
+      if (r.left < b.left - 0.5 || r.right > b.right + 0.5) clipped.push(n.textContent);
+    });
+  }
+  const barButtons = [...document.querySelectorAll('.insert-bar > button')];
+  return {
+    workspaceBorder: border(document.querySelector('.workspace')),
+    sidebarBorder: border(document.querySelector('.sidebar')),
+    coverBorder: border(cover),
+    insertBarBorder: border(document.querySelector('.insert-bar')),
+    insertBtnBorders: barButtons.map((b) => border(b)),
+    insertBarButtons: barButtons.length,
+    coverClipped: clipped,
+  };
+}
+"""
+
 
 def main() -> int:
     state = api("/api/world/state")
@@ -144,6 +186,23 @@ def main() -> int:
                     if "quote" in b["cls"] and b["h"] > QUOTE_MAX_H:
                         problems.append(f"{tag}@{width} 引用块 {b['h']}px 超预算 {QUOTE_MAX_H}px"
                                         f"「{b['title'] or b['text']}」")
+
+                frames = page.evaluate(FRAMES_JS)
+                print(f"  描边：工作区 {frames['workspaceBorder']}px · 侧栏 {frames['sidebarBorder']}px "
+                      f"· 封面 {frames['coverBorder']}px · 插入条 {frames['insertBarBorder']}px "
+                      f"· 插入条按键 {frames['insertBtnBorders']}")
+                if frames["workspaceBorder"]:
+                    problems.append(f"{tag}@{width} 编辑面板又长出 {frames['workspaceBorder']}px 描边")
+                if not frames["sidebarBorder"]:
+                    problems.append(f"{tag}@{width} 侧栏的描边没了（侧栏保持圆角卡片 + 细边）")
+                if frames["coverBorder"]:
+                    problems.append(f"{tag}@{width} 卡片封面框又长出 {frames['coverBorder']}px 描边")
+                if not frames["insertBarBorder"]:
+                    problems.append(f"{tag}@{width} 插入条容器没有描边了（只该去掉里面按键的）")
+                if any(frames["insertBtnBorders"]):
+                    problems.append(f"{tag}@{width} 插入条里的按键又各自描边：{frames['insertBtnBorders']}")
+                if frames["coverClipped"]:
+                    problems.append(f"{tag}@{width} 封面占位文字被裁：{frames['coverClipped']}")
             page.close()
         browser.close()
 
@@ -152,7 +211,7 @@ def main() -> int:
         for item in problems:
             print(f"  ✗ {item}")
         return 1
-    print("  ✓ 卡片正文铺满编辑区，引用块高度在预算内")
+    print("  ✓ 卡片正文铺满编辑区，编辑区只有一圈该有的边，区块高度在预算内")
     return 0
 
 

@@ -164,12 +164,15 @@ body {
 .sb-foot .sb-new > .icon, .sb-foot .sb-new > span { flex: 0 0 auto; white-space: nowrap; }
 
 /* -------------------------------------------------------- 工作区：一张卡 */
+/* 编辑区不描边：面板靠底色阶 + 投影浮在页面底上就够了。满屏的编辑器再套一圈
+   1px 细边，看着像把正文"框"住了（顶边那道高光 --shell-rim 也是同一条边，
+   一并去掉）。侧栏仍然是圆角卡片 + 细边 + 高光，原有语法不变。 */
 .workspace {
   background: var(--shell-surface);
-  border: 1px solid var(--shell-line);
+  border: 0;
   border-radius: var(--shell-radius);
   overflow: hidden;
-  box-shadow: var(--shell-shadow), var(--shell-rim);
+  box-shadow: var(--shell-shadow);
 }
 .panels { border-radius: inherit; }
 .panel { border-right: 0; border-left: 0; }

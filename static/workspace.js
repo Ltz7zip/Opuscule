@@ -840,7 +840,12 @@ function renderCard(entry, panelIndex) {
     img.alt = '';
     cover.appendChild(img);
   } else {
-    cover.textContent = '添加封面（点击后粘贴图片地址）';
+    // 168px 的方框塞不下"添加封面（点击后粘贴图片地址）"这一整句（会被两边裁掉），
+    // 拆成上下两行：主标签 + 一句更小的说明。
+    const empty = el('div', 'cover-empty');
+    empty.appendChild(el('b', null, '添加封面'));
+    empty.appendChild(el('span', null, '点击后粘贴图片地址'));
+    cover.appendChild(empty);
   }
   cover.addEventListener('click', async () => {
     const url = window.prompt('封面图片地址', document_.cover || '');
