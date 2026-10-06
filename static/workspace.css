@@ -255,7 +255,8 @@ kbd {
 .panels.has-tabs + .empty-hint { display: none; }
 
 /* --------------------------------------------------------------- 卡片 */
-.card-view { padding: 22px 26px 90px; max-width: 940px; }
+/* 正文铺满编辑区（不再有 940px 的居中窄栏），只有内边距兜住文字 */
+.card-view { padding: 22px 26px 90px; max-width: none; }
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .card-title {
   font-family: var(--heading-font);
@@ -754,7 +755,10 @@ kbd {
 .trash-info b { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ------------------------------------------------------------- 文件夹 */
-.folder-view { max-width: 760px; }
+/* 文件夹是"文档清单"，不是编辑器：清单拉满一整屏会散架，所以单独收窄。
+   选择器写成两个类（.card-view.folder-view），免得被 minimal.css 里
+   "卡片正文铺满编辑区"那条 .card-view { max-width: none } 按加载顺序盖掉。 */
+.card-view.folder-view { max-width: 760px; }
 .folder-head { margin-bottom: 14px; }
 .folder-list { display: grid; gap: 2px; margin-bottom: 18px; }
 .folder-row {

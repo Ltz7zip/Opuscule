@@ -308,7 +308,7 @@ body {
 .insert-btn:hover, .tl-mini:hover { background: var(--mn-surface-muted); color: var(--mn-ink); }
 
 /* ---------------------------------------------------------------- 卡片区 */
-.card-view { max-width: 860px; padding: var(--mn-5) var(--mn-5) 96px; }
+/* (.card-view 的几何统一写在下面「编辑区」那一节：它铺满面板，这里不再重复声明) */
 .card-title {
   font-size: 30px; line-height: 1.2; margin-bottom: var(--mn-2);
 }
@@ -615,16 +615,20 @@ body {
 .sb-foot { gap: var(--mn-2); }
 
 /* ---------------------------------------------------------------- 编辑区 */
-/* 编辑区是"一张圆角卡片"：整块白/深底 + 细边框，里面的区块也是圆角块 */
+/* 卡片正文**铺满整个编辑区**：面板自己就是那张"纸"（shell.css 已经给了
+   surface 底 + 18px 圆角 + 细边框），里面再套一层居中的 900px 小卡片，
+   等于在 1400px 宽的编辑区里只用中间 900px，两侧留出两片死白。
+   这里把内层卡片收掉：正文宽度 = 编辑区宽度，只留内边距。 */
 .panel-body { padding: 0; }
 .card-view {
-  margin: var(--mn-4) auto var(--mn-5);
-  max-width: 900px;
-  padding: var(--mn-5);
-  background: var(--mn-surface);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--mn-radius-lg);
-  box-shadow: var(--mn-shadow);
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  padding: var(--mn-5) var(--mn-5) 96px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .card-title { color: var(--mn-ink); }
 .card-title:focus { outline: none; }
@@ -748,28 +752,34 @@ body {
 .block-menu { min-width: 190px; }
 .block-menu .fb-sep { height: 1px; background: var(--mn-border); margin: 4px 6px; }
 
-/* 评论浮层 */
+/* 评论浮层：贴在块旁边的一张小便签——宁可小一点、密一点，
+   也别在正文上压出一大块空白（320px 宽 + 240px 列表那一版太占地方了）。 */
 .comment-pop {
-  position: fixed; z-index: 74; width: 320px;
+  position: fixed; z-index: 74; width: 264px;
   background: var(--mn-surface); border: 1px solid var(--mn-border);
-  border-radius: var(--mn-radius-lg); box-shadow: var(--mn-shadow-pop);
+  border-radius: var(--mn-radius); box-shadow: var(--mn-shadow-pop);
   overflow: hidden;
 }
-.comment-head { padding: 10px 12px; border-bottom: 1px solid var(--mn-border); font-size: 12.5px; color: var(--mn-ink); }
-.comment-list { max-height: 240px; overflow: auto; padding: 8px; display: grid; gap: 8px; }
-.comment-row { padding: 8px 10px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-sm); background: var(--mn-surface-muted); }
+.comment-head {
+  padding: 6px 10px; border-bottom: 1px solid var(--mn-border);
+  font-size: 11.5px; color: var(--mn-ink-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.comment-list { max-height: 148px; overflow: auto; padding: 6px; display: grid; gap: 6px; }
+.comment-list .hint { margin: 0; font-size: 12px; line-height: 1.5; }
+.comment-row { padding: 6px 8px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-sm); background: var(--mn-surface-muted); }
 .comment-row.is-resolved { opacity: .6; }
 .comment-row.is-resolved .comment-text { text-decoration: line-through; }
-.comment-meta { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
-.comment-meta b { font-size: 12px; font-weight: 600; }
-.comment-text { font-size: 12.5px; color: var(--mn-ink); white-space: pre-wrap; }
-.comment-actions { display: flex; gap: 6px; margin-top: 6px; }
-.comment-foot { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--mn-border); align-items: flex-end; }
+.comment-meta { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+.comment-meta b { font-size: 11.5px; font-weight: 600; }
+.comment-text { font-size: 12px; line-height: 1.5; color: var(--mn-ink); white-space: pre-wrap; }
+.comment-actions { display: flex; gap: 4px; margin-top: 4px; }
+.comment-foot { display: flex; gap: 4px; padding: 6px 8px; border-top: 1px solid var(--mn-border); align-items: flex-end; }
 .comment-input {
-  flex: 1 1 auto; resize: vertical; min-height: 34px;
+  flex: 1 1 auto; resize: none; min-height: 30px; max-height: 96px;
   background: var(--mn-surface-muted); color: var(--mn-ink);
   border: 1px solid var(--mn-border); border-radius: var(--mn-radius-sm);
-  padding: 6px 8px; font: inherit; font-size: 12.5px;
+  padding: 5px 7px; font: inherit; font-size: 12px; line-height: 1.45;
 }
 .mini-btn.is-small { height: 24px; padding: 0 9px; font-size: 11.5px; }
 .tb-divider { width: 1px; height: 20px; background: var(--mn-border); margin: 0 2px; }

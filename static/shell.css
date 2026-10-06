@@ -339,7 +339,7 @@ body {
     border-radius: var(--shell-radius-sm);
   }
   .sidebar { bottom: calc(58px + var(--shell-gap) + env(safe-area-inset-bottom, 0px)); }
-  .card-view { border-radius: var(--shell-radius-sm); border: 1px solid var(--shell-line); margin: var(--mn-3) var(--mn-2); }
+  /* 手机上也不再给卡片正文套小卡片：面板本身就是那张纸，正文铺满它 */
 }
 
 @media (max-height: 620px) {

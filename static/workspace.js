@@ -2161,7 +2161,7 @@ function openBlockComments(anchor, entry, index) {
   const list = el('div', 'comment-list');
   const render = () => {
     list.innerHTML = '';
-    if (!comments.length) list.appendChild(el('p', 'hint', '还没有评论。写下第一条，给自己或同伴留个记号。'));
+    if (!comments.length) list.appendChild(el('p', 'hint', '还没有评论。'));
     comments.forEach((comment, i) => {
       const row = el('div', `comment-row${comment.resolved ? ' is-resolved' : ''}`);
       const head = el('div', 'comment-meta');
@@ -2223,11 +2223,18 @@ function openBlockComments(anchor, entry, index) {
   pop.appendChild(list);
   pop.appendChild(foot);
   document.body.appendChild(pop);
-  const rect = anchor.getBoundingClientRect();
-  pop.style.left = `${clamp(rect.right - 320, 8, window.innerWidth - 336)}px`;
-  pop.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 320)}px`;
-  input.focus();
   render();
+  /* 定位按实测尺寸算，别按写死的 320：浮层宽高改了之后写死的数字会把便签
+     顶到视口外（窄屏尤其明显）。默认贴在块的右下角，放不下就翻到上方。 */
+  const rect = anchor.getBoundingClientRect();
+  const box = pop.getBoundingClientRect();
+  const margin = 8;
+  pop.style.left = `${clamp(rect.right - box.width, margin, Math.max(margin, window.innerWidth - box.width - margin))}px`;
+  const below = rect.bottom + margin;
+  pop.style.top = `${below + box.height > window.innerHeight - margin
+    ? Math.max(margin, rect.top - box.height - margin)
+    : below}px`;
+  input.focus();
   const close = (event) => {
     if (!pop.contains(event.target) && !anchor.contains(event.target)) {
       pop.remove();
