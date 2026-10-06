@@ -732,3 +732,66 @@ html[data-can-edit="0"] .card-view .prop-row .prop-input { pointer-events: none;
 .pl-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 12.5px; color: var(--mn-ink-soft); }
 .pl-time { color: var(--mn-ink-dim); }
 .pl-diff { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--mn-ink-dim); }
+
+
+/* ==================================================================
+   发布站点里嵌入的画布（地图 / 关系树 / 图谱）
+   目标：看起来像站点的一部分 —— 纸面底、去编辑控件、自适应窗口。
+   ================================================================== */
+body.is-embed { background: transparent; }
+body.is-embed.is-paper {
+  /* 工作区的 token 换成站点那套纸面配色 */
+  --mn-surface: #ffffff;
+  --mn-surface-muted: #faf7f0;
+  --mn-surface-sunken: #f4f0e6;
+  --mn-border: #e6e0d3;
+  --mn-border-strong: #d8d0bd;
+  --mn-ink: #1b1710;
+  --mn-ink-muted: #4a4438;
+  --mn-ink-dim: #857c6b;
+  --mn-primary: #18181b;
+  --mn-primary-ink: #fafafa;
+  --mn-icon: #6b6459;
+  --mn-ring: #8a6a1f;
+  --mn-success: #2f6b4a;
+  --mn-error: #b3261e;
+}
+body.is-embed.is-paper .workspace,
+body.is-embed.is-paper .panel, body.is-embed.is-paper .panel-body { background: transparent; }
+
+/* 只读：把"改内容"的控件藏掉，留下看内容需要的（缩放、适应、关系名显示方式） */
+body.is-embed .is-embed-bar .mini-btn.is-primary,
+body.is-embed .is-embed-bar .variant-tab:not(.is-active),
+body.is-embed .is-embed-bar .mini-select,
+body.is-embed .is-embed-bar .map-upload,
+body.is-embed .is-embed-bar .map-bg-btn { display: none !important; }
+
+/* 画布铺满 iframe 的宽度（高度仍由各自布局算，别硬撑坏了几何计算） */
+body.is-embed .tree-wrap, body.is-embed .map-wrap, body.is-embed .graph-wrap {
+  height: 100%; display: flex; flex-direction: column; min-height: 0;
+}
+body.is-embed .tree-canvas, body.is-embed .map-canvas, body.is-embed .graph-wrap > svg {
+  flex: 1 1 auto; min-height: 0;
+}
+
+/* 纸面模式下的关系树墨色（默认那套是给深色画布调的） */
+body.is-embed.is-paper .tree-canvas {
+  background-image: radial-gradient(rgba(27, 23, 16, .11) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+body.is-embed.is-paper .tree-node rect { fill: #ffffff; stroke: rgba(27, 23, 16, .16); }
+/* 节点的左侧色条：跟着分组色走，没有分组就按世代给一套柔和色 */
+body.is-embed.is-paper .tree-node rect { rx: 10; }
+body.is-embed.is-paper .tree-node .node-accent { opacity: .85; }
+body.is-embed.is-paper .tree-node:hover rect { stroke: rgba(27, 23, 16, .34); }
+body.is-embed.is-paper .tree-node-name { fill: #1b1710; }
+body.is-embed.is-paper .tree-node-sub { fill: #6b6459; }
+body.is-embed.is-paper .tree-edge { stroke: rgba(27, 23, 16, .35); }
+body.is-embed.is-paper .tree-edge-label { fill: #8a6a1f; }
+body.is-embed.is-paper .map-blank-hint, body.is-embed.is-paper .tree-empty { color: #6b6459; }
+
+/* 只读：工具条里"改内容"的按钮藏掉，留下缩放 / 适应 / 关系名显示方式 */
+body.is-embed .is-embed-bar .tree-tool-edit,
+body.is-embed .is-embed-bar .map-tool-edit,
+body.is-embed .is-embed-bar .graph-tool-edit,
+body.is-embed .embed-hide { display: none !important; }
