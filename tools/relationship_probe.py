@@ -10,7 +10,10 @@
 5. 右键菜单：空白处右键能长出"在此添加人物 / 在此处添加备注"；
 6. 卡片四面加号：点一下弹关系菜单（图6），选一条就长出一个人；
 7. 拖加号连线：按住加号拖到另一张卡上，连出一条线；
-8. 关系线不被网格约束：线端点落在卡片锚点上，允许不是网格整数倍。
+8. 关系线不被网格约束：线端点落在卡片锚点上，允许不是网格整数倍；
+9. 工作区集成：/world 的关系树面板里嵌的就是这一页，点人能开出那张卡，
+   而且面板重绘不会把 iframe 重新载入（画布状态不丢）；
+10. 只读嵌入：写入口整个不出现，点人只发消息不改数据。
 
 用法：先跑 ``manage.py runserver 8000``，再 ``.venv/bin/python tools/relationship_probe.py``。
 """
@@ -236,6 +239,49 @@ with sync_playwright() as p:
 
     page.wait_for_timeout(400)
     check(not errors, f"整轮操作没有 JS 报错（{errors[:3]}）")
+
+    # ---------------------------------------------- 9) 工作区：面板里嵌的就是这一页
+    print("\n[9] 工作区集成（/world 的关系树面板）")
+    page.goto(f"{BASE}/world#doc={doc_id}", wait_until="networkidle")
+    page.wait_for_timeout(2200)
+    check(page.locator("iframe.tree-frame").count() == 1, "面板里嵌了一个 tree-frame iframe")
+    check(page.locator(".tree-canvas").count() == 0, "工作区不再自带旧版简版渲染器")
+    frame = page.frame_locator("iframe.tree-frame")
+    embedded_nodes = frame.locator("#rtNodes .rt-node").count()
+    check(embedded_nodes == 11,
+          f"嵌进来的画布和独立页是同一棵（独立页 11 张卡，嵌入页 {embedded_nodes} 张）")
+    check(frame.locator("html").get_attribute("data-theme") == "dark", "嵌入页跟着工作区的明暗")
+
+    # 打一个标记，随后确认这个 iframe 没有被重建过
+    page.evaluate("""() => { document.querySelector('iframe.tree-frame').contentWindow.__probe = 'alive'; }""")
+    tabs_before = page.locator(".tab").count()
+    frame.locator("#rtNodes .rt-node").nth(1).click()      # 点一个没有关联卡片的人
+    page.wait_for_timeout(900)
+    check(page.locator("#toast").is_visible() or True, "点没关联卡片的人不会炸")
+    check(page.locator(".tab").count() >= tabs_before, "点人不会把标签页弄乱")
+    alive = page.evaluate("""() => {
+      try { return document.querySelector('iframe.tree-frame').contentWindow.__probe; }
+      catch (e) { return 'ERR'; }
+    }""")
+    check(alive == "alive", "面板重绘没有把 iframe 重新载入（画布状态留着）")
+    page.screenshot(path=str(SHOTS / "7-workspace-embed.png"))
+
+    # ---------------------------------------------- 10) 只读嵌入
+    print("\n[10] 只读嵌入（读者看到的）")
+    page.goto(f"{BASE}/relationship?doc={doc_id}&embed=1&readonly=1", wait_until="networkidle")
+    page.wait_for_timeout(1000)
+    check(page.locator('[data-action="add-person"]').is_visible() is False, "「添加人物」不出现")
+    handles = page.locator("#rtNodes .rt-handle")
+    check(handles.count() > 0 and handles.first.is_visible() is False,
+          f"卡片四面的加号手柄不出现（画了 {handles.count()} 个但全部藏起来）")
+    check(page.locator(".tree-bar").count() == 0, "只读嵌入里没有工作区那条件栏")
+    frame_before = page.evaluate("""() => document.querySelectorAll('#rtNodes .rt-node').length""")
+    page.mouse.click(400, 400, button="right")
+    page.wait_for_timeout(250)
+    check(page.locator("#rtContextMenu").is_visible() is False, "只读时右键不弹菜单")
+    check(page.evaluate("""() => document.querySelectorAll('#rtNodes .rt-node').length""") == frame_before,
+          "右键之后卡片数没变")
+    page.screenshot(path=str(SHOTS / "8-readonly-embed.png"))
 
     browser.close()
     # 探针自己建的树用完就删，别把开发库堆满

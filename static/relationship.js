@@ -21,6 +21,11 @@
   var $ = function (id) { return document.getElementById(id); };
 
   /* ---------------------------------------------------------------- 状态 */
+  /* 只读（游客 / 只读成员 / 发布站点里的嵌入）：写入口整个不发生作用。
+     不是"点了再提示"，是干脆不画菜单、不绑定拖拽——对着空气点一下什么都不该发生。 */
+  var READONLY = app.dataset.readonly === '1';
+  var EMBED = app.dataset.embed === '1';
+
   var S = {
     grid: { grid: 28, card_cols: 5, card_rows: 8, col_step: 8, row_step: 12 },
     templates: [],
@@ -463,6 +468,10 @@
 
       $('rtDocName').textContent = S.doc.name;
       $('rtKindChip').textContent = S.variant.kind_label || '';
+      $('rtOpenFull').href = '/relationship?doc=' + S.docId;
+      if (READONLY) {
+        $('rtEmptyHint').innerHTML = '这棵关系树还没有人物';
+      }
       showScreen('editor');
       render();
       fit();
@@ -477,7 +486,7 @@
       id: node.id, x: snap(node.x || 0), y: snap(node.y || 0),
       name: node.name || '', note: node.note || '',
       kind: node.kind || 'person',
-      card: node.card, card_name: node.card_name,
+      card: node.card, card_name: node.card_name, card_slug: node.card_slug,
       image: node.image || '', subtitle: node.subtitle || '',
       deceased: !!node.deceased, favourite: !!node.favourite
     };
@@ -537,6 +546,7 @@
       path.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
       path.addEventListener('click', function (event) {
         event.stopPropagation();
+        if (READONLY) return;
         editEdge(edge);
       });
       layer.appendChild(path);
@@ -612,6 +622,7 @@
 
     /* 拖动卡片：松手才吸附 + 落库（拖动过程中不碰后端，也不重排整棵树） */
     el.addEventListener('pointerdown', function (event) {
+      if (READONLY) return;                      // 只读：卡片不能拖
       var handle = event.target.closest ? event.target.closest('.rt-handle') : null;
       if (handle) { beginLink(event, node, handle); return; }
       if (event.button !== 0) return;
@@ -620,12 +631,15 @@
 
     el.addEventListener('dblclick', function (event) {
       event.stopPropagation();
+      if (READONLY) return;
       if (node.kind === 'note') editNote(node, el); else editName(node, el);
     });
 
     el.addEventListener('click', function (event) {
       event.stopPropagation();
       if (event.target.closest && event.target.closest('.rt-handle')) return;
+      // 嵌在宿主里时点人 = 让宿主打开那张卡（发布站点是跳站点页，工作区是开面板）
+      if (EMBED) { openCardInHost(node); return; }
       select(node.id);
     });
     el.addEventListener('contextmenu', function (event) {
@@ -891,6 +905,7 @@
   }
 
   $('rtCanvasWrap').addEventListener('contextmenu', function (event) {
+    if (READONLY) return;
     if (event.target.closest && event.target.closest('.rt-node')) return;
     event.preventDefault();
     hideMenus();
@@ -1170,6 +1185,7 @@
   /* -------------------------------------------------------- 卡片工具条（图6 顶部） */
   function renderCardTools() {
     var bar = $('rtCardTools');
+    if (READONLY) { bar.hidden = true; return; }
     var node = S.selected != null ? nodeById(S.selected) : null;
     if (!node || node.kind === 'note') { bar.hidden = true; return; }
     bar.hidden = false;
@@ -1257,6 +1273,26 @@
           toast('已分配给「' + data.card_name + '」');
         });
     }).catch(function (err) { toast(err.message || '分配失败'); });
+  }
+
+  /* ------------------------------------------------- 只读嵌入：点人告诉宿主 */
+  /* 发一条消息给宿主页面：
+     · 发布站点认 slug，直接跳那张卡的站点页；
+     · 工作区认 id，在自己里面把那张卡开成标签页。
+     两种宿主都收得到，同一条消息就够了。 */
+  function openCardInHost(node) {
+    if (window.parent === window) return;
+    if (!node.card) {
+      // 没有关联卡片：也得给个回音，不然点一下什么都不发生，像坏了
+      window.parent.postMessage({ type: 'ws-node-hint', name: node.name }, window.location.origin);
+      return;
+    }
+    window.parent.postMessage({
+      type: 'ws-open-doc',
+      id: node.card,
+      name: node.name,
+      slug: node.card_slug || ''
+    }, window.location.origin);
   }
 
   /* ------------------------------------------------------------ 落库 */

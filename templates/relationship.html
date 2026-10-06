@@ -9,9 +9,11 @@
   <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
   <link rel="stylesheet" href="{% static 'relationship.css' %}?v={{ static_version }}" />
 </head>
-<body class="rt-body">
+<body class="rt-body{% if embed %} is-embed{% endif %}{% if paper %} is-paper{% endif %}">
   <div class="rt-app" id="rtApp"
        data-doc="{{ doc_id }}"
+       data-embed="{{ embed|yesno:'1,0' }}"
+       data-readonly="{{ readonly|yesno:'1,0' }}"
        data-templates-url="/api/world/relationship/templates"
        data-trees-url="/api/world/relationship/trees">
 
@@ -83,15 +85,19 @@
           <span class="rt-chip" id="rtKindChip">家庭</span>
         </div>
         <div class="rt-topbar-tools">
-          <button type="button" class="rt-tool" data-action="add-person" title="添加人物">
+          <button type="button" class="rt-tool rt-write" data-action="add-person" title="添加人物">
             <span data-icon="user-plus" data-icon-size="15"></span> 添加人物
           </button>
-          <button type="button" class="rt-tool" data-action="add-note" title="添加备注">
+          <button type="button" class="rt-tool rt-write" data-action="add-note" title="添加备注">
             <span data-icon="sticky-note" data-icon-size="15"></span> 添加备注
           </button>
           <span class="rt-tool-sep" aria-hidden="true"></span>
-          <button type="button" class="rt-tool" data-action="relations" title="可用关系">关系清单</button>
+          <button type="button" class="rt-tool rt-write" data-action="relations" title="可用关系">关系清单</button>
           <button type="button" class="rt-tool rt-tool--ghost" data-action="fit" title="缩放到适应">适应</button>
+          <a class="rt-tool rt-embed-only" id="rtOpenFull" target="_blank" rel="noopener"
+             title="在新标签页里全屏编辑" aria-label="在新标签页里全屏编辑">
+            <span data-icon="external-link" data-icon-size="15"></span>
+          </a>
           <span class="rt-save" id="rtSaveState">已保存</span>
         </div>
       </header>

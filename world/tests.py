@@ -800,6 +800,48 @@ class RelationshipPageTests(BaseWorldCase):
         with_doc = self.client.get(f"/relationship?doc={document['id']}")
         self.assertContains(with_doc, f'data-doc="{document["id"]}"')
 
+    def test_embed_and_readonly_flags(self):
+        """面板 / 站点是用 iframe 嵌这一页的：embed 去外壳，且默认只读。"""
+        plain = self.client.get("/relationship")
+        self.assertContains(plain, 'data-embed="0"')
+        # 没账号（首次安装）时任何人都能编辑，所以这里不是只读
+        self.assertContains(plain, 'data-readonly="0"')
+
+        embedded = self.client.get("/relationship?embed=1")
+        self.assertContains(embedded, "rt-body is-embed")
+        self.assertContains(embedded, 'data-embed="1"')
+        self.assertContains(embedded, 'data-readonly="1"')     # embed 默认只读
+
+        editable = self.client.get("/relationship?embed=1&readonly=0")
+        self.assertContains(editable, 'data-readonly="0"')
+
+        # 纸面主题：嵌进发布站点时按那边的米白走
+        paper = self.client.get("/relationship?embed=1&theme=paper")
+        self.assertContains(paper, "is-paper")
+        self.assertContains(paper, 'data-theme="light"')
+
+        forced = self.client.get("/relationship?theme=light")
+        self.assertContains(forced, 'data-theme="light"')
+
+    def test_guest_gets_a_readonly_canvas(self):
+        """有账号之后，游客 / 只读成员拿到的一定是只读画布。"""
+        from django.contrib.auth.models import User
+        User.objects.create_user("owner", password="dev-password-1")
+        guest = self.client.get("/relationship")
+        self.assertContains(guest, 'data-readonly="1"')
+
+    def test_workspace_embeds_the_same_editor(self):
+        """工作区的关系树面板必须嵌这一页，而不是自己那套旧简版。"""
+        sheet = (pathlib.Path(__file__).resolve().parent.parent / "static" / "workspace.js")
+        script = sheet.read_text(encoding="utf-8")
+        self.assertIn("function renderTreeFrame(entry)", script)
+        self.assertIn("/relationship?doc=", script)
+        self.assertNotIn("function renderTreeTool(entry)", script)   # 旧简版已经拆掉
+        self.assertNotIn("function fitTree(", script)
+        # 嵌入的 iframe 不能在面板重绘时被销毁，否则画布状态每次都丢
+        self.assertIn("function liveEmbed(", script)
+        self.assertIn("function parkLiveEmbeds(", script)
+
     def test_page_follows_the_minimal_design_language(self):
         """外观必须跟工作区同一套语言：加载 minimal.css、明暗跟世界主题、图标走公共图标集。"""
         page = self.client.get("/relationship")
