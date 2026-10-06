@@ -121,6 +121,54 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* 打不开：整屏就一句话，别让人以为"我的树变成了新建向导" */
+.rt-screen--error {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  place-items: center;
+}
+
+.rt-screen--error[hidden] { display: none; }
+
+.rt-error {
+  max-width: 380px;
+  padding: var(--mn-5);
+  text-align: center;
+  color: var(--mn-ink-muted);
+}
+
+.rt-error-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--mn-3);
+  border: 1px solid var(--mn-border);
+  border-radius: 50%;
+  background: var(--mn-surface-muted);
+  color: var(--mn-ink-dim);
+}
+
+.rt-error h2 {
+  margin: 0 0 var(--mn-2);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--mn-ink);
+}
+
+.rt-error p { margin: 0 0 var(--mn-4); font-size: 13px; line-height: 1.6; }
+
+.rt-error-actions {
+  display: flex;
+  gap: var(--mn-2);
+  justify-content: center;
+}
+
+.rt-error-actions .rt-btn { text-decoration: none; }
+
+/* 嵌在宿主里时"回模版选择"没有意义：那是宿主的面板，不该被这里换掉 */
+.rt-body.is-embed .rt-error-home { display: none; }
+
 /* ------------------------------------------------------------- 左栏 */
 .rt-side {
   display: flex;

@@ -204,6 +204,12 @@
   /* ================================================================= 首屏 */
   function boot() {
     hydrateIcons(document);
+    // 宿主/链接指名要的那篇文档打不开（被删了、在回收站里、不是关系树）：
+    // 先明说，别掉回模版选择
+    if (S.docId && app.dataset.docMissing === '1') {
+      showLoadError({ message: '这篇关系树不在了——它可能已经被删掉，或者躺在回收站里。' });
+      return;
+    }
     Promise.all([
       api(API + '/relationship/templates'),
       api(API + '/relationship/trees')
@@ -520,10 +526,21 @@
       render();
       fit();
     }).catch(function (err) {
-      toast(err.message || '打不开这棵树', 4000);
-      showScreen('picker');
+      // 打不开就明说打不开。以前这里悄悄退回模版选择，看着像"我的树
+      // 变成了新建向导"——文档只是进了回收站而已，不该这么演。
+      showLoadError(err);
     });
   }
+
+  /* 文档不在（被删 / 进了回收站 / 根本没这个 id）时的那一屏 */
+  function showLoadError(err) {
+    $('rtErrorText').textContent = (err && err.message) || '它可能已经被删掉了。';
+    showScreen('error');
+  }
+
+  $('rtErrorRetry').addEventListener('click', function () {
+    if (S.docId) openEditor(S.docId); else showScreen('picker');
+  });
 
   function normalizeNode(node) {
     return {

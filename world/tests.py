@@ -10,6 +10,7 @@ import json
 import pathlib
 
 from django.test import TestCase
+from django.utils import timezone
 
 from . import publish
 
@@ -845,6 +846,27 @@ class RelationshipPageTests(BaseWorldCase):
                                     data=json.dumps({"template": "family"}),
                                     content_type="application/json")
         self.assertEqual(response.status_code, 400)
+
+    def test_missing_document_does_not_look_like_a_new_tree(self):
+        """指名要的那篇打不开时，页面得说"打不开"，而不是掉回模版选择。"""
+        missing = self.client.get("/relationship?doc=999999")
+        self.assertContains(missing, 'data-doc="999999"')
+        self.assertContains(missing, 'data-doc-missing="1"')
+
+        # 正常打开的一篇：没有这个标记
+        created = self._new_tree("family", with_demo=False)
+        alive = self.client.get(f"/relationship?doc={created['document']['id']}")
+        self.assertContains(alive, 'data-doc-missing="0"')
+
+        # 进了回收站也算"打不开"（这正是当初看着像"树变成了新建向导"的那次）
+        document = Document.objects.get(pk=created["document"]["id"])
+        document.deleted_at = timezone.now()
+        document.save(update_fields=["deleted_at"])
+        trashed = self.client.get(f"/relationship?doc={document.id}")
+        self.assertContains(trashed, 'data-doc-missing="1"')
+
+        # 不带 ?doc= 的裸页面不算
+        self.assertContains(self.client.get("/relationship"), 'data-doc-missing="0"')
 
     def test_embed_and_readonly_flags(self):
         """面板 / 站点是用 iframe 嵌这一页的：embed 去外壳，且默认只读。"""
