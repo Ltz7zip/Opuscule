@@ -42,7 +42,7 @@
 @keyframes mn-fade { from { opacity: 0; } to { opacity: 1; } }
 
 /* 文档切换：内容轻微上浮，别用大位移（写东西的时候晃眼） */
-.card-view, .tl-frame-wrap, .tree-canvas, .map-canvas, .graph-canvas {
+.card-view, .tl-frame-wrap, .tree-wrap, .map-canvas, .graph-canvas {
   animation: mn-rise var(--mn-dur-slow) var(--mn-ease) both;
 }
 @keyframes mn-rise {
@@ -703,7 +703,7 @@ body.is-embed .bottom-nav,
 body.is-embed .empty-hint { display: none !important; }
 body.is-embed .body, body.is-embed .workspace, body.is-embed .panels, body.is-embed .panel { display: block; }
 body.is-embed .panel { border: 0; }
-body.is-embed .tree-canvas, body.is-embed .map-canvas, body.is-embed .graph-canvas { height: 100%; }
+body.is-embed .tree-frame-body, body.is-embed .map-canvas, body.is-embed .graph-canvas { height: 100%; }
 
 
 /* ============================================ 只读模式（游客 / 观众） */
@@ -762,7 +762,6 @@ body.is-embed.is-paper .panel,
 body.is-embed.is-paper .panel-body { background: #f7f3e4; }
 /* 工具条保持白卡片，画布才是奶油底 */
 body.is-embed.is-paper .is-embed-bar { background: #ffffff; border-bottom: 1px solid #e6e0d3; }
-body.is-embed.is-paper .tree-canvas { background-color: #f7f3e4; }
 
 /* 只读：把"改内容"的控件藏掉，留下看内容需要的（缩放、适应、关系名显示方式） */
 body.is-embed .is-embed-bar .mini-btn.is-primary,
@@ -784,28 +783,11 @@ body.is-embed .panel-body { display: flex; flex-direction: column; }
 body.is-embed .tree-wrap, body.is-embed .map-wrap, body.is-embed .graph-wrap {
   flex: 1 1 auto; height: 100%; display: flex; flex-direction: column; min-height: 0;
 }
-body.is-embed .tree-canvas, body.is-embed .map-canvas, body.is-embed .graph-wrap > svg {
+body.is-embed .tree-frame-body, body.is-embed .map-canvas, body.is-embed .graph-wrap > svg {
   flex: 1 1 auto; min-height: 0;
 }
 
-/* 纸面模式下的关系树墨色（默认那套是给深色画布调的） */
-body.is-embed.is-paper .tree-canvas {
-  background-image: radial-gradient(rgba(27, 23, 16, .11) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-body.is-embed.is-paper .tree-node rect { fill: #ffffff; stroke: rgba(27, 23, 16, .16); }
-/* 节点的左侧色条：跟着分组色走，没有分组就按世代给一套柔和色 */
-body.is-embed.is-paper .tree-node rect { rx: 10; }
-body.is-embed.is-paper .tree-node .node-accent { opacity: .85; }
-body.is-embed.is-paper .tree-node:hover rect { stroke: rgba(27, 23, 16, .34); }
-body.is-embed.is-paper .tree-node-name { fill: #1b1710; }
-body.is-embed.is-paper .tree-node-sub { fill: #6b6459; }
-body.is-embed.is-paper .tree-edge { stroke: rgba(27, 23, 16, .35); }
-body.is-embed.is-paper .tree-edge-label { fill: #8a6a1f; }
-body.is-embed.is-paper .map-blank-hint, body.is-embed.is-paper .tree-empty { color: #6b6459; }
-
 /* 只读：工具条里"改内容"的按钮藏掉，留下缩放 / 适应 / 关系名显示方式 */
-body.is-embed .is-embed-bar .tree-tool-edit,
 body.is-embed .is-embed-bar .map-tool-edit,
 body.is-embed .is-embed-bar .graph-tool-edit,
 body.is-embed .embed-hide { display: none !important; }

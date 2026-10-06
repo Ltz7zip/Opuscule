@@ -1024,6 +1024,8 @@ class TreeNode(models.Model):
             "variant": self.variant_id,
             "card": self.card_id,
             "card_name": self.card.name if self.card_id else None,
+            # 只读画布点人要跳站点页，那边按 slug 走，所以顺手带上
+            "card_slug": self.card.slug if self.card_id else None,
             "name": self.name,
             "subtitle": self.subtitle,
             "image": self.image,

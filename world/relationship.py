@@ -23,6 +23,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_safe
 
+from . import permissions
 from . import views as world_views
 from .models import DOC_TREE, Document, TreeEdge, TreeNode, TreeVariant
 from .relations import (
@@ -41,6 +42,10 @@ def relationship_page(request):
 
     明暗跟工作区走同一条规则（``world.theme.mode``，非 light 即 dark），
     这样从工作区点「全屏编辑」跳过来不会有"闪一下换了皮肤"的割裂感。
+
+    ``?embed=1``：被工作区面板 / 发布站点用 iframe 嵌进去时用——去掉外壳的
+    留白与圆角边框，让编辑器直接铺满那块地方。``embed`` 默认只读，
+    要可编辑得显式给 ``readonly=0``。
     """
     world = world_views.current_world()
     doc_id = world_views.as_int(request.GET.get("doc"), 0)
@@ -50,9 +55,23 @@ def relationship_page(request):
         if document is not None and document.document_type != DOC_TREE:
             document = None
     theme = world.theme_config if isinstance(world.theme_config, dict) else {}
+    # 明暗三档：paper = 发布站点的纸面（嵌进去要跟宿主同色），
+    # light / dark 可以强制覆盖，缺省跟世界主题走
+    theme_mode = request.GET.get("theme", "")
+    if theme_mode not in ("paper", "light", "dark"):
+        theme_mode = "light" if theme.get("mode") == "light" else "dark"
+    embed = request.GET.get("embed", "") not in ("", "0", "false", "no")
+    readonly = embed if "readonly" not in request.GET else (
+        request.GET.get("readonly", "") not in ("0", "false", "no"))
+    # 没编辑权限的人（游客 / 只读成员）看到的也是只读画布
+    if not permissions.can_edit(request.user, world):
+        readonly = True
     return render(request, "relationship.html", {
         "doc_id": document.id if document is not None else 0,
-        "theme_mode": "light" if theme.get("mode") == "light" else "dark",
+        "theme_mode": "light" if theme_mode in ("paper", "light") else "dark",
+        "paper": theme_mode == "paper",
+        "embed": embed,
+        "readonly": readonly,
     })
 
 

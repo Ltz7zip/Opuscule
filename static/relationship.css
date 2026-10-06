@@ -50,6 +50,50 @@
   --rt-ring: 0 0 0 3px rgba(161, 161, 170, 0.22);
 }
 
+/* 纸面模式：嵌进**发布站点**时用（站点是浅色纸感），把表面色换成站点的米白，
+   免得一块"标准 Minimal 白"贴在米黄纸面上。只换色，不动结构。 */
+.rt-body.is-paper {
+  --mn-surface: #fffdf8;
+  --mn-surface-muted: #f6f3ec;
+  --mn-surface-sunken: #f6f3ec;
+  --mn-border: rgba(35, 32, 26, 0.14);
+  --mn-border-strong: rgba(35, 32, 26, 0.26);
+  --mn-ink: #23201a;
+  --mn-ink-muted: #5f594e;
+  --mn-ink-dim: #8d867a;
+  --mn-primary: #23201a;
+  --mn-primary-ink: #faf7f0;
+  --mn-icon: #5f594e;
+  --mn-accent: #3f3416;
+  --mn-accent-ink: #fffdf8;
+  --rt-dot: rgba(35, 32, 26, 0.13);
+  --rt-ring: 0 0 0 3px rgba(35, 32, 26, 0.14);
+  background: #f6f3ec;
+}
+
+/* 嵌进工作区面板 / 发布站点时：外壳由宿主给，这里只负责把编辑器铺满 */
+.rt-body.is-embed { height: 100%; }
+.rt-body.is-embed .rt-app { padding: 0; height: 100vh; }
+.rt-body.is-embed .rt-screen { border: 0; border-radius: 0; }
+.rt-body.is-embed .rt-topbar { padding: 0 var(--mn-3); }
+.rt-body.is-embed .rt-canvas-wrap { margin: var(--mn-2); }
+/* 嵌在宿主里时"回到模版选择"没有意义——那会把宿主的面板整个换掉；
+   反过来，"在新标签页全屏编辑"只有嵌着的时候才有意义。 */
+.rt-body.is-embed .rt-topbar-back { display: none; }
+.rt-body.is-embed .rt-side-head--back .rt-back { display: none; }
+.rt-embed-only { display: none; }
+.rt-body.is-embed .rt-embed-only { display: inline-flex; align-items: center; text-decoration: none; }
+/* 读者（只读嵌入）不需要"去编辑器"的入口，也不需要看着"已保存"发呆 */
+.rt-app[data-readonly="1"] .rt-embed-only { display: none; }
+.rt-app[data-readonly="1"] .rt-save { display: none; }
+
+/* 只读：写入口整个收起来（不是"点了再提示"），画布只留下看与缩放 */
+.rt-app[data-readonly="1"] .rt-write { display: none; }
+.rt-app[data-readonly="1"] .rt-handle { display: none; }
+.rt-app[data-readonly="1"] .rt-card { cursor: pointer; }
+.rt-app[data-readonly="1"] .rt-canvas-wrap { cursor: grab; }
+.rt-app[data-readonly="1"] .rt-canvas-wrap.is-panning { cursor: grabbing; }
+
 .rt-app *,
 .rt-app *::before,
 .rt-app *::after { box-sizing: border-box; }

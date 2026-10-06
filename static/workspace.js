@@ -463,6 +463,7 @@ function renderPanels() {
   // 这样它们接下来触发的 input / blur 保存不会再拿旧内容覆盖掉新结构
   // （斜杠菜单刚写好的 <h1> 曾经就是这样被 700ms 后的防抖保存盖回去的）。
   $$('.block-text, .block-title', host).forEach((node) => { node.dataset.retired = '1'; });
+  parkLiveEmbeds(host);                 // 嵌入的 iframe 先"寄存"，别让它随面板一起销毁
   host.innerHTML = '';
   // 重渲染时清掉可能还挂在 body 上的 @ 提及浮层与格式条（否则会越积越多）
   $$('.mention-pop').forEach((node) => node.remove());
@@ -529,22 +530,7 @@ function renderPanels() {
       else if (entry.document.type === 'chapter') body.appendChild(renderChapterTool(entry));
       else if (entry.document.type === 'embed') body.appendChild(renderEmbedTool(entry));
       else if (entry.document.type === 'graph') body.appendChild(renderGraph(entry));
-      else if (entry.document.type === 'familyTree') {
-        body.appendChild(renderTreeTool(entry));
-        // 首次渲染时把整棵树缩放到视野中央（画布尺寸要等挂上 DOM 才知道）
-        const treeUi = entry.treeUi;
-        if (treeUi && !treeUi.fitted && entry.tree) {
-          requestAnimationFrame(() => {
-            const treeCanvas = body.querySelector('.tree-canvas');
-            if (!treeCanvas) return;
-            fitTree(entry, treeCanvas);
-          });
-        }
-        // 嵌在站点里时只适应一次：fitTree() 结尾会 renderPanels()，反复调度会变成死循环
-        if (isEmbedded()) {
-          requestAnimationFrame(() => embedFitOnce(entry, body.querySelector('.tree-canvas')));
-        }
-      }
+      else if (entry.document.type === 'familyTree') body.appendChild(renderTreeFrame(entry));
       else if (entry.document.type === 'map') body.appendChild(renderMapTool(entry));
       else if (entry.document.type === 'folder') body.appendChild(renderFolder(entry));
       else body.appendChild(renderPlaceholder(entry.document));
@@ -552,6 +538,7 @@ function renderPanels() {
     pane.appendChild(body);
     host.appendChild(pane);
   });
+  sweepLiveEmbeds();                    // 这一轮没被认领的嵌入（文档关了）才真销毁
   const hasTabs = S.panels.some((p) => p.tabs.length);
   host.classList.toggle('has-tabs', hasTabs);
   // 没有标签页时把面板整体藏掉：否则空面板会盖在空状态上面，按钮点不动
@@ -565,6 +552,56 @@ function renderPanels() {
     const first = host.querySelector('.panel');
     if (first && S.panelSplit) first.style.flex = `0 0 ${S.panelSplit}%`;
   }
+}
+
+/* ------------------------------------------------------- 活着的嵌入 iframe */
+/**
+ * 面板是"整块重建"的（``host.innerHTML = ''``），而 iframe 一旦被移出文档，
+ * 浏览上下文就销毁了——于是每次 renderPanels() 都会把嵌入的编辑器重载一次，
+ * 用户在里面的选中 / 平移 / 缩放全丢。
+ *
+ * 这里的办法很土但很稳：重建前先把带 ``is-live-embed`` 的元素**挪到常驻文档的
+ * staging 容器**里（还在文档里，所以 iframe 不会重载），重建时再由渲染函数按
+ * key 认领回去；这一轮没被认领的（文档关掉了）才真正删掉。
+ */
+const LIVE_EMBEDS = new Map();          // key -> 元素
+
+function liveStage() {
+  let stage = $('#panelStage');
+  if (!stage) {
+    stage = el('div', 'panel-stage');
+    stage.id = 'panelStage';
+    stage.hidden = true;
+    document.body.appendChild(stage);
+  }
+  return stage;
+}
+
+function parkLiveEmbeds(host) {
+  $$('.is-live-embed', host).forEach((node) => {
+    if (node.dataset.liveKey) LIVE_EMBEDS.set(node.dataset.liveKey, node);
+    liveStage().appendChild(node);      // 只是换爹，不是销毁
+  });
+}
+
+function sweepLiveEmbeds() {
+  const stage = liveStage();
+  Array.prototype.slice.call(stage.children).forEach((node) => {
+    if (LIVE_EMBEDS.get(node.dataset.liveKey) === node) LIVE_EMBEDS.delete(node.dataset.liveKey);
+    node.remove();
+  });
+}
+
+/** 取一个"活着"的嵌入元素：有就复用（不重载），没有就用 factory 造一个。 */
+function liveEmbed(key, factory) {
+  let node = LIVE_EMBEDS.get(key);
+  if (!node) {
+    node = factory();
+    node.classList.add('is-live-embed');
+    node.dataset.liveKey = key;
+    LIVE_EMBEDS.set(key, node);
+  }
+  return node;
 }
 
 function startGripDrag(event) {
@@ -3289,532 +3326,34 @@ async function typeManager(focusTypeId = null) {
 
 /* ================================================================ 关系树 */
 /**
- * 关系树成员的落点有两个来源，得区分开：
+ * 关系树面板 = 独立页 ``/relationship`` 的只读/可编辑嵌入。
  *
- * * **grid**：``/relationship`` 那个网格编辑器画的，``x/y`` 都是像素落点，
- *   ``generation`` 只是"第几行"的附带信息。这里必须照 y 摆，不然同一棵树
- *   在两个地方长得不一样。
- * * **generation**：工作区自己那个简版只写 ``x`` + ``generation``（``y`` 恒为 0），
- *   所以照旧按世代行排。
+ * 以前这里有一套工作区自带的"简版"渲染器（世代行 + 贝塞尔曲线 + 节点栏），
+ * 和独立页那套网格编辑器是**两份实现**：同一棵树在两个地方长得不一样，
+ * 修一个 bug 要改两遍。现在只留一份——面板里嵌独立页，新功能自动两边都有。
  *
- * 判据很简单：只要有一个成员的 y 不是 0，这棵树就是按网格摆的。
+ * iframe 用 ``liveEmbed`` 认领：面板整块重建时它不会被销毁，所以点人、切标签
+ * 都不会把画布上的选中 / 平移 / 缩放弄丢。
  */
-function treeLayout(nodes) {
-  return (nodes || []).some((node) => node.y) ? 'grid' : 'generation';
-}
-
-function treePoint(node, index, spread, layout) {
-  // 注意是 != null 而不是 ||：x = 0 是合法落点（网格第一列），不能被当成"没填"
-  const x = (node.x != null ? node.x : index * 190) * spread;
-  const y = layout === 'grid'
-    ? (node.y || 0) * spread
-    : (node.generation || 0) * 150 * spread;
-  return { x, y };
-}
-
-/**
- * 对齐 familyTree：多变体（variant）、世代行、可重命名的关系、交汇点、
- * 卡片吸附（有卡就显示卡片名，没有就纯占位），节点栏里还能"新建一张卡片"。
- */
-function renderTreeTool(entry) {
+function renderTreeFrame(entry) {
   const wrap = el('div', 'tree-wrap');
-  const ui = entry.treeUi || (entry.treeUi = { kind: 'family', zoom: 1, offset: { x: 0, y: 0 },
-                                              selected: null, labels: 'hover',
-                                              // 嵌进站点时默认就是"拖动空白 = 平移画布"，读者拖起来更顺手
-                                              mode: isEmbedded() ? 'pan' : 'select' });
-
-  if (!entry.tree) {
-    wrap.appendChild(el('p', 'hint', '载入关系树…'));
-    loadTree(entry);
-    return wrap;
+  const key = `tree:${entry.document.id}`;
+  const frame = liveEmbed(key, () => {
+    const node = el('iframe', 'tree-frame');
+    node.title = `${entry.document.name} · 关系树`;
+    return node;
+  });
+  // 只读成员看到的也是只读画布；权限变了只换参数，不重建 iframe。
+  // 嵌在发布站点里（纸面）时代码要跟宿主同色，所以明暗由这边指定。
+  const src = `/relationship?doc=${entry.document.id}&embed=1`
+    + (editable() && !isEmbedded() ? '&readonly=0' : '&readonly=1')
+    + (isEmbedded() ? '&theme=paper' : '');
+  if (frame.dataset.src !== src) {
+    frame.dataset.src = src;
+    frame.src = src;
   }
-  const state = entry.tree;
-  const variant = state.active;
-
-  /* 工具条 */
-  const bar = el('div', 'tree-bar');
-  if (isEmbedded()) bar.classList.add('is-embed-bar');
-  const variantBox = el('div', 'variant-tabs');
-  state.variants.forEach((item) => {
-    const tab = el('button', `variant-tab${item.id === variant.id ? ' is-active' : ''}`,
-      `${item.name}${item.node_count ? ` (${item.node_count})` : ''}`);
-    tab.addEventListener('click', async () => {
-      await api(`/api/world/documents/${entry.document.id}`,
-        { method: 'PUT', body: { settings: { active_variant: item.id } } });
-      await loadTree(entry);
-    });
-    variantBox.appendChild(tab);
-  });
-  const addVariant = el('button', 'variant-tab tree-tool-edit', '＋ 变体');
-  addVariant.title = '新建变体（可选择复制当前这棵）';
-  addVariant.addEventListener('click', async () => {
-    const name = window.prompt('新变体名称', `Variant ${state.variants.length + 1}`);
-    if (!name) return;
-    const fork = window.confirm('复制当前这棵树的成员与关系？\n确定 = 复制，取消 = 建一棵空的');
-    await api(`/api/world/trees/${entry.document.id}/variants`, {
-      method: 'POST', body: { name, kind: variant.kind, fork_from: fork ? variant.id : null },
-    });
-    await loadTree(entry);
-  });
-  variantBox.appendChild(addVariant);
-  bar.appendChild(variantBox);
-
-  const kindSelect = el('select', 'mini-select');
-  state.kinds.forEach((k) => {
-    const option = el('option', null, k.label);
-    option.value = k.value;
-    kindSelect.appendChild(option);
-  });
-  kindSelect.value = variant.kind;
-  kindSelect.title = '起步模板：会改掉默认的关系名';
-  kindSelect.classList.add('tree-tool-edit');
-  kindSelect.addEventListener('change', async () => {
-    await api(`/api/world/tree-variants/${variant.id}`, { method: 'PUT', body: { kind: kindSelect.value } });
-    await loadTree(entry);
-  });
-  bar.appendChild(kindSelect);
-
-  bar.appendChild(button('＋ 成员', '添加一位成员', async () => {
-    const name = window.prompt('成员名称', '新成员');
-    if (!name) return;
-    const maxGen = variant.nodes.reduce((acc, n) => Math.max(acc, n.generation), -1);
-    const created = await api(`/api/world/tree-variants/${variant.id}/nodes`, {
-      method: 'POST', body: { name, generation: maxGen + 1, x: variant.nodes.length * 24 },
-    });
-    ui.selected = created.id;
-    await loadTree(entry);
-  }));
-
-  bar.appendChild(button(ui.mode === 'pan' ? '✋ 平移' : '☝ 选择', '选择 / 平移（V / H）', () => {
-    ui.mode = ui.mode === 'pan' ? 'select' : 'pan';
-    renderPanels();
-  }, ui.mode === 'pan'));
-
-  const labelMode = el('button', 'mini-btn tree-tool-edit', `关系名：${{ hover: '悬停显示', always: '总是显示', never: '隐藏' }[ui.labels]}`);
-  labelMode.addEventListener('click', () => {
-    ui.labels = ui.labels === 'hover' ? 'always' : ui.labels === 'always' ? 'never' : 'hover';
-    renderPanels();
-  });
-  bar.appendChild(labelMode);
-
-  bar.appendChild(button('＋', '放大', () => { ui.zoom = Math.min(2.4, ui.zoom * 1.15); renderPanels(); }));
-  bar.appendChild(button('－', '缩小', () => { ui.zoom = Math.max(0.35, ui.zoom / 1.15); renderPanels(); }));
-  bar.appendChild(button('⤢', '缩放到适应', () => {
-    ui.fitted = false;
-    const target = $('.tree-canvas', wrap) || document.querySelector('.tree-canvas');
-    if (target) fitTree(entry, target);
-  }));
-  // 一个大画布才画得开的关系树：工作区里这只是"够用"的简版，
-  // 网格吸附 / 右键长人 / 拖加号连线那套在独立的 /relationship 页上
-  if (!isEmbedded()) {
-    const full = el('a', 'mini-btn tree-tool-edit', '⛶ 全屏编辑');
-    full.href = `/relationship?doc=${entry.document.id}`;
-    full.target = '_blank';
-    full.rel = 'noopener';
-    full.title = '在新标签页里用关系树编辑器打开（网格吸附 / 右键添加人物 / 拖加号连线）';
-    bar.appendChild(full);
-  }
-  wrap.appendChild(bar);
-
-  /* 画布 */
-  const canvas = el('div', `tree-canvas${ui.mode === 'pan' ? ' is-pan' : ''}`);
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('class', 'tree-svg');
-  const inner = document.createElementNS(svgNS, 'g');
-  inner.setAttribute('transform', `translate(${ui.offset.x} ${ui.offset.y}) scale(${ui.zoom})`);
-  svg.appendChild(inner);
-
-  /* 落点 + 世代行。两套坐标来源见 treeLayout() */
-  const spread = isEmbedded() ? 1.3 : 1;
-  const layout = treeLayout(variant.nodes);
-  const rows = new Map();
-  variant.nodes.forEach((node, index) => {
-    const gen = node.generation || 0;
-    const list = rows.get(gen) || [];
-    list.push(node);
-    rows.set(gen, list);
-    const point = treePoint(node, index, spread, layout);
-    node._px = point.x;
-    node._py = point.y;
-  });
-
-  // 世代横线只在"按世代排"的模式下画：网格模式的 y 是自由的，画横线反而误导
-  if (layout === 'generation') {
-    rows.forEach((list, gen) => {
-      const line = document.createElementNS(svgNS, 'line');
-      line.setAttribute('x1', -4000); line.setAttribute('x2', 4000);
-      line.setAttribute('y1', gen * 150 + 46); line.setAttribute('y2', gen * 150 + 46);
-      line.setAttribute('stroke', 'rgba(255,255,255,.06)');
-      inner.appendChild(line);
-    });
-  }
-
-  const byId = new Map(variant.nodes.map((n) => [n.id, n]));
-  variant.edges.forEach((edge) => {
-    const a = byId.get(edge.source); const b = byId.get(edge.target);
-    if (!a || !b) return;
-    const x1 = a._px + 78; const y1 = a._py + 46;
-    const x2 = b._px + 78; const y2 = b._py + 46;
-    const path = document.createElementNS(svgNS, 'path');
-    const mid = (y1 + y2) / 2;
-    path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`);
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', edge.kind === 'spouse' ? 'rgba(224,168,60,.75)' : 'rgba(255,255,255,.34)');
-    path.setAttribute('stroke-width', '1.4');
-    if (edge.style === 'dashed') path.setAttribute('stroke-dasharray', '5 4');
-    path.setAttribute('class', 'tree-edge');
-    path.addEventListener('click', async (event) => {
-      event.stopPropagation();
-      const value = window.prompt(`关系名（${edge.kind}）`, edge.display_label);
-      if (value === null) return;
-      await api(`/api/world/tree-edges/${edge.id}`, { method: 'PUT', body: { label: value.trim() } });
-      await loadTree(entry);
-    });
-    inner.appendChild(path);
-
-    const showLabel = ui.labels === 'always'
-      || (ui.labels === 'hover' && false);   // hover 由 CSS class 控制
-    if (showLabel || ui.labels === 'always') {
-      const text = document.createElementNS(svgNS, 'text');
-      text.setAttribute('x', (x1 + x2) / 2 + 6);
-      text.setAttribute('y', mid + 4);
-      text.setAttribute('class', 'tree-edge-label');
-      text.textContent = edge.display_label;
-      inner.appendChild(text);
-    } else if (ui.labels === 'hover') {
-      const tip = document.createElementNS(svgNS, 'title');
-      tip.textContent = edge.display_label;
-      path.appendChild(tip);
-      path.setAttribute('class', 'tree-edge has-hover-label');
-    }
-  });
-
-  variant.nodes.forEach((node) => {
-    const group = document.createElementNS(svgNS, 'g');
-    const selected = ui.selected === node.id;
-    group.setAttribute('transform', `translate(${node._px} ${node._py})`);
-    group.setAttribute('class', `tree-node${selected ? ' is-selected' : ''}`);
-
-    const rect = document.createElementNS(svgNS, 'rect');
-
-      // 左侧色条：让只读视图也有颜色（分组色优先，否则按世代轮换一套柔和色）
-      const accent = document.createElementNS(svgNS, 'rect');
-      const palette = ['#7aa5e6', '#7fc8a5', '#eb968c', '#e6c378', '#afA5eb', '#78bee6'];
-      const accentColor = node.group_color || palette[Math.abs(node.generation || 0) % palette.length];
-      accent.setAttribute('class', 'node-accent');
-      accent.setAttribute('x', '6');
-      accent.setAttribute('y', '16');
-      accent.setAttribute('width', '3');
-      accent.setAttribute('height', '46');
-      accent.setAttribute('rx', '2');
-      accent.setAttribute('fill', accentColor);
-    if (node.image) {
-      const avatar = document.createElementNS(svgNS, 'image');
-      avatar.setAttribute('href', node.image);
-      avatar.setAttribute('x', '10'); avatar.setAttribute('y', '14');
-      avatar.setAttribute('width', '50'); avatar.setAttribute('height', '50');
-      avatar.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-      avatar.setAttribute('style', 'clip-path: inset(0 round 8px)');
-      group.appendChild(avatar);
-    }
-    rect.setAttribute('width', '156'); rect.setAttribute('height', '78');
-    rect.setAttribute('rx', node.junction ? '39' : '12');
-    rect.setAttribute('fill', node.deceased ? 'rgba(255,255,255,.045)' : 'rgba(255,255,255,.075)');
-    rect.setAttribute('stroke', selected ? '#e0a83c' : (node.group_color ? colorFor(node.group_color) : 'rgba(255,255,255,.14)'));
-    rect.setAttribute('stroke-width', selected ? '2' : '1');
-    if (node.deceased) rect.setAttribute('stroke-dasharray', '4 3');
-    group.appendChild(rect);
-    group.appendChild(accent);
-
-    if (node.card) {
-      const link = document.createElementNS(svgNS, 'text');
-      link.setAttribute('x', '146'); link.setAttribute('y', '14');
-      link.setAttribute('class', 'tree-node-card');
-      link.textContent = '▤';
-      group.appendChild(link);
-    }
-    const textLeft = node.image ? '70' : '14';
-    const name = document.createElementNS(svgNS, 'text');
-    name.setAttribute('x', textLeft); name.setAttribute('y', '34');
-    name.setAttribute('class', 'tree-node-name');
-    const nameLimit = node.image ? 6 : 11;
-    name.textContent = node.name.length > nameLimit ? `${node.name.slice(0, nameLimit - 1)}…` : node.name;
-    group.appendChild(name);
-
-    const sub = document.createElementNS(svgNS, 'text');
-    sub.setAttribute('x', textLeft); sub.setAttribute('y', '56');
-    sub.setAttribute('class', 'tree-node-sub');
-    sub.textContent = node.subtitle || (node.card_name ? '已关联卡片' : '未关联卡片');
-    group.appendChild(sub);
-
-    group.addEventListener('click', (event) => {
-      event.stopPropagation();
-      // 嵌在发布站点里：点成员 = 跳到那个人的站点页面。
-      // 千万不能走 renderPanels() —— 那会把整棵树重绘一次（看起来像页面在刷新），
-      // 再叠加自适应重算就会出现"样式短暂错乱"。
-      if (isEmbedded()) {
-        const target = node.card ? findNode(node.card) : null;
-        if (target && target.slug) {
-          postToHost('ws-open-doc', { id: node.card, name: node.name, slug: target.slug });
-        } else {
-          postToHost('ws-node-hint', { name: node.name });
-        }
-        return;
-      }
-      ui.selected = ui.selected === node.id ? null : node.id;
-      renderPanels();
-    });
-    group.addEventListener('dblclick', async (event) => {
-      event.stopPropagation();
-      if (isEmbedded()) return;                 // 只读：不改名字
-      const value = window.prompt('成员名称', node.name);
-      if (value === null) return;
-      await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { name: value.trim() } });
-      await loadTree(entry);
-    });
-    group.addEventListener('pointerdown', (event) => {
-      if (ui.mode === 'pan') return;
-      if (isEmbedded()) return;        // 只读：读者不能拖动成员（以前会每帧重绘整块面板 -> 一片空白）
-      event.stopPropagation();
-      const start = { x: event.clientX, y: event.clientY, px: node._px, py: node._py };
-      // 拖动过程中只挪这一张卡（含它两端的连线），松手才整块重绘 + 落库。
-      // 以前每次 pointermove 都 renderPanels()，整块面板每帧重建，又卡又闪。
-      const move = (e) => {
-        node._px = start.px + (e.clientX - start.x) / ui.zoom;
-        node._py = start.py + (e.clientY - start.y) / ui.zoom;
-        node.x = Math.round(node._px);
-        node.generation = Math.round(node._py / 150);
-        // 只挪这张卡：连线在松手后的整体重绘里更新（每帧重建整块面板才是问题所在）
-        group.setAttribute('transform', `translate(${node._px} ${node._py})`);
-        canvas.classList.add('is-dragging-node');
-      };
-      const up = async () => {
-        document.removeEventListener('pointermove', move);
-        document.removeEventListener('pointerup', up);
-        canvas.classList.remove('is-dragging-node');
-        try {
-          const body = { x: node.x, generation: node.generation };
-          // 网格模式下 y 才是真正的落点，不一起存的话下次渲染会跳回去
-          if (layout === 'grid') body.y = Math.round(node._py);
-          await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body });
-        } catch (error) {
-          if (!error || !error.isReadonly) throw error;
-        }
-        renderPanels();
-      };
-      document.addEventListener('pointermove', move);
-      document.addEventListener('pointerup', up);
-    });
-    group.setAttribute('data-id', String(node.id));
-    inner.appendChild(group);
-  });
-
-  canvas.appendChild(svg);
-
-  /* 画布平移 */
-  canvas.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('.tree-node') || event.target.closest('.tree-edge')) return;
-    if (ui.mode !== 'pan' && event.button !== 1) return;
-    const start = { x: event.clientX, y: event.clientY, ...ui.offset };
-    canvas.classList.add('is-grabbing');
-    const move = (e) => {
-      ui.offset = { x: start.x + (e.clientX - start.x), y: start.y + (e.clientY - start.y) };
-      // 直接挪视图，不要每帧重建整块面板（那是"拖起来卡 + 闪"的原因）
-      inner.setAttribute('transform', `translate(${ui.offset.x} ${ui.offset.y}) scale(${ui.zoom})`);
-    };
-    const up = () => {
-      canvas.classList.remove('is-grabbing');
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      renderPanels();          // 松手再对齐一次真实的层结构
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-  });
-  canvas.addEventListener('click', () => {
-    // 点空白只是"取消选中"：没选中东西就别重绘（嵌入时每点一下都重绘 = 看着像刷新）
-    if (ui.selected === null) return;
-    ui.selected = null;
-    renderPanels();
-  });
-
-  if (!variant.nodes.length) {
-    const empty = el('div', 'tree-empty');
-    empty.appendChild(el('h3', null, '这棵树还是空的'));
-    empty.appendChild(el('p', 'hint', '点「＋ 成员」加第一个人，拖动可以换行换位，点两个成员之间的关系线可以改关系名。'));
-    canvas.appendChild(empty);
-  }
-  wrap.appendChild(canvas);
-
-  /* 节点栏（选中某人时出现） */
-  const selected = byId.get(ui.selected);
-  if (selected) wrap.appendChild(treeNodeBar(entry, selected));
-
+  wrap.appendChild(frame);
   return wrap;
-}
-
-/** 把整棵树缩放到视野中央（只在首次打开时做一次）。 */
-/** 嵌进站点时：等画布有实际尺寸后适应一次；窗口/iframe 尺寸变了最多再补两次。 */
-function embedFitOnce(entry, canvas, attempt = 0) {
-  if (!canvas || entry.embedFitCount >= 3) return;
-  // 画布得先有"像样"的尺寸：flex 布局 + 站点给的 iframe 高度都要到位，
-  // 否则会按一个很小的尺寸算出 0.4 的缩放，整棵树缩成一小团
-  const ready = canvas.clientWidth >= 360 && canvas.clientHeight >= 260;
-  if (!ready || !canvas.clientWidth || !canvas.clientHeight) {
-    if (attempt < 12) setTimeout(() => embedFitOnce(entry, canvas, attempt + 1), 150);
-    return;
-  }
-  entry.embedFitCount = (entry.embedFitCount || 0) + 1;
-  fitTree(entry, canvas);
-  if (!canvas.__embedObserver && window.ResizeObserver) {
-    let timer = null;
-    canvas.__embedObserver = new ResizeObserver(() => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (entry.embedFitCount >= 3) return;
-        if (canvas.clientWidth < 360 || canvas.clientHeight < 260) return;
-        entry.embedFitCount += 1;
-        fitTree(entry, canvas);
-      }, 260);
-    });
-    canvas.__embedObserver.observe(canvas);
-  }
-}
-
-/** 嵌进站点时：树画好之后自动适应一次视野（只在第一次，之后交给读者自己缩放）。 */
-function autoFitTree(entry, canvas) {
-  if (!isEmbedded() || entry.treeFitted) return;
-  entry.treeFitted = true;
-  setTimeout(() => fitTree(entry, canvas), 60);
-}
-
-function fitTree(entry, canvas) {
-  const ui = entry.treeUi;
-  const nodes = (entry.tree && entry.tree.active.nodes) || [];
-  if (!nodes.length) { ui.fitted = true; return; }
-  // 和渲染时用同一套间距（嵌入时 1.3 倍），否则算出来的包围盒偏小、底行会被裁
-  const spread = isEmbedded() ? 1.3 : 1;
-  const layout = treeLayout(nodes);
-  const points = nodes.map((n, i) => treePoint(n, i, spread, layout));
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs) + 156;
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys) + 78;
-  const width = Math.max(1, maxX - minX);
-  const height = Math.max(1, maxY - minY);
-  const cw = canvas.clientWidth || 900;
-  const ch = canvas.clientHeight || 520;
-  // 嵌入站点时留白给足：节点卡不该贴着画布边缘（否则底行会被裁掉）
-  const pad = isEmbedded() ? 168 : 90;
-  const scale = clamp(Math.min((cw - pad) / width, (ch - pad) / height), 0.4, 1.25);
-  ui.zoom = scale;
-  ui.offset = {
-    x: (cw - width * scale) / 2 - minX * scale,
-    y: (ch - height * scale) / 2 - minY * scale,
-  };
-  ui.fitted = true;
-  renderPanels();
-}
-
-function treeNodeBar(entry, node) {
-  const bar = el('div', 'node-bar');
-  bar.appendChild(el('b', null, node.name));
-
-  bar.appendChild(button(node.card ? '打开卡片' : '关联卡片', '把这张卡关联到这个人', async () => {
-    if (node.card) { openDoc(node.card); return; }
-    cardPicker(async (chosen) => {
-      await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { card: chosen.id } });
-      await loadTree(entry);
-    });
-  }));
-
-  if (!node.card) {
-    bar.appendChild(button('新建卡片', '给这个人建一张新卡片', async () => {
-      const type = S.types.find((t) => !t.hidden);
-      if (!type) { toast('先去「类型」里建一个类型'); return; }
-      const created = await api(`/api/world/tree-nodes/${node.id}/card`, {
-        method: 'POST', body: { entity_type: type.id, name: node.name },
-      });
-      toast(`已建卡片「${created.document.name}」`);
-      await reloadTree();
-      await loadTree(entry);
-    }));
-  } else {
-    bar.appendChild(button('解除关联', '只解除关系，不删卡片', async () => {
-      await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { card: null } });
-      await loadTree(entry);
-    }));
-  }
-
-  bar.appendChild(button(node.image ? '换图片' : '设置图片', '给这个人一张头像（粘贴图片地址）', async () => {
-    const url = window.prompt('图片地址（留空则移除）', node.image || '');
-    if (url === null) return;
-    await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { image: url.trim() } });
-    await loadTree(entry);
-  }));
-  bar.appendChild(button(node.deceased ? '标记在世' : '标记已故', '', async () => {
-    await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { deceased: !node.deceased } });
-    await loadTree(entry);
-  }));
-  bar.appendChild(button(node.junction ? '取消交汇点' : '设为交汇点', '交汇点画成圆角，用来表示合并的支系', async () => {
-    await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { junction: !node.junction } });
-    await loadTree(entry);
-  }));
-  bar.appendChild(button('加子女', '在下一代加一个人并自动连线', async () => {
-    const name = window.prompt('新成员名称', '新成员');
-    if (!name) return;
-    const child = await api(`/api/world/tree-variants/${node.variant}/nodes`, {
-      method: 'POST', body: { name, generation: node.generation + 1, x: node.x },
-    });
-    await api(`/api/world/tree-variants/${node.variant}/edges`, {
-      method: 'POST', body: { source: node.id, target: child.id, kind: 'parent' },
-    });
-    entry.treeUi.selected = child.id;
-    await loadTree(entry);
-  }));
-  bar.appendChild(button('加配偶', '在同一代加一个人并连成对等关系', async () => {
-    const name = window.prompt('新成员名称', '新成员');
-    if (!name) return;
-    const spouse = await api(`/api/world/tree-variants/${node.variant}/nodes`, {
-      method: 'POST', body: { name, generation: node.generation, x: node.x + 200 },
-    });
-    await api(`/api/world/tree-variants/${node.variant}/edges`, {
-      method: 'POST', body: { source: node.id, target: spouse.id, kind: 'spouse' },
-    });
-    entry.treeUi.selected = spouse.id;
-    await loadTree(entry);
-  }));
-  bar.appendChild(button('分组', '给这个人一个颜色 + 分组名', async () => {
-    const group = window.prompt('分组名', node.group || '');
-    if (group === null) return;
-    const color = window.prompt('分组颜色（gold/sky/violet/red/teal/blue）', node.group_color || 'gold');
-    await api(`/api/world/tree-nodes/${node.id}`, {
-      method: 'PUT', body: { group: group.trim(), group_color: color || '' },
-    });
-    await loadTree(entry);
-  }));
-  const remove = button('删除', '从树上移除这个人', async () => {
-    if (!window.confirm(`删除「${node.name}」？`)) return;
-    await api(`/api/world/tree-nodes/${node.id}`, { method: 'DELETE' });
-    entry.treeUi.selected = null;
-    await loadTree(entry);
-  });
-  remove.classList.add('is-danger');
-  bar.appendChild(remove);
-  return bar;
-}
-
-async function loadTree(entry) {
-  entry.tree = await api(`/api/world/trees/${entry.document.id}`);
-  const variant = entry.tree.active;
-  if (entry.treeUi && entry.treeUi.selected
-      && !variant.nodes.some((n) => n.id === entry.treeUi.selected)) {
-    entry.treeUi.selected = null;
-  }
-  renderPanels();
 }
 
 /* ============================================================== 经典地图 */
@@ -4739,7 +4278,7 @@ async function runPalette(query) {
     { kind: '动作', name: '新建关系树（选模版）', run: () => {
       window.open('/relationship', '_blank', 'noopener');
     } },
-    { kind: '动作', name: '新建关系树（留在此页）', run: async () => { await createDoc('familyTree'); } },
+    { kind: '动作', name: '新建关系树（直接建一棵）', run: async () => { await createDoc('familyTree'); } },
     { kind: '动作', name: '新建地图', run: async () => { await createDoc('map'); } },
     { kind: '动作', name: '分享与发布', run: () => publishDialog() },
     { kind: '动作', name: '类型与属性', run: () => typeManager() },
@@ -5167,6 +4706,7 @@ function bindEvents() {
   document.addEventListener('contextmenu', (event) => {
     if (!event.target.closest('.row')) event.preventDefault();
   });
+  window.addEventListener('message', onCanvasMessage);
 
   /* 侧栏空白处右键：在根级新建 */
   $('#sbTree').addEventListener('contextmenu', (event) => {
@@ -6657,8 +6197,8 @@ function revealWriteControls(show) {
   });
   // 插入条 / 新建类按钮：只读时整块收起来，界面干净，也不会误导
   $$('.insert-bar, .block-menu-add, .tool-add-row').forEach((node) => { node.hidden = !show; });
-  // 关系树 / 地图 / 图谱的编辑控件（变体、成员、关系名、＋/－、选择模式…）
-  $$('.variant-tab.is-add, .tree-tool-edit, .map-tool-edit, .graph-tool-edit').forEach((node) => {
+  // 地图 / 图谱的编辑控件（关系树的编辑入口现在在嵌入页里，由那边自己判只读）
+  $$('.map-tool-edit, .graph-tool-edit').forEach((node) => {
     node.hidden = !show;
   });
   document.documentElement.classList.toggle('is-readonly-mode', !show);
@@ -6670,6 +6210,24 @@ function isEmbedded() {
 }
 
 /** 跟宿主页面（发布站点）说一句话。 */
+/* 嵌在工作区里面的画布（关系树）点了人：把那张卡开成标签页。
+   自己也是被站点嵌着的时候，就继续往上抛给站点（那边按 slug 跳页面）。 */
+function onCanvasMessage(event) {
+  if (event.origin !== window.location.origin) return;
+  const data = event.data || {};
+  if (data.type === 'ws-node-hint') {          // 画布上这个人没有关联卡片
+    // 自己也被站点嵌着的时候继续往上抛：这条提示该由读者看得见的**站点**说，
+    // 在被嵌的工作区里弹 toast 读者根本看不见（整块工作区外壳都是藏起来的）
+    if (isEmbedded()) { postToHost('ws-node-hint', data); return; }
+    toast(`${data.name || '这位成员'}：还没有关联卡片`);
+    return;
+  }
+  if (data.type !== 'ws-open-doc') return;
+  if (isEmbedded()) { postToHost('ws-open-doc', data); return; }
+  if (data.id) openDoc(data.id);
+  else if (data.name) toast(`${data.name}：这位成员还没有关联卡片`);
+}
+
 function postToHost(type, payload) {
   if (window.parent === window) return;
   window.parent.postMessage({ type, ...(payload || {}) }, window.location.origin);
@@ -6847,7 +6405,23 @@ function startPresence() {
   if (S.presenceTimer) clearInterval(S.presenceTimer);
   presenceBeat();
   S.presenceTimer = setInterval(presenceBeat, 25000);
-  window.addEventListener('focus', presenceBeat);
+  window.addEventListener('focus', () => {
+    presenceBeat();
+    refreshDocTreeSoon();
+  });
+  // 回到这个标签页时也刷一下：关系树是"另开一个标签页选模版建出来的"，
+  // 不刷的话这边侧栏里看不到刚建好的那棵（点了会以为没建成）
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshDocTreeSoon();
+  });
+}
+
+/** 切回工作区时刷一次文档树；1.5 秒内连着触发只刷一次，别刷屏。 */
+function refreshDocTreeSoon() {
+  const now = Date.now();
+  if (now - (S.treeRefreshedAt || 0) < 1500) return;
+  S.treeRefreshedAt = now;
+  reloadTree();
 }
 
 /* ------------------------------------------------------------- 版本历史 */

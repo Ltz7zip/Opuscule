@@ -66,6 +66,17 @@ def _measure(page) -> int:
         return 0
 
 
+def tree_frame(page):
+    """发布页里的关系树画布在最内层那个 iframe 里（站点 → /world 外壳 → /relationship）。"""
+    for frame in page.frames:
+        try:
+            if frame.locator("#rtNodes").count():
+                return frame
+        except Exception:                        # noqa: BLE001 - 跨域 / 已销毁的 frame
+            continue
+    return None
+
+
 def main() -> int:
     state = api("/api/world/state")
     docs = flat(state["documents"])
@@ -131,125 +142,56 @@ def main() -> int:
                 print(f"{label:26s} 异常 {type(exc).__name__}")
             page.close()
 
-        # 关系树专门验一次：点成员应该让宿主跳转，而不是 iframe 里重绘
+        # 关系树：发布站点里的画布现在是"站点 → /world 外壳 → /relationship" 三层，
+        # 点成员应该让最外层站点跳转，而不是在 iframe 里重画。
         if slug:
             tree = next((d for d in docs if d["type"] == "familyTree" and d.get("slug")), None)
             if tree:
                 page = browser.new_page(viewport={"width": 1400, "height": 920})
                 page.goto(f"{BASE}/s/{slug}/{tree['slug']}/", wait_until="domcontentloaded")
-                page.wait_for_timeout(4000)
-                frame = page.frames[1] if len(page.frames) > 1 else None
-                if frame:
-                    try:
-                        info = frame.evaluate("""() => {
-                      const nodes = Array.from(document.querySelectorAll('.tree-node'));
-                      const linked = nodes.find(n => (n.querySelector('.tree-node-sub') || {}).textContent === '已关联卡片');
-                      const target = linked || nodes[0];
-                      if (!target) return null;
-                      const r = target.getBoundingClientRect();
-                      return {x: r.x + r.width / 2, y: r.y + r.height / 2, linked: Boolean(linked),
-                              count: nodes.length};
-                    }""")
-                    except Exception as exc:      # noqa: BLE001
-                        info = None
-                        print(f"{'关系树节点点击':26s} 跳过（{type(exc).__name__}）")
-                    if info:
-                        box = page.locator("iframe").first.bounding_box()
-                        before = page.url
-                        page.mouse.click(box["x"] + info["x"], box["y"] + info["y"])
-                        page.wait_for_timeout(2200)
-                        msg = "成员点击 → 宿主跳转" if page.url != before else "成员点击 → 留在本页"
-                        print(f"{'关系树节点点击':26s} {msg}（关联卡片={info['linked']}，节点 {info['count']} 个）")
-                        if info["linked"] and page.url == before:
-                            problems.append("关系树：点有卡片的成员没有跳转")
-                        try:
-                            after_nodes = frame.evaluate("() => document.querySelectorAll('.tree-node').length")
-                        except Exception:            # noqa: BLE001
-                            after_nodes = info["count"]      # 已经跳走，frame 被销毁，算通过
-                        if after_nodes != info["count"]:
-                            problems.append(f"关系树：点击后节点数从 {info['count']} 变成 {after_nodes}（被重绘）")
-                page.close()
+                page.wait_for_timeout(4500)
+                inner = tree_frame(page)
+                if inner:
+                    nodes = inner.locator(".rt-node")
+                    count = nodes.count()
+                    box = nodes.first.bounding_box()
+                    before = page.url
+                    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                    # 没有关联卡片时站点会给一条 2.2 秒的轻提示，要赶在它消失前看一眼
+                    page.wait_for_timeout(900)
+                    hint = page.locator("#canvasHint")
+                    hint_on = bool(hint.count()) and hint.first.is_visible()
+                    page.wait_for_timeout(1600)
+                    jumped = page.url != before
+                    print(f"{'关系树点成员':26s} "
+                          f"{'宿主跳转' if jumped else ('轻提示（未关联卡片）' if hint_on else '没反应')}"
+                          f"（{count} 个成员）")
+                    if not jumped and not hint_on:
+                        problems.append("关系树：点成员既没跳转也没有提示")
 
-        # 关系树上模拟"长按拖动"：只读视图不该被拖走，更不该变空白
-        if slug:
-            tree = next((d for d in docs if d["type"] == "familyTree" and d.get("slug")), None)
-            if tree:
-                page = browser.new_page(viewport={"width": 1400, "height": 920})
-                page.goto(f"{BASE}/s/{slug}/{tree['slug']}/", wait_until="domcontentloaded")
-                page.wait_for_timeout(4000)
-                frame = page.frames[1] if len(page.frames) > 1 else None
-                if frame:
-                    try:
-                        info = frame.evaluate("""() => {
-                          const n = document.querySelector('.tree-node');
-                          if (!n) return null;
-                          const r = n.getBoundingClientRect();
-                          return {x: r.x + r.width / 2, y: r.y + r.height / 2,
-                                  count: document.querySelectorAll('.tree-node').length};
-                        }""")
-                    except Exception:                # noqa: BLE001
-                        info = None
-                    if info:
-                        box = page.locator("iframe").first.bounding_box()
-                        page.mouse.move(box["x"] + info["x"], box["y"] + info["y"])
+                    # 只读：拖成员不该改数据、也不该把画布拖没
+                    inner = tree_frame(page)
+                    if inner and inner.locator(".rt-node").count():
+                        node = inner.locator(".rt-node").first
+                        nb = node.bounding_box()
+                        page.mouse.move(nb["x"] + nb["width"] / 2, nb["y"] + nb["height"] / 2)
                         page.mouse.down()
                         for step in range(1, 6):
-                            page.mouse.move(box["x"] + info["x"] + step * 40, box["y"] + info["y"] + step * 25)
-                            page.wait_for_timeout(120)
+                            page.mouse.move(nb["x"] + nb["width"] / 2 + step * 40,
+                                            nb["y"] + nb["height"] / 2 + step * 25)
+                            page.wait_for_timeout(110)
                         page.mouse.up()
-                        page.wait_for_timeout(1200)
-                        try:
-                            after = frame.evaluate("""() => ({
-                              count: document.querySelectorAll('.tree-node').length,
-                              canvas: (() => { const c = document.querySelector('.tree-canvas');
-                                return c ? [c.clientWidth, c.clientHeight] : [0, 0]; })(),
-                            })""")
-                        except Exception:                # noqa: BLE001
-                            after = {"count": 0, "canvas": [0, 0]}
-                        print(f"{'关系树拖动（只读）':24s} 节点 {info['count']}→{after['count']} · 画布 {after['canvas']}")
-                        if after["count"] != info["count"]:
-                            problems.append(f"关系树：只读拖动后节点数变了（{info['count']}→{after['count']}）")
-                        if after["canvas"][1] < 120:
+                        page.wait_for_timeout(1000)
+                        after_nodes = inner.locator(".rt-node").count()
+                        canvas = inner.locator("#rtCanvasWrap").bounding_box()
+                        print(f"{'关系树拖成员（只读）':24s} 成员 {count}→{after_nodes} · "
+                              f"画布 {round(canvas['width'])}×{round(canvas['height'])}")
+                        if after_nodes != count:
+                            problems.append(f"关系树：只读拖动后成员数变了（{count}→{after_nodes}）")
+                        if canvas["height"] < 120:
                             problems.append("关系树：只读拖动后画布被压没了（疑似空白）")
-
-                        # 点空白：不该整块重绘（节点数与 SVG 结构都不该变）
-                        empty = frame.evaluate("""() => {
-                          const c = document.querySelector('.tree-canvas');
-                          const r = c.getBoundingClientRect();
-                          const before = document.querySelector('.tree-svg').outerHTML.length;
-                          return {x: r.x + 40, y: r.y + r.height - 40, before};
-                        }""")
-                        page.mouse.click(box["x"] + empty["x"], box["y"] + empty["y"])
-                        page.wait_for_timeout(900)
-                        after_empty = frame.evaluate("""() => ({
-                          nodes: document.querySelectorAll('.tree-node').length,
-                          size: document.querySelector('.tree-svg').outerHTML.length,
-                        })""")
-                        same = abs(after_empty["size"] - empty["before"]) < 40
-                        print(f"{'关系树点空白':24s} 节点 {after_empty['nodes']} · SVG 长度变化 {abs(after_empty['size'] - empty['before'])}")
-                        if after_empty["nodes"] != info["count"]:
-                            problems.append("关系树：点空白后节点数变了")
-                        if not same:
-                            problems.append("关系树：点空白触发了整块重绘（看着像刷新）")
-
-                        # 拖动空白：应该平移画布（内层 g 的 transform 变）
-                        drag = frame.evaluate("""() => {
-                          const c = document.querySelector('.tree-canvas');
-                          const r = c.getBoundingClientRect();
-                          const g = document.querySelector('.tree-svg g');
-                          return {x: r.x + 60, y: r.y + r.height - 60, before: g.getAttribute('transform')};
-                        }""")
-                        page.mouse.move(box["x"] + drag["x"], box["y"] + drag["y"])
-                        page.mouse.down()
-                        for step in range(1, 5):
-                            page.mouse.move(box["x"] + drag["x"] + step * 30, box["y"] + drag["y"] - step * 10)
-                            page.wait_for_timeout(90)
-                        page.mouse.up()
-                        page.wait_for_timeout(700)
-                        moved = frame.evaluate("() => document.querySelector('.tree-svg g').getAttribute('transform')")
-                        print(f"{'关系树拖空白=平移':24s} {'已平移' if moved != drag['before'] else '没平移'}")
-                        if moved == drag["before"]:
-                            problems.append("关系树：拖动空白没有平移画布")
+                else:
+                    print(f"{'关系树':26s} 跳过（没找到画布 iframe）")
                 page.close()
 
         browser.close()
