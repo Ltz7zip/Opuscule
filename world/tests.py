@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 
 from django.test import TestCase
 
@@ -798,6 +799,27 @@ class RelationshipPageTests(BaseWorldCase):
         document = self._new_tree("family")["document"]
         with_doc = self.client.get(f"/relationship?doc={document['id']}")
         self.assertContains(with_doc, f'data-doc="{document["id"]}"')
+
+    def test_page_follows_the_minimal_design_language(self):
+        """外观必须跟工作区同一套语言：加载 minimal.css、明暗跟世界主题、图标走公共图标集。"""
+        page = self.client.get("/relationship")
+        self.assertContains(page, "minimal.css")
+        self.assertContains(page, "icons.js")
+        # 明暗由 world.theme.mode 决定，非 light 即 dark（和工作区 applyTheme 同一条规则）
+        self.assertContains(page, 'data-theme="dark"')
+
+        self.world.theme_config = {**(self.world.theme_config or {}), "mode": "light"}
+        self.world.save(update_fields=["theme_config"])
+        self.assertContains(self.client.get("/relationship"), 'data-theme="light"')
+
+        # 样式表得真的吃 Minimal 的 token，而不是自己另起一套配色
+        sheet = (pathlib.Path(__file__).resolve().parent.parent / "static" / "relationship.css")
+        css = sheet.read_text(encoding="utf-8")
+        self.assertIn("--mn-surface", css)
+        self.assertIn("--mn-border", css)
+        self.assertIn("--mn-radius", css)
+        self.assertIn("[data-theme=\"dark\"]", css)
+        self.assertNotIn("#182533", css)          # 旧的自定义深蓝已退役
 
     def test_templates_cover_the_five_design_specs(self):
         data = self.client.get("/api/world/relationship/templates").json()

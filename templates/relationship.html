@@ -1,11 +1,13 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="{{ theme_mode }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>关系树 · {{ world_name|default:"世界观共建" }}</title>
+  <title>关系树 · 世界观共建</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='2'%3E%3Crect x='12' y='5' width='8' height='7' rx='1.6'/%3E%3Crect x='3.5' y='20' width='8' height='7' rx='1.6'/%3E%3Crect x='20.5' y='20' width='8' height='7' rx='1.6'/%3E%3Cpath d='M16 12v4M7.5 20v-4h17v4'/%3E%3C/g%3E%3C/svg%3E" />
+  <!-- Minimal 设计语言（桌面 Minimalist 设计系统的 token：灰阶主色 / 12-16px 圆角 / 4px 栅格 / 扁平） -->
+  <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
   <link rel="stylesheet" href="{% static 'relationship.css' %}?v={{ static_version }}" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23182533'/%3E%3Cg fill='none' stroke='%23cfe0f5' stroke-width='2'%3E%3Crect x='7' y='5' width='7' height='9' rx='2'/%3E%3Crect x='18' y='5' width='7' height='9' rx='2'/%3E%3Crect x='12' y='19' width='8' height='9' rx='2'/%3E%3Cpath d='M10.5 14v3h11v-3M16 17v2'/%3E%3C/g%3E%3C/svg%3E" />
 </head>
 <body class="rt-body">
   <div class="rt-app" id="rtApp"
@@ -17,14 +19,7 @@
     <section class="rt-screen rt-screen--picker" data-screen="picker">
       <aside class="rt-side">
         <header class="rt-side-head">
-          <span class="rt-side-glyph" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-              <rect x="9" y="2.5" width="6" height="5" rx="1.4"/>
-              <rect x="2.5" y="16.5" width="6" height="5" rx="1.4"/>
-              <rect x="15.5" y="16.5" width="6" height="5" rx="1.4"/>
-              <path d="M12 7.5v4M5.5 16.5v-2.5h13v2.5"/>
-            </svg>
-          </span>
+          <span class="rt-side-glyph" data-icon="network" data-icon-size="19" aria-hidden="true"></span>
           <div>
             <h1>关系树</h1>
             <p>选择您要构建的树的类型</p>
@@ -50,9 +45,7 @@
       <aside class="rt-side">
         <header class="rt-side-head rt-side-head--back">
           <button type="button" class="rt-back" id="rtBack" title="返回模版列表" aria-label="返回">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 5l-7 7 7 7"/>
-            </svg>
+            <span data-icon="chevron-left" data-icon-size="18"></span>
           </button>
           <div>
             <h1>关系树</h1>
@@ -63,7 +56,7 @@
         <div class="rt-relation-list" id="rtRelationList"></div>
 
         <button type="button" class="rt-add-relation" id="rtAddRelation">
-          <span aria-hidden="true">＋</span> 添加关系
+          <span data-icon="plus" data-icon-size="17" aria-hidden="true"></span> 添加关系
         </button>
       </aside>
 
@@ -83,9 +76,7 @@
     <section class="rt-screen rt-screen--editor" data-screen="editor" hidden>
       <header class="rt-topbar">
         <a class="rt-topbar-back" href="/relationship" title="回到模版选择">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 5l-7 7 7 7"/>
-          </svg>
+          <span data-icon="chevron-left" data-icon-size="18"></span>
         </a>
         <div class="rt-topbar-title">
           <strong id="rtDocName">关系树</strong>
@@ -93,10 +84,10 @@
         </div>
         <div class="rt-topbar-tools">
           <button type="button" class="rt-tool" data-action="add-person" title="添加人物">
-            <span aria-hidden="true">＋</span> 添加人物
+            <span data-icon="user-plus" data-icon-size="15"></span> 添加人物
           </button>
           <button type="button" class="rt-tool" data-action="add-note" title="添加备注">
-            <span aria-hidden="true">▤</span> 添加备注
+            <span data-icon="sticky-note" data-icon-size="15"></span> 添加备注
           </button>
           <span class="rt-tool-sep" aria-hidden="true"></span>
           <button type="button" class="rt-tool" data-action="relations" title="可用关系">关系清单</button>
@@ -113,12 +104,14 @@
         </div>
 
         <div class="rt-zoom">
-          <button type="button" data-action="zoom-in" title="放大">＋</button>
-          <button type="button" data-action="zoom-out" title="缩小">－</button>
-          <button type="button" data-action="fit" title="缩放到适应">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M4 9V5.5A1.5 1.5 0 015.5 4H9M15 4h3.5A1.5 1.5 0 0120 5.5V9M20 15v3.5a1.5 1.5 0 01-1.5 1.5H15M9 20H5.5A1.5 1.5 0 014 18.5V15"/>
-            </svg>
+          <button type="button" data-action="zoom-in" title="放大" aria-label="放大">
+            <span data-icon="zoom-in" data-icon-size="16"></span>
+          </button>
+          <button type="button" data-action="zoom-out" title="缩小" aria-label="缩小">
+            <span data-icon="zoom-out" data-icon-size="16"></span>
+          </button>
+          <button type="button" data-action="fit" title="缩放到适应" aria-label="缩放到适应">
+            <span data-icon="maximize" data-icon-size="16"></span>
           </button>
         </div>
 
@@ -131,16 +124,11 @@
     <!-- 右键菜单（图5） -->
     <div class="rt-menu" id="rtContextMenu" hidden role="menu">
       <button type="button" data-menu="person" role="menuitem">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-          <circle cx="10" cy="8" r="3.4"/><path d="M3.6 20c.5-3.4 3.2-5.4 6.4-5.4 1.2 0 2.3.3 3.2.8"/>
-          <path d="M18 14v6M15 17h6"/>
-        </svg>
+        <span data-icon="user-plus" data-icon-size="16"></span>
         在此添加人物
       </button>
       <button type="button" data-menu="note" role="menuitem">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-          <path d="M5 4.5h9.5L19 9v10.5H5z"/><path d="M14 4.5V9h5"/><path d="M8.5 13h7M8.5 16h4.5"/>
-        </svg>
+        <span data-icon="sticky-note" data-icon-size="16"></span>
         在此处添加备注
       </button>
     </div>
@@ -149,13 +137,12 @@
     <div class="rt-relations-pop" id="rtRelationsPop" hidden role="dialog" aria-label="关系">
       <p class="rt-pop-title">关系</p>
       <div class="rt-pop-grid" id="rtPopGrid"></div>
-      <button type="button" class="rt-pop-add" data-pop="custom">＋ 创建自定义</button>
+      <button type="button" class="rt-pop-add" data-pop="custom">
+        <span data-icon="plus" data-icon-size="16"></span> 创建自定义
+      </button>
       <div class="rt-pop-sep" aria-hidden="true"></div>
       <button type="button" class="rt-pop-row" data-pop="link">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-          <path d="M9.5 14.5l5-5"/><path d="M8 11L6 13a3.5 3.5 0 105 5l2-2"/>
-          <path d="M16 13l2-2a3.5 3.5 0 10-5-5l-2 2"/>
-        </svg>
+        <span data-icon="link" data-icon-size="16"></span>
         链接现有人员…
       </button>
       <button type="button" class="rt-pop-row" data-pop="skip">暂时跳过</button>
@@ -164,48 +151,30 @@
     <!-- 卡片被选中时浮出来的小工具条（图6 顶部） -->
     <div class="rt-card-tools" id="rtCardTools" hidden role="toolbar">
       <button type="button" data-card-tool="card">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-          <circle cx="10" cy="7.5" r="3.2"/><path d="M3.8 19.5c.5-3.2 3-5 6.2-5"/>
-          <path d="M18 13v6M15 16h6"/>
-        </svg>
-        创建卡片
+        <span data-icon="user-plus" data-icon-size="15"></span> 创建卡片
       </button>
       <button type="button" data-card-tool="assign">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-          <path d="M9.5 14.5l5-5"/><path d="M8 11L6 13a3.5 3.5 0 105 5l2-2"/>
-          <path d="M16 13l2-2a3.5 3.5 0 10-5-5l-2 2"/>
-        </svg>
-        分配卡片
+        <span data-icon="link" data-icon-size="15"></span> 分配卡片
       </button>
-      <button type="button" data-card-tool="image" title="设置头像">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-          <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/>
-          <circle cx="9" cy="10" r="1.7"/><path d="M4 17l4.5-4 4 3.5 3-2.5 4.5 3.5"/>
-        </svg>
+      <button type="button" data-card-tool="image" title="设置头像" aria-label="设置头像">
+        <span data-icon="image" data-icon-size="15"></span>
       </button>
       <span class="rt-tool-sep" aria-hidden="true"></span>
-      <button type="button" data-card-tool="deceased" title="标记已故">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-          <path d="M12 3.2c-4 0-6.6 2.9-6.6 6.7 0 2.1.7 3.6 1.8 4.7v3.2h2.3v2.4h5v-2.4h2.3v-3.2c1.1-1.1 1.8-2.6 1.8-4.7 0-3.8-2.6-6.7-6.6-6.7z"/>
-          <circle cx="9.6" cy="10.4" r="1.5"/><circle cx="14.4" cy="10.4" r="1.5"/>
-        </svg>
+      <button type="button" data-card-tool="deceased" title="标记已故" aria-label="标记已故">
+        <span data-icon="skull" data-icon-size="15"></span>
       </button>
-      <button type="button" data-card-tool="favourite" title="标记重点">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-          <path d="M12 20.2s-7.3-4.6-7.3-9.4A4.1 4.1 0 0112 8.6a4.1 4.1 0 017.3 2.2c0 4.8-7.3 9.4-7.3 9.4z"/>
-        </svg>
+      <button type="button" data-card-tool="favourite" title="标记重点" aria-label="标记重点">
+        <span data-icon="star" data-icon-size="15"></span>
       </button>
-      <button type="button" data-card-tool="delete" class="is-danger" title="删除">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-          <path d="M4.5 7h15"/><path d="M9.5 7V4.8h5V7"/>
-          <path d="M6.5 7l.9 12.2h9.2L17.5 7"/><path d="M10.3 10.5v5.5M13.7 10.5v5.5"/>
-        </svg>
+      <button type="button" data-card-tool="delete" class="is-danger" title="删除" aria-label="删除">
+        <span data-icon="trash-2" data-icon-size="15"></span>
       </button>
     </div>
 
     <div class="rt-toast" id="rtToast" hidden></div>
   </div>
 
+  <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
   <script src="{% static 'relationship.js' %}?v={{ static_version }}"></script>
 </body>
 </html>
