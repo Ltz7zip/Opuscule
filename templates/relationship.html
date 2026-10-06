@@ -12,6 +12,7 @@
 <body class="rt-body{% if embed %} is-embed{% endif %}{% if paper %} is-paper{% endif %}">
   <div class="rt-app" id="rtApp"
        data-doc="{{ doc_id }}"
+       data-doc-missing="{{ doc_missing|yesno:'1,0' }}"
        data-embed="{{ embed|yesno:'1,0' }}"
        data-readonly="{{ readonly|yesno:'1,0' }}"
        data-templates-url="/api/world/relationship/templates"
@@ -124,6 +125,19 @@
         <p class="rt-empty-hint" id="rtEmptyHint">
           在空白处 <b>右键</b> 就能添加人物
         </p>
+      </div>
+    </section>
+
+    <!-- ================ 打不开：文档不在（被删 / 进了回收站） ================ -->
+    <section class="rt-screen rt-screen--error" data-screen="error" hidden>
+      <div class="rt-error">
+        <span class="rt-error-glyph" data-icon="triangle-alert" data-icon-size="26" aria-hidden="true"></span>
+        <h2>打不开这棵关系树</h2>
+        <p id="rtErrorText">它可能已经被删掉了。</p>
+        <div class="rt-error-actions">
+          <button type="button" class="rt-btn" id="rtErrorRetry">重试</button>
+          <a class="rt-btn rt-btn--primary rt-error-home" href="/relationship">回到模版选择</a>
+        </div>
       </div>
     </section>
 

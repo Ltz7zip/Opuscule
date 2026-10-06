@@ -52,6 +52,8 @@ def relationship_page(request):
     要可编辑得显式给 ``readonly=0``。
     """
     world = world_views.current_world()
+    # 原样留着请求的 id（别悄悄归零）：文档打不开时前端要能说"这篇不在了"，
+    # 而不是把人丢回模版选择——那看着像"我的树变成了新建向导"。
     doc_id = world_views.as_int(request.GET.get("doc"), 0)
     document = None
     if doc_id:
@@ -71,7 +73,8 @@ def relationship_page(request):
     if not permissions.can_edit(request.user, world):
         readonly = True
     return render(request, "relationship.html", {
-        "doc_id": document.id if document is not None else 0,
+        "doc_id": doc_id,
+        "doc_missing": bool(doc_id) and document is None,
         "theme_mode": "light" if theme_mode in ("paper", "light") else "dark",
         "paper": theme_mode == "paper",
         "embed": embed,
