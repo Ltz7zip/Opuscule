@@ -3295,7 +3295,9 @@ async function typeManager(focusTypeId = null) {
 function renderTreeTool(entry) {
   const wrap = el('div', 'tree-wrap');
   const ui = entry.treeUi || (entry.treeUi = { kind: 'family', zoom: 1, offset: { x: 0, y: 0 },
-                                              selected: null, labels: 'hover', mode: 'select' });
+                                              selected: null, labels: 'hover',
+                                              // 嵌进站点时默认就是"拖动空白 = 平移画布"，读者拖起来更顺手
+                                              mode: isEmbedded() ? 'pan' : 'select' });
 
   if (!entry.tree) {
     wrap.appendChild(el('p', 'hint', '载入关系树…'));
@@ -3579,17 +3581,24 @@ function renderTreeTool(entry) {
     canvas.classList.add('is-grabbing');
     const move = (e) => {
       ui.offset = { x: start.x + (e.clientX - start.x), y: start.y + (e.clientY - start.y) };
-      renderPanels();
+      // 直接挪视图，不要每帧重建整块面板（那是"拖起来卡 + 闪"的原因）
+      inner.setAttribute('transform', `translate(${ui.offset.x} ${ui.offset.y}) scale(${ui.zoom})`);
     };
     const up = () => {
       canvas.classList.remove('is-grabbing');
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      renderPanels();          // 松手再对齐一次真实的层结构
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
   });
-  canvas.addEventListener('click', () => { ui.selected = null; renderPanels(); });
+  canvas.addEventListener('click', () => {
+    // 点空白只是"取消选中"：没选中东西就别重绘（嵌入时每点一下都重绘 = 看着像刷新）
+    if (ui.selected === null) return;
+    ui.selected = null;
+    renderPanels();
+  });
 
   if (!variant.nodes.length) {
     const empty = el('div', 'tree-empty');

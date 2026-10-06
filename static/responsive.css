@@ -740,9 +740,9 @@ html[data-can-edit="0"] .card-view .prop-row .prop-input { pointer-events: none;
    ================================================================== */
 body.is-embed { background: transparent; }
 body.is-embed.is-paper {
-  /* 工作区的 token 换成站点那套纸面配色 */
-  --mn-surface: #ffffff;
-  --mn-surface-muted: #faf7f0;
+  /* 工作区的 token 换成站点那套纸面配色（画布底和时间线用同一个奶油色 #f7f3e4） */
+  --mn-surface: #f7f3e4;
+  --mn-surface-muted: #f7f3e4;
   --mn-surface-sunken: #f4f0e6;
   --mn-border: #e6e0d3;
   --mn-border-strong: #d8d0bd;
@@ -756,8 +756,13 @@ body.is-embed.is-paper {
   --mn-success: #2f6b4a;
   --mn-error: #b3261e;
 }
+body.is-embed.is-paper,
 body.is-embed.is-paper .workspace,
-body.is-embed.is-paper .panel, body.is-embed.is-paper .panel-body { background: transparent; }
+body.is-embed.is-paper .panel,
+body.is-embed.is-paper .panel-body { background: #f7f3e4; }
+/* 工具条保持白卡片，画布才是奶油底 */
+body.is-embed.is-paper .is-embed-bar { background: #ffffff; border-bottom: 1px solid #e6e0d3; }
+body.is-embed.is-paper .tree-canvas { background-color: #f7f3e4; }
 
 /* 只读：把"改内容"的控件藏掉，留下看内容需要的（缩放、适应、关系名显示方式） */
 body.is-embed .is-embed-bar .mini-btn.is-primary,
