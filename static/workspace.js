@@ -111,7 +111,12 @@ function handleConflict(payload) {
 async function api(path, { method = 'GET', body, form } = {}) {
   // 写操作统一闸门：只读时不用发请求，直接提示（服务端也会拦，这里是体验层）
   if (method !== 'GET' && !path.startsWith('/api/world/auth/') && !path.startsWith('/api/world/presence')) {
-    if (!guardWrite()) throw new Error('read-only');
+    if (!guardWrite()) {
+      // 只读拦下来的写请求：提示已经弹过了，这里标记一下，让全局处理器安静吞掉
+      const blocked = new Error('read-only');
+      blocked.isReadonly = true;
+      throw blocked;
+    }
   }
   const response = await fetch(path, {
     method,
@@ -167,6 +172,12 @@ function readableInk(hex) {
 }
 
 /* ----------------------------------------------------------------- 启动 */
+/* 只读被拦、编辑冲突都是预期情况：界面上已经提示过，不该再冒到控制台 */
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  if (reason && (reason.isReadonly || reason.isConflict)) event.preventDefault();
+});
+
 async function boot() {
   const data = await api('/api/world/state');
   applyViewer(data.viewer);
@@ -3499,11 +3510,24 @@ function renderTreeTool(entry) {
 
     group.addEventListener('click', (event) => {
       event.stopPropagation();
+      // 嵌在发布站点里：点成员 = 跳到那个人的站点页面。
+      // 千万不能走 renderPanels() —— 那会把整棵树重绘一次（看起来像页面在刷新），
+      // 再叠加自适应重算就会出现"样式短暂错乱"。
+      if (isEmbedded()) {
+        const target = node.card ? findNode(node.card) : null;
+        if (target && target.slug) {
+          postToHost('ws-open-doc', { id: node.card, name: node.name, slug: target.slug });
+        } else {
+          postToHost('ws-node-hint', { name: node.name });
+        }
+        return;
+      }
       ui.selected = ui.selected === node.id ? null : node.id;
       renderPanels();
     });
     group.addEventListener('dblclick', async (event) => {
       event.stopPropagation();
+      if (isEmbedded()) return;                 // 只读：不改名字
       const value = window.prompt('成员名称', node.name);
       if (value === null) return;
       await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body: { name: value.trim() } });
