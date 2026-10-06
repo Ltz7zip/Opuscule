@@ -1,0 +1,1389 @@
+/* ==========================================================================
+   关系树（/relationship）
+   三屏一条线：选模版 → 看模版关系 → 进画布编辑。
+
+   画布上有两条铁律，其余都好商量：
+   1. **人物卡片的边框严格贴网格**。卡宽高都是整数格（5 × 8），落点也永远吸附到
+      网格整数倍，所以边框天然落在网格线上——不会出现"差两像素"的毛边。
+   2. **关系线不贴网格**。线怎么走由几何算（正交 + 圆角），只在需要时经过中点，
+      不为了对齐网格把线拗成奇怪的形状。
+
+   关系连线的两种手势都会落到同一个"关系菜单"（图6）上：
+   点加号 = 在那个方向新建一个人；按住加号拖到另一张卡 = 连到那个人。
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  var app = document.getElementById('rtApp');
+  if (!app) return;
+
+  var API = '/api/world';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------------------------------------------------------------- 状态 */
+  var S = {
+    grid: { grid: 28, card_cols: 5, card_rows: 8, col_step: 8, row_step: 12 },
+    templates: [],
+    trees: [],
+    pickTemplate: 'family',
+    draftRelations: [],       // 图2 左侧那份（还没落库）
+    docId: parseInt(app.dataset.doc, 10) || 0,
+    doc: null,
+    variant: null,
+    nodes: [],
+    edges: [],
+    relations: [],
+    labels: {},
+    view: { x: 0, y: 0, z: 1 },
+    selected: null,
+    link: null,               // {from: nodeId, side: 'n', to: nodeId|null}
+    ctx: null,                // {x, y} 右键落点（画布坐标，已吸附）
+    popAnchor: null,
+    dirty: Object.create(null),
+    saveTimer: null
+  };
+
+  function grid() { return S.grid.grid; }
+  function cardW() { return S.grid.card_cols * S.grid.grid; }
+  function cardH() { return S.grid.card_rows * S.grid.grid; }
+  function snap(v) { return Math.round(v / grid()) * grid(); }
+  /* 世代 = "第几行卡片"。工作区里那个简版渲染器按 generation 排 y，
+     喂它格坐标（0/12/24…）会把整棵树拉成竖着的一条线。 */
+  function rowIndex(y) { return Math.round(y / (S.grid.row_step * grid())); }
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /* ---------------------------------------------------------------- 请求 */
+  function api(path, options) {
+    options = options || {};
+    var init = { method: options.method || 'GET', headers: { 'Content-Type': 'application/json' } };
+    if (options.body !== undefined) init.body = JSON.stringify(options.body);
+    return fetch(path, init).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok) {
+          var message = (data && data.error) || ('请求失败（' + response.status + '）');
+          throw new Error(message);
+        }
+        return data;
+      });
+    });
+  }
+
+  function toast(message, ms) {
+    var box = $('rtToast');
+    box.textContent = message;
+    box.hidden = false;
+    clearTimeout(box._timer);
+    box._timer = setTimeout(function () { box.hidden = true; }, ms || 2200);
+  }
+
+  function saveState(text, mode) {
+    var el = $('rtSaveState');
+    el.textContent = text;
+    el.className = 'rt-save' + (mode ? ' is-' + mode : '');
+  }
+
+  /* ================================================================== 图标 */
+  var ICONS = {
+    parent: '<circle cx="9" cy="7" r="3.2"/><path d="M3.5 19c.5-3 2.8-4.8 5.5-4.8"/><path d="M17 13v7M13.5 16.5h7"/>',
+    child: '<circle cx="9" cy="7" r="3.2"/><path d="M3.5 19c.5-3 2.8-4.8 5.5-4.8"/><path d="M17 20v-7M13.5 16.5h7"/>',
+    spouse: '<path d="M12 20s-7-4.4-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.6-7 9-7 9z"/>',
+    ex: '<path d="M12 20s-7-4.4-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.6-7 9-7 9z"/><path d="M4 4l16 16"/>',
+    sibling: '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 19c.4-2.6 2.4-4.2 5-4.2s4.6 1.6 5 4.2M13 19c.4-2.6 1.6-4.2 3-4.2s2.6 1.6 3 4.2"/>',
+    half_sibling: '<circle cx="7" cy="8" r="2.6"/><circle cx="17" cy="8" r="2.6"/><path d="M2.5 19c.4-2.4 2.2-3.9 4.5-3.9"/><path d="M21.5 19c-.4-2.4-2.2-3.9-4.5-3.9"/><path d="M10 5.5h4"/>',
+    adoptive: '<path d="M12 20s-7-4.4-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.6-7 9-7 9z"/><path d="M9.5 12.5l2 2 3.5-4"/>',
+    step: '<circle cx="9" cy="7" r="3.2"/><path d="M3.5 19c.5-3 2.8-4.8 5.5-4.8"/><path d="M15 14.5h5M17.5 12v5"/>',
+    custom: '<path d="M12 5v14M5 12h14"/>'
+  };
+
+  function icon(kind) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+      'stroke-linecap="round" stroke-linejoin="round">' + (ICONS[kind] || ICONS.custom) + '</svg>';
+  }
+
+  /* 图1 模版图标 */
+  var TEMPLATE_ICONS = {
+    house: '<path d="M4 10.5L12 4l8 6.5V20H4z"/><path d="M9.5 20v-5h5v5"/>',
+    building: '<path d="M5 20V5.5A1.5 1.5 0 016.5 4h7A1.5 1.5 0 0115 5.5V20"/><path d="M15 10h3.5A1.5 1.5 0 0120 11.5V20"/><path d="M3 20h18"/><path d="M8 8h4M8 12h4M8 16h4"/>',
+    shield: '<path d="M12 3.5l7 2.6v5.6c0 4.2-2.9 7.4-7 8.8-4.1-1.4-7-4.6-7-8.8V6.1z"/><path d="M9.5 12.2l1.9 1.9 3.6-4"/>',
+    crown: '<path d="M4 17.5h16"/><path d="M4.5 8l3.6 3L12 5.5l3.9 5.5 3.6-3-1.6 7H6.1z"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>'
+  };
+
+  function templateIcon(name) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+      'stroke-linecap="round" stroke-linejoin="round">' + (TEMPLATE_ICONS[name] || TEMPLATE_ICONS.plus) + '</svg>';
+  }
+
+  /* ========================================================= 几何：正交走线 */
+  /* 卡片四边的锚点：关系线只从这四个点出发 / 落到这四个点。 */
+  function anchors(node) {
+    var w = cardW(), h = cardH();
+    return {
+      n: { x: node.x + w / 2, y: node.y },
+      s: { x: node.x + w / 2, y: node.y + h },
+      w: { x: node.x, y: node.y + h / 2 },
+      e: { x: node.x + w, y: node.y + h / 2 }
+    };
+  }
+
+  var TOL = 10;
+
+  /* 给两点之间算一条正交折线。同排直连、同列直连，其余走"横-竖-横"或"竖-横-竖"。
+     这里刻意**不对齐网格**：线只服从几何，卡片才贴网格。 */
+  function routePoints(a, b) {
+    var A = anchors(a), B = anchors(b);
+    var acx = a.x + cardW() / 2, acy = a.y + cardH() / 2;
+    var bcx = b.x + cardW() / 2, bcy = b.y + cardH() / 2;
+    var dx = bcx - acx, dy = bcy - acy;
+
+    if (Math.abs(dy) < TOL) {
+      return dx >= 0 ? [A.e, B.w] : [A.w, B.e];
+    }
+    if (Math.abs(dx) < TOL) {
+      return dy >= 0 ? [A.s, B.n] : [A.n, B.s];
+    }
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      var east = dx > 0;
+      var start = east ? A.e : A.w;
+      var end = east ? B.w : B.e;
+      var midX = (start.x + end.x) / 2;
+      return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+    }
+    var south = dy > 0;
+    var top = south ? A.s : A.n;
+    var bottom = south ? B.n : B.s;
+    var midY = (top.y + bottom.y) / 2;
+    return [top, { x: top.x, y: midY }, { x: bottom.x, y: midY }, bottom];
+  }
+
+  /* 折线 → 带圆角的 path。顺手去掉重复点和共线的中间点。 */
+  function pathFrom(points, radius) {
+    var pts = [];
+    points.forEach(function (point) {
+      var last = pts[pts.length - 1];
+      if (!last || Math.abs(last.x - point.x) > 0.01 || Math.abs(last.y - point.y) > 0.01) pts.push(point);
+    });
+    if (pts.length < 2) return '';
+    if (pts.length === 2) {
+      return 'M ' + pts[0].x + ' ' + pts[0].y + ' L ' + pts[1].x + ' ' + pts[1].y;
+    }
+    var r = radius == null ? 12 : radius;
+    var d = 'M ' + pts[0].x + ' ' + pts[0].y;
+    for (var i = 1; i < pts.length - 1; i++) {
+      var prev = pts[i - 1], cur = pts[i], next = pts[i + 1];
+      var l1 = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+      var l2 = Math.hypot(next.x - cur.x, next.y - cur.y);
+      var rr = Math.min(r, l1 / 2, l2 / 2);
+      if (rr < 1) { d += ' L ' + cur.x + ' ' + cur.y; continue; }
+      var p1 = { x: cur.x + (prev.x - cur.x) / l1 * rr, y: cur.y + (prev.y - cur.y) / l1 * rr };
+      var p2 = { x: cur.x + (next.x - cur.x) / l2 * rr, y: cur.y + (next.y - cur.y) / l2 * rr };
+      d += ' L ' + p1.x + ' ' + p1.y + ' Q ' + cur.x + ' ' + cur.y + ' ' + p2.x + ' ' + p2.y;
+    }
+    var last = pts[pts.length - 1];
+    d += ' L ' + last.x + ' ' + last.y;
+    return d;
+  }
+
+  /* ================================================================= 首屏 */
+  function boot() {
+    Promise.all([
+      api(API + '/relationship/templates'),
+      api(API + '/relationship/trees')
+    ]).then(function (results) {
+      S.templates = results[0].templates || [];
+      if (results[0].grid) S.grid = results[0].grid;
+      S.trees = results[1].trees || [];
+      if (S.docId) { openEditor(S.docId); return; }
+      renderPicker();
+      showScreen('picker');
+    }).catch(function (err) {
+      toast(err.message || '载入失败', 4000);
+    });
+  }
+
+  function showScreen(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-screen]'), function (el) {
+      el.hidden = el.dataset.screen !== name;
+    });
+  }
+
+  /* --------------------------------------------------- 图1：模版列表 */
+  function renderPicker() {
+    var host = $('rtTemplateList');
+    host.innerHTML = '';
+    S.templates.forEach(function (item) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'rt-template-item' + (item.id === S.pickTemplate ? ' is-active' : '');
+      button.dataset.template = item.id;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', String(item.id === S.pickTemplate));
+      button.innerHTML =
+        '<span class="rt-template-icon">' + templateIcon(item.icon) + '</span>' +
+        '<span class="rt-template-text"><b>' + esc(item.name) + '</b><span>' + esc(item.tagline) + '</span></span>';
+      button.addEventListener('click', function () {
+        S.pickTemplate = item.id;
+        renderPicker();
+        renderPreview($('rtPickerCanvas'), item.id);
+      });
+      host.appendChild(button);
+    });
+    renderPreview($('rtPickerCanvas'), S.pickTemplate);
+    renderExisting();
+  }
+
+  function renderExisting() {
+    var host = $('rtExisting');
+    host.innerHTML = '';
+    if (!S.trees.length) {
+      host.innerHTML = '<p class="rt-existing-empty">还没有关系树</p>';
+      return;
+    }
+    S.trees.forEach(function (tree) {
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'rt-existing-row';
+      row.innerHTML = '<b>' + esc(tree.name) + '</b><span>' +
+        tree.people + ' 人 · ' + tree.kind_label + '</span>';
+      row.addEventListener('click', function () { location.href = '/relationship?doc=' + tree.id; });
+      host.appendChild(row);
+    });
+  }
+
+  /* ------------------------------------------- 图2：模版自带的关系清单 */
+  function openTemplateScreen(templateId) {
+    var item = S.templates.filter(function (t) { return t.id === templateId; })[0] || S.templates[0];
+    if (!item) return;
+    S.pickTemplate = item.id;
+    S.draftRelations = (item.relations || []).map(function (relation) {
+      return { kind: relation.kind, label: relation.label, hint: relation.hint || '', style: relation.style || '', enabled: true };
+    });
+    $('rtTemplateCaption').textContent = item.name + ' 关系';
+    $('rtWithDemo').parentNode.style.display = item.id === 'blank' ? 'none' : '';
+    renderRelationList();
+    renderPreview($('rtTemplateCanvas'), item.id);
+    showScreen('template');
+  }
+
+  function renderRelationList() {
+    var host = $('rtRelationList');
+    host.innerHTML = '';
+    if (!S.draftRelations.length) {
+      host.innerHTML = '<p class="rt-existing-empty" style="padding:14px 16px">还没有关系，点下面的「添加关系」自己定。</p>';
+      return;
+    }
+    S.draftRelations.forEach(function (relation, index) {
+      var row = document.createElement('div');
+      row.className = 'rt-relation-row' + (relation.enabled === false ? ' is-off' : '');
+      row.innerHTML = icon(relation.kind) + '<b>' + esc(relation.label) + '</b>' +
+        '<button type="button" class="rt-relation-btn" data-act="toggle" title="' +
+        (relation.enabled === false ? '启用' : '暂时停用（快捷菜单里不再出现）') + '">−</button>' +
+        '<button type="button" class="rt-relation-btn is-danger" data-act="remove" title="删除这条关系">×</button>';
+
+      row.querySelector('[data-act="toggle"]').addEventListener('click', function () {
+        relation.enabled = relation.enabled === false;
+        renderRelationList();
+      });
+      row.querySelector('[data-act="remove"]').addEventListener('click', function () {
+        S.draftRelations.splice(index, 1);
+        renderRelationList();
+      });
+      // 双击改名：模版给的是通用叫法，用户想叫"生父"也正常
+      row.querySelector('b').addEventListener('dblclick', function () {
+        var value = window.prompt('这条关系叫什么？', relation.label);
+        if (value === null) return;
+        relation.label = value.trim() || relation.label;
+        renderRelationList();
+      });
+      host.appendChild(row);
+    });
+  }
+
+  $('rtAddRelation').addEventListener('click', function () {
+    var value = window.prompt('新关系的名字（例如：教父、世仇、债主）', '');
+    if (value === null) return;
+    var label = value.trim();
+    if (!label) return;
+    S.draftRelations.push({
+      kind: 'custom_' + Date.now().toString(36),
+      label: label, hint: '', style: '', enabled: true
+    });
+    renderRelationList();
+  });
+
+  $('rtBack').addEventListener('click', function () { showScreen('picker'); });
+  $('rtContinue').addEventListener('click', function () { openTemplateScreen(S.pickTemplate); });
+
+  $('rtCreate').addEventListener('click', function () {
+    var button = $('rtCreate');
+    button.disabled = true;
+    var item = S.templates.filter(function (t) { return t.id === S.pickTemplate; })[0] || {};
+    api(API + '/relationship/trees', {
+      method: 'POST',
+      body: {
+        template: S.pickTemplate,
+        name: item.name ? item.name + '关系树' : '关系树',
+        with_demo: $('rtWithDemo').checked
+      }
+    }).then(function (data) {
+      // 用户在左边改过的关系清单要带过去（改名 / 停用 / 新加 / 删掉）
+      return api(API + '/relationship/trees/' + data.document.id + '/relations', {
+        method: 'PUT', body: { relations: S.draftRelations }
+      }).then(function () { return data; });
+    }).then(function (data) {
+      location.href = '/relationship?doc=' + data.document.id;
+    }).catch(function (err) {
+      button.disabled = false;
+      toast(err.message || '创建失败', 4000);
+    });
+  });
+
+  /* ================================================== 预览：示意小画布 */
+  /* 预览和编辑区共用同一套走线算法，所以"看到的"就是"建出来的"。 */
+  function renderPreview(host, templateId) {
+    var item = S.templates.filter(function (t) { return t.id === templateId; })[0];
+    host.innerHTML = '';
+    var scale = 1;
+    if (!item || !item.demo || !item.demo.nodes.length) {
+      var hint = document.createElement('p');
+      hint.className = 'rt-empty-hint';
+      hint.innerHTML = '空白起步：进去以后在画布上 <b>右键</b> 添加第一个人';
+      host.appendChild(hint);
+      return;
+    }
+
+    var g = S.grid.grid;
+    var nodes = item.demo.nodes.map(function (node) {
+      return { key: node.key, name: node.name, x: node.col * g, y: node.row * g };
+    });
+    var byKey = {};
+    nodes.forEach(function (node) { byKey[node.key] = node; });
+
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'rt-edges');
+    var layer = document.createElementNS(svgNS, 'g');
+    svg.appendChild(layer);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'rt-grid';
+    wrap.appendChild(svg);
+
+    item.demo.edges.forEach(function (edge) {
+      var a = byKey[edge.source], b = byKey[edge.target];
+      if (!a || !b) return;
+      var path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('d', pathFrom(routePoints(a, b)));
+      path.setAttribute('class', 'rt-edge' + (edge.kind === 'spouse' ? ' rt-edge--spouse' : '') +
+        (edge.style === 'dashed' ? ' rt-edge--dashed' : ''));
+      layer.appendChild(path);
+
+      if (edge.label) {
+        var mid = midpointOf(path);
+        var text = document.createElementNS(svgNS, 'text');
+        text.setAttribute('x', mid.x);
+        text.setAttribute('y', mid.y - 6);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('class', 'rt-edge-label');
+        text.textContent = edge.label;
+        layer.appendChild(text);
+      }
+    });
+
+    nodes.forEach(function (node) {
+      var el = document.createElement('div');
+      el.className = 'rt-node is-empty';
+      el.style.left = node.x + 'px';
+      el.style.top = node.y + 'px';
+      el.innerHTML = '<div class="rt-card"></div><div class="rt-name">' + esc(node.name) + '</div>';
+      wrap.appendChild(el);
+    });
+
+    host.appendChild(wrap);
+    fitTo(host, wrap, nodes);
+  }
+
+  function midpointOf(path) {
+    try {
+      var total = path.getTotalLength();
+      return path.getPointAtLength(total / 2);
+    } catch (error) {
+      return { x: 0, y: 0 };
+    }
+  }
+
+  /* 把 wrap 缩放平移到 host 里居中显示 */
+  function fitTo(host, wrap, nodes) {
+    if (!nodes.length) return;
+    var minX = Math.min.apply(null, nodes.map(function (n) { return n.x; }));
+    var minY = Math.min.apply(null, nodes.map(function (n) { return n.y; }));
+    var maxX = Math.max.apply(null, nodes.map(function (n) { return n.x + cardW(); }));
+    var maxY = Math.max.apply(null, nodes.map(function (n) { return n.y + cardH(); }));
+    var pad = 44;
+    var width = maxX - minX + pad * 2;
+    var height = maxY - minY + pad * 2;
+
+    // 先挂上去量一次，容器尺寸只有布局后才知道
+    requestAnimationFrame(function () {
+      var rect = host.getBoundingClientRect();
+      if (!rect.width) return;
+      var scale = Math.min(rect.width / width, rect.height / height, 1.2);
+      var tx = (rect.width - (maxX - minX) * scale) / 2 - minX * scale;
+      var ty = (rect.height - (maxY - minY) * scale) / 2 - minY * scale;
+      wrap.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+      wrap.style.transformOrigin = '0 0';
+    });
+  }
+
+  /* ==================================================== 编辑区：载入与渲染 */
+  function openEditor(docId) {
+    api(API + '/relationship/trees/' + docId).then(function (data) {
+      S.docId = docId;
+      S.doc = data.document;
+      S.grid = data.grid || S.grid;
+      S.variant = data.variant;
+      S.nodes = (data.variant.nodes || []).map(normalizeNode);
+      S.edges = data.variant.edges || [];
+      S.relations = (data.variant.relations || []);
+      S.labels = data.variant.resolved_labels || {};
+      S.relationKinds = data.relation_kinds || [];
+
+      $('rtDocName').textContent = S.doc.name;
+      $('rtKindChip').textContent = S.variant.kind_label || '';
+      showScreen('editor');
+      render();
+      fit();
+    }).catch(function (err) {
+      toast(err.message || '打不开这棵树', 4000);
+      showScreen('picker');
+    });
+  }
+
+  function normalizeNode(node) {
+    return {
+      id: node.id, x: snap(node.x || 0), y: snap(node.y || 0),
+      name: node.name || '', note: node.note || '',
+      kind: node.kind || 'person',
+      card: node.card, card_name: node.card_name,
+      image: node.image || '', subtitle: node.subtitle || '',
+      deceased: !!node.deceased, favourite: !!node.favourite
+    };
+  }
+
+  function nodeById(id) {
+    for (var i = 0; i < S.nodes.length; i++) if (S.nodes[i].id === id) return S.nodes[i];
+    return null;
+  }
+
+  function applyView() {
+    var g = $('rtGrid');
+    g.style.transform = 'translate(' + S.view.x + 'px,' + S.view.y + 'px) scale(' + S.view.z + ')';
+    var wrap = $('rtCanvasWrap');
+    wrap.style.backgroundSize = (grid() * S.view.z) + 'px ' + (grid() * S.view.z) + 'px';
+    wrap.style.backgroundPosition = S.view.x + 'px ' + S.view.y + 'px';
+  }
+
+  function render() {
+    renderEdges();
+    renderNodes();
+    applyView();
+    $('rtEmptyHint').hidden = S.nodes.length > 0;
+  }
+
+  function labelOf(kind, label) {
+    if (label) return label;
+    for (var i = 0; i < S.relations.length; i++) {
+      if (S.relations[i].kind === kind) return S.relations[i].label || '';
+    }
+    // 没起名字的自定义关系 = 一条"先连上、以后再命名"的线，不印字
+    if (String(kind).indexOf('custom') === 0) return '';
+    return S.labels[kind] || '';
+  }
+
+  function renderEdges() {
+    var svg = $('rtEdges');
+    var layer = svg.querySelector('g') || svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
+    while (layer.firstChild) layer.removeChild(layer.firstChild);
+    var ns = 'http://www.w3.org/2000/svg';
+
+    S.edges.forEach(function (edge) {
+      var a = nodeById(edge.source), b = nodeById(edge.target);
+      if (!a || !b) return;
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', pathFrom(routePoints(a, b)));
+      path.setAttribute('class', 'rt-edge' + (edge.kind === 'spouse' ? ' rt-edge--spouse' : '') +
+        (edge.style === 'dashed' ? ' rt-edge--dashed' : ''));
+      path.setAttribute('data-edge', edge.id);
+      path.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
+      path.addEventListener('click', function (event) {
+        event.stopPropagation();
+        editEdge(edge);
+      });
+      layer.appendChild(path);
+
+      var text = labelOf(edge.kind, edge.label);
+      if (text) {
+        var mid = midpointOf(path);
+        var node = document.createElementNS(ns, 'text');
+        node.setAttribute('x', mid.x);
+        node.setAttribute('y', mid.y - 6);
+        node.setAttribute('text-anchor', 'middle');
+        node.setAttribute('class', 'rt-edge-label');
+        node.textContent = text;
+        layer.appendChild(node);
+      }
+    });
+  }
+
+  function renderNodes() {
+    var host = $('rtNodes');
+    host.innerHTML = '';
+    S.nodes.forEach(function (node) { host.appendChild(nodeElement(node)); });
+  }
+
+  function initial(name) {
+    var text = (name || '').trim();
+    if (!text) return '?';
+    // 拉丁字母取首字母，中文取头一个字
+    var first = text[0];
+    return /[a-zA-Z]/.test(first) ? first.toUpperCase() : first;
+  }
+
+  function nodeElement(node) {
+    var el = document.createElement('div');
+    el.className = 'rt-node' +
+      (node.kind === 'note' ? ' is-note' : '') +
+      (node.kind !== 'note' && !node.name ? ' is-empty' : '') +
+      (node.id === S.selected ? ' is-selected' : '') +
+      (node.deceased ? ' is-deceased' : '');
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+    el.dataset.node = node.id;
+
+    var body;
+    if (node.kind === 'note') {
+      body = '<div class="rt-card"><div class="rt-note-body">' + esc(node.note || '点两下写点什么') + '</div>' +
+        '<div class="rt-name">备注</div></div>';
+    } else {
+      if (node.name || node.image) {
+        // 有名字（或有头像）才画"人像"，否则留空 —— 空卡就该是图4 那张虚线框加号卡
+        var portrait = node.image
+          ? '<img src="' + esc(node.image) + '" alt="" draggable="false" />'
+          : esc(initial(node.name));
+        body = '<div class="rt-card"><div class="rt-portrait">' + portrait + '</div></div>';
+      } else {
+        body = '<div class="rt-card"></div>';
+      }
+      body += '<div class="rt-name">' + esc(node.name || '添加名称') + '</div>';
+    }
+    el.innerHTML = body;
+
+    if (node.kind !== 'note') {
+      ['n', 'e', 's', 'w'].forEach(function (side) {
+        var handle = document.createElement('button');
+        handle.type = 'button';
+        handle.className = 'rt-handle rt-handle--' + side;
+        handle.dataset.side = side;
+        handle.textContent = '+';
+        handle.title = '点：在这个方向新建一个人；拖到另一张卡：直接连过去';
+        el.appendChild(handle);
+      });
+    }
+
+    /* 拖动卡片：松手才吸附 + 落库（拖动过程中不碰后端，也不重排整棵树） */
+    el.addEventListener('pointerdown', function (event) {
+      var handle = event.target.closest ? event.target.closest('.rt-handle') : null;
+      if (handle) { beginLink(event, node, handle); return; }
+      if (event.button !== 0) return;
+      beginDrag(event, node, el);
+    });
+
+    el.addEventListener('dblclick', function (event) {
+      event.stopPropagation();
+      if (node.kind === 'note') editNote(node, el); else editName(node, el);
+    });
+
+    el.addEventListener('click', function (event) {
+      event.stopPropagation();
+      if (event.target.closest && event.target.closest('.rt-handle')) return;
+      select(node.id);
+    });
+    el.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      select(node.id);
+    });
+
+    return el;
+  }
+
+  /* 只切 class、不重建 DOM —— 拖动过程中手里的 el 必须还是页面上那一个。
+     刻意**不关菜单**：点加号会先弹关系菜单、随后浏览器才补一个 click 事件，
+     这里要是顺手关一下，用户就永远看不到那个菜单。关菜单交给 pointerdown 那条路。 */
+  function select(id) {
+    S.selected = id;
+    Array.prototype.forEach.call(document.querySelectorAll('.rt-node'), function (el) {
+      el.classList.toggle('is-selected', Number(el.dataset.node) === id);
+    });
+    renderCardTools();
+  }
+
+  /* -------------------------------------------------------- 平移 / 缩放 */
+  function beginPan(event) {
+    if (event.button === 1 || event.button === 0) {
+      var startX = event.clientX, startY = event.clientY;
+      var originX = S.view.x, originY = S.view.y;
+      var moved = false;
+      var wrap = $('rtCanvasWrap');
+      wrap.classList.add('is-panning');
+      function move(ev) {
+        var dx = ev.clientX - startX, dy = ev.clientY - startY;
+        if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+        S.view.x = originX + dx;
+        S.view.y = originY + dy;
+        applyView();
+      }
+      function up() {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        wrap.classList.remove('is-panning');
+        if (!moved) select(null);
+      }
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    }
+  }
+
+  function zoomBy(factor, clientX, clientY) {
+    var wrap = $('rtCanvasWrap');
+    var rect = wrap.getBoundingClientRect();
+    var px = (clientX == null ? rect.width / 2 : clientX - rect.left);
+    var py = (clientY == null ? rect.height / 2 : clientY - rect.top);
+    var next = Math.min(2.4, Math.max(0.25, S.view.z * factor));
+    var ratio = next / S.view.z;
+    S.view.x = px - (px - S.view.x) * ratio;
+    S.view.y = py - (py - S.view.y) * ratio;
+    S.view.z = next;
+    applyView();
+  }
+
+  function fit() {
+    var wrap = $('rtCanvasWrap');
+    var rect = wrap.getBoundingClientRect();
+    if (!rect.width) { requestAnimationFrame(fit); return; }
+    if (!S.nodes.length) {
+      S.view = { x: 40, y: 40, z: 1 };
+      applyView();
+      return;
+    }
+    var minX = Math.min.apply(null, S.nodes.map(function (n) { return n.x; }));
+    var minY = Math.min.apply(null, S.nodes.map(function (n) { return n.y; }));
+    var maxX = Math.max.apply(null, S.nodes.map(function (n) { return n.x + cardW(); }));
+    var maxY = Math.max.apply(null, S.nodes.map(function (n) { return n.y + cardH(); }));
+    var pad = 70;
+    var scale = Math.min(
+      (rect.width - pad * 2) / (maxX - minX),
+      (rect.height - pad * 2) / (maxY - minY),
+      1
+    );
+    scale = Math.max(0.25, Math.min(scale, 1.6));
+    S.view.z = scale;
+    S.view.x = (rect.width - (maxX - minX) * scale) / 2 - minX * scale;
+    S.view.y = (rect.height - (maxY - minY) * scale) / 2 - minY * scale;
+    applyView();
+  }
+
+  /* ------------------------------------------------------------ 拖动卡片 */
+  function beginDrag(event, node, el) {
+    event.preventDefault();
+    event.stopPropagation();
+    select(node.id);
+    var startX = event.clientX, startY = event.clientY;
+    var originX = node.x, originY = node.y;
+    var moved = false;
+
+    function move(ev) {
+      var dx = (ev.clientX - startX) / S.view.z;
+      var dy = (ev.clientY - startY) / S.view.z;
+      if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+      node.x = originX + dx;
+      node.y = originY + dy;
+      el.style.left = node.x + 'px';
+      el.style.top = node.y + 'px';
+      renderEdges();
+      positionCardTools();
+    }
+    function up() {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) return;
+      node.x = snap(node.x);
+      node.y = snap(node.y);
+      el.style.left = node.x + 'px';
+      el.style.top = node.y + 'px';
+      renderEdges();
+      positionCardTools();
+      saveNode(node, { x: node.x, y: node.y, generation: rowIndex(node.y) });
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  /* ------------------------------------------------------ 加号：连线手势 */
+  var HANDLE_DIR = {
+    n: { dx: 0, dy: -1, side: 'n' },
+    s: { dx: 0, dy: 1, side: 's' },
+    w: { dx: -1, dy: 0, side: 'w' },
+    e: { dx: 1, dy: 0, side: 'e' }
+  };
+
+  function beginLink(event, node, handle) {
+    event.preventDefault();
+    event.stopPropagation();
+    var side = handle.dataset.side;
+    S.link = { from: node.id, side: side, to: null };
+    handle.classList.add('is-armed');
+    var live = $('rtLive');
+    var layer = live.querySelector('g') || live.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
+    var moved = false;
+    var startX = event.clientX, startY = event.clientY;
+
+    function toCanvas(clientX, clientY) {
+      var rect = $('rtCanvasWrap').getBoundingClientRect();
+      return {
+        x: (clientX - rect.left - S.view.x) / S.view.z,
+        y: (clientY - rect.top - S.view.y) / S.view.z
+      };
+    }
+
+    function move(ev) {
+      if (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) > 4) moved = true;
+      var point = toCanvas(ev.clientX, ev.clientY);
+      var hit = hitNode(point, 4);
+      S.link.to = moved && hit && hit.id !== node.id ? hit.id : null;
+      while (layer.firstChild) layer.removeChild(layer.firstChild);
+      var a = anchors(node)[side];
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      if (S.link.to) {
+        path.setAttribute('d', pathFrom(routePoints(node, nodeById(S.link.to))));
+        path.setAttribute('class', 'rt-edge rt-edge--draft');
+      } else {
+        var mid = side === 'n' || side === 's'
+          ? ' L ' + a.x + ' ' + point.y + ' L ' + point.x + ' ' + point.y
+          : ' L ' + point.x + ' ' + a.y + ' L ' + point.x + ' ' + point.y;
+        path.setAttribute('d', 'M ' + a.x + ' ' + a.y + mid);
+        path.setAttribute('class', 'rt-edge rt-edge--draft');
+      }
+      layer.appendChild(path);
+      highlightTarget(S.link.to);
+    }
+
+    function up(ev) {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      handle.classList.remove('is-armed');
+      while (layer.firstChild) layer.removeChild(layer.firstChild);
+      highlightTarget(null);
+      var point = toCanvas(ev.clientX, ev.clientY);
+      var hit = hitNode(point, 4);
+      // 只有"真的拖动过"才算连线：加号手柄就压在卡片边上，
+      // 光看落点会把"贴着邻居站的自己"误判成拖到了邻居身上。
+      var target = moved && hit && hit.id !== node.id ? hit.id : null;
+      S.link = null;
+      if (target) {
+        openRelations(node.id, side, target, handle, null);
+        return;
+      }
+      // 拖到空白处松手：人落在**松手的地方**（而不是死板地贴在源卡旁边）
+      var place = moved
+        ? freeSlot(point.x - cardW() / 2, point.y - cardH() / 2, node)
+        : neighborSlot(node, side);
+      openRelations(node.id, side, null, handle, place);
+    }
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  /* 某个方向的"下一格"：正好隔一个走线通道，卡片边框仍然贴网格 */
+  function neighborSlot(node, side) {
+    var info = HANDLE_DIR[side];
+    var w = cardW(), h = cardH();
+    if (side === 'e') return { x: node.x + w + S.grid.gap_x * grid(), y: node.y };
+    if (side === 'w') return { x: node.x - w - S.grid.gap_x * grid(), y: node.y };
+    if (side === 's') return { x: node.x, y: node.y + h + S.grid.gap_y * grid() };
+    return { x: node.x, y: node.y - h - S.grid.gap_y * grid() };
+  }
+
+  function highlightTarget(id) {
+    Array.prototype.forEach.call(document.querySelectorAll('.rt-node'), function (el) {
+      el.classList.toggle('is-drop-target', id != null && Number(el.dataset.node) === id);
+    });
+  }
+
+  /* 落点命中：从最后画的往前找（画面在上面的优先）。
+     卡片要**内缩**几个像素才算命中——加号手柄正好压在卡片边上，
+     不内缩的话"贴着邻居的那张卡"会把一次普通点击误判成"拖到了邻居身上"。 */
+  function hitNode(point, inset) {
+    var pad = inset == null ? 0 : inset;
+    for (var i = S.nodes.length - 1; i >= 0; i--) {
+      var node = S.nodes[i];
+      if (point.x >= node.x + pad && point.x <= node.x + cardW() - pad &&
+          point.y >= node.y + pad && point.y <= node.y + cardH() - pad) return node;
+    }
+    return null;
+  }
+
+  /* 在期望落点附近找一格不压人的位置（拖到空白处新建时用） */
+  function freeSlot(x, y, source) {
+    var stepX = S.grid.col_step * grid();
+    var stepY = S.grid.row_step * grid();
+    var candidate = { x: snap(x), y: snap(y) };
+    for (var ring = 0; ring < 12; ring++) {
+      for (var ix = -ring; ix <= ring; ix++) {
+        for (var iy = -ring; iy <= ring; iy++) {
+          if (Math.max(Math.abs(ix), Math.abs(iy)) !== ring) continue;
+          var spot = { x: candidate.x + ix * stepX, y: candidate.y + iy * stepY };
+          if (!overlaps(spot, source)) return spot;
+        }
+      }
+    }
+    return candidate;
+  }
+
+  function overlaps(spot, source) {
+    for (var i = 0; i < S.nodes.length; i++) {
+      var node = S.nodes[i];
+      if (source && node.id === source.id) continue;
+      if (spot.x < node.x + cardW() && spot.x + cardW() > node.x &&
+          spot.y < node.y + cardH() && spot.y + cardH() > node.y) return true;
+    }
+    return false;
+  }
+
+  /* ================================================ 图5：右键菜单 */
+  function canvasPoint(event) {
+    var rect = $('rtCanvasWrap').getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left - S.view.x) / S.view.z,
+      y: (event.clientY - rect.top - S.view.y) / S.view.z
+    };
+  }
+
+  $('rtCanvasWrap').addEventListener('contextmenu', function (event) {
+    if (event.target.closest && event.target.closest('.rt-node')) return;
+    event.preventDefault();
+    hideMenus();
+    var point = canvasPoint(event);
+    S.ctx = { x: snap(point.x), y: snap(point.y) };
+    var menu = $('rtContextMenu');
+    menu.hidden = false;
+    var width = menu.offsetWidth, height = menu.offsetHeight;
+    menu.style.left = Math.min(event.clientX, window.innerWidth - width - 10) + 'px';
+    menu.style.top = Math.min(event.clientY, window.innerHeight - height - 10) + 'px';
+  });
+
+  $('rtContextMenu').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-menu]');
+    if (!button || !S.ctx) return;
+    var kind = button.dataset.menu;
+    hideMenus();
+    createCard({
+      x: S.ctx.x, y: S.ctx.y,
+      kind: kind === 'note' ? 'note' : 'person',
+      generation: rowIndex(S.ctx.y)
+    });
+  });
+
+  function createCard(body) {
+    // 新人物**不带名字**（服务端会保留空名字）：落地就是图4 那张虚线空卡，
+    // 紧接着就弹输入框让你起名，而不是先塞一个"新成员"再让你改。
+    if (body.kind !== 'note' && body.name === undefined) body.name = '';
+    return api(API + '/tree-variants/' + S.variant.id + '/nodes', { method: 'POST', body: body })
+      .then(function (data) {
+        var node = normalizeNode(data);
+        S.nodes.push(node);
+        render();
+        select(node.id);
+        var el = document.querySelector('.rt-node[data-node="' + node.id + '"]');
+        if (node.kind === 'note') editNote(node, el); else editName(node, el);
+        return node;
+      })
+      .catch(function (err) { toast(err.message || '添加失败'); });
+  }
+
+  /* ================================================ 图6：关系菜单 */
+  function relationMenuItems() {
+    return S.relations.filter(function (relation) { return relation.enabled !== false; });
+  }
+
+  function openRelations(fromId, side, targetId, handle, place) {
+    hideMenus();
+    var from = nodeById(fromId);
+    if (!from) return;
+    S.popAnchor = {
+      from: fromId, side: side, target: targetId,
+      place: place || neighborSlot(from, side),
+      x: from.x + cardW(), y: from.y
+    };
+    var pop = $('rtRelationsPop');
+    var gridBox = $('rtPopGrid');
+    gridBox.innerHTML = '';
+
+    var items = relationMenuItems();
+    if (!items.length) {
+      gridBox.innerHTML = '<p class="rt-existing-empty" style="grid-column:1/-1;padding:8px 10px">这棵树还没有可用关系，先「创建自定义」。</p>';
+    }
+    items.forEach(function (relation) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'rt-pop-item';
+      button.innerHTML = icon(relation.kind) + '<span>' + esc(relation.label) + '</span>';
+      button.addEventListener('click', function () { applyRelation(relation); });
+      gridBox.appendChild(button);
+    });
+
+    pop.hidden = false;
+    positionRelations();
+  }
+
+  function positionRelations() {
+    var pop = $('rtRelationsPop');
+    var anchor = S.popAnchor;
+    if (!anchor) return;
+    var wrap = $('rtCanvasWrap').getBoundingClientRect();
+    var x = wrap.left + S.view.x + (anchor.x + 18) * S.view.z;
+    var y = wrap.top + S.view.y + anchor.y * S.view.z;
+    pop.style.left = Math.min(x, window.innerWidth - pop.offsetWidth - 12) + 'px';
+    pop.style.top = Math.min(Math.max(y, 12), window.innerHeight - pop.offsetHeight - 12) + 'px';
+  }
+
+  function ensureRelation(kind, label) {
+    var found = S.relations.filter(function (relation) { return relation.kind === kind; })[0];
+    if (found) return Promise.resolve(found);
+    var next = S.relations.concat([{ kind: kind, label: label || kind, style: '', enabled: true }]);
+    return api(API + '/relationship/trees/' + S.docId + '/relations', {
+      method: 'PUT', body: { relations: next }
+    }).then(function (data) {
+      S.relations = data.relations || next;
+      return S.relations.filter(function (relation) { return relation.kind === kind; })[0];
+    });
+  }
+
+  /* 关系菜单里真正干活的那个函数：三种出口（新建人 / 连现有的人 / 跳过）都汇到这里 */
+  function applyRelation(relation) {
+    var anchor = S.popAnchor;
+    hideMenus();
+    if (!anchor) return;
+
+    var afterNode = function (targetNode) {
+      if (!targetNode || !relation) return Promise.resolve(null);
+      return api(API + '/tree-variants/' + S.variant.id + '/edges', {
+        method: 'POST',
+        body: {
+          source: anchor.from, target: targetNode.id,
+          kind: relation.kind, label: relation.label, style: relation.style || ''
+        }
+      }).then(function (edge) {
+        S.edges.push(edge);
+        render();
+        return edge;
+      });
+    };
+
+    if (anchor.target) {
+      afterNode(nodeById(anchor.target)).catch(function (err) { toast(err.message || '连线失败'); });
+      return;
+    }
+    var place = anchor.place;
+    createCard({ x: place.x, y: place.y, generation: rowIndex(place.y) })
+      .then(function (node) {
+        if (!node) return null;
+        return afterNode(node);
+      })
+      .catch(function (err) { toast(err.message || '连线失败'); });
+  }
+
+  $('rtRelationsPop').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-pop]');
+    if (!button) return;
+    var action = button.dataset.pop;
+    if (action === 'skip') {
+      // 暂时跳过：人先放下来，关系以后再补——所以只建卡片，不建边
+      var anchor = S.popAnchor;
+      hideMenus();
+      if (!anchor || anchor.target) return;
+      var place = anchor.place;
+      createCard({ x: place.x, y: place.y, generation: rowIndex(place.y) });
+      return;
+    }
+    if (action === 'custom') {
+      var value = window.prompt('这条关系叫什么？', '');
+      if (value === null) return;
+      var label = value.trim();
+      if (!label) return;
+      var kind = 'custom_' + Date.now().toString(36);
+      ensureRelation(kind, label).then(function (relation) { applyRelation(relation); });
+      return;
+    }
+    if (action === 'link') { openLinkPicker(); }
+  });
+
+  /* 链接现有人员：把世界上已经有的卡片挂到这棵树上，落点用刚才算好的那一格 */
+  function openLinkPicker() {
+    hideMenus();
+    var anchor = S.popAnchor;
+    if (!anchor) return;
+    pickDocument('要链接哪张卡片？输入名字（留空看全部）').then(function (picked) {
+      if (!picked) return null;
+      var place = anchor.place || { x: 0, y: 0 };
+      return api(API + '/tree-variants/' + S.variant.id + '/nodes', {
+        method: 'POST',
+        body: { card: picked.id, x: place.x, y: place.y, generation: rowIndex(place.y) }
+      }).then(function (data) {
+        var node = normalizeNode(data);
+        S.nodes.push(node);
+        render();
+        return api(API + '/tree-variants/' + S.variant.id + '/edges', {
+          method: 'POST',
+          body: { source: anchor.from, target: node.id, kind: 'parent', label: '' }
+        }).then(function (edge) {
+          S.edges.push(edge);
+          render();
+          toast('已链接「' + node.name + '」');
+        });
+      }).catch(function (err) { toast(err.message || '链接失败'); });
+    }).catch(function (err) { toast(err.message || '搜索失败'); });
+  }
+
+  /* 从世界里的卡片中挑一张（先按名字搜，再按序号选） */
+  function pickDocument(question) {
+    var name = window.prompt(question, '');
+    if (name === null) return Promise.resolve(null);
+    return api(API + '/documents?type=card&q=' + encodeURIComponent(name.trim()))
+      .then(function (data) {
+        var documents = data.documents || [];
+        if (!documents.length) { toast('没找到匹配的卡片'); return null; }
+        var list = documents.slice(0, 12)
+          .map(function (item, index) { return (index + 1) + '. ' + item.name; }).join('\n');
+        var answer = window.prompt('选一个序号：\n' + list, '1');
+        if (answer === null) return null;
+        return documents[parseInt(answer, 10) - 1] || null;
+      });
+  }
+
+  function hideMenus() {
+    $('rtContextMenu').hidden = true;
+    $('rtRelationsPop').hidden = true;
+  }
+
+  /* ---------------------------------------------------- 就地编辑名字 / 备注 */
+  function editName(node, el) {
+    if (!el) return;
+    var chip = el.querySelector('.rt-name');
+    if (!chip || el.querySelector('.rt-name-input')) return;
+    var input = document.createElement('input');
+    input.className = 'rt-name-input';
+    input.value = node.name || '';
+    input.placeholder = '添加名称';
+    chip.style.visibility = 'hidden';
+    el.appendChild(input);
+    input.focus();
+    input.select();
+    var done = false;
+    function commit(save) {
+      if (done) return;
+      done = true;
+      var value = input.value.trim();
+      input.remove();
+      chip.style.visibility = '';
+      if (save && value !== node.name) {
+        node.name = value;
+        var target = document.querySelector('.rt-node[data-node="' + node.id + '"]');
+        if (target) { target.classList.toggle('is-empty', !value); target.querySelector('.rt-name').textContent = value || '添加名称'; }
+        saveNode(node, { name: value });
+      } else if (!save) {
+        renderNodes();
+      }
+    }
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); commit(true); }
+      if (event.key === 'Escape') { event.preventDefault(); commit(false); }
+    });
+    input.addEventListener('blur', function () { commit(true); });
+    input.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
+  }
+
+  function editNote(node, el) {
+    if (!el) return;
+    var body = el.querySelector('.rt-note-body');
+    if (!body || el.querySelector('.rt-note-input')) return;
+    var area = document.createElement('textarea');
+    area.className = 'rt-note-input';
+    area.value = node.note || '';
+    area.placeholder = '写点什么…';
+    body.style.visibility = 'hidden';
+    el.appendChild(area);
+    area.focus();
+    var done = false;
+    function commit(save) {
+      if (done) return;
+      done = true;
+      var value = area.value;
+      area.remove();
+      body.style.visibility = '';
+      if (save && value !== node.note) {
+        node.note = value;
+        body.textContent = value || '点两下写点什么';
+        saveNode(node, { note: value });
+      } else if (!save) {
+        renderNodes();
+      }
+    }
+    area.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { event.preventDefault(); commit(false); }
+    });
+    area.addEventListener('blur', function () { commit(true); });
+    area.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
+  }
+
+  /* -------------------------------------------------------- 卡片工具条（图6 顶部） */
+  function renderCardTools() {
+    var bar = $('rtCardTools');
+    var node = S.selected != null ? nodeById(S.selected) : null;
+    if (!node || node.kind === 'note') { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.querySelector('[data-card-tool="deceased"]').classList.toggle('is-on', !!node.deceased);
+    bar.querySelector('[data-card-tool="favourite"]').classList.toggle('is-on', !!node.favourite);
+    positionCardTools();
+  }
+
+  function positionCardTools() {
+    var bar = $('rtCardTools');
+    if (bar.hidden || S.selected == null) return;
+    var node = nodeById(S.selected);
+    if (!node) { bar.hidden = true; return; }
+    var wrap = $('rtCanvasWrap').getBoundingClientRect();
+    var x = wrap.left + S.view.x + (node.x + cardW() / 2) * S.view.z;
+    var y = wrap.top + S.view.y + node.y * S.view.z - 14;
+    bar.style.left = Math.min(Math.max(x - bar.offsetWidth / 2, 12), window.innerWidth - bar.offsetWidth - 12) + 'px';
+    bar.style.top = Math.max(y - bar.offsetHeight, 12) + 'px';
+  }
+
+  $('rtCardTools').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-card-tool]');
+    if (!button) return;
+    var node = nodeById(S.selected);
+    if (!node) return;
+    var tool = button.dataset.cardTool;
+
+    if (tool === 'card') {
+      api(API + '/tree-nodes/' + node.id + '/card', {
+        method: 'POST', body: { name: node.name || '新人物' }
+      }).then(function (data) {
+        node.card = data.node.card;
+        node.card_name = data.document.name;
+        toast('已创建卡片「' + data.document.name + '」');
+      }).catch(function (err) { toast(err.message || '创建卡片失败'); });
+      return;
+    }
+    if (tool === 'assign') { assignCard(node); return; }
+    if (tool === 'image') {
+      var url = window.prompt('图片地址（留空则用姓名首字）', node.image || '');
+      if (url === null) return;
+      node.image = url.trim();
+      saveNode(node, { image: node.image });
+      renderNodes();
+      renderCardTools();
+      return;
+    }
+    if (tool === 'deceased') {
+      node.deceased = !node.deceased;
+      saveNode(node, { deceased: node.deceased });
+      renderNodes();
+      renderCardTools();
+      return;
+    }
+    if (tool === 'favourite') {
+      node.favourite = !node.favourite;
+      saveNode(node, { favourite: node.favourite });
+      renderCardTools();
+      return;
+    }
+    if (tool === 'delete') {
+      if (!window.confirm('删除「' + (node.name || '这张卡') + '」？连在它上面的关系也会一起删掉。')) return;
+      api(API + '/tree-nodes/' + node.id, { method: 'DELETE' }).then(function () {
+        S.nodes = S.nodes.filter(function (item) { return item.id !== node.id; });
+        S.edges = S.edges.filter(function (edge) {
+          return edge.source !== node.id && edge.target !== node.id;
+        });
+        S.selected = null;
+        render();
+        renderCardTools();
+      }).catch(function (err) { toast(err.message || '删除失败'); });
+    }
+  });
+
+  function assignCard(node) {
+    pickDocument('分配哪张现有卡片？输入名字（留空看全部）').then(function (picked) {
+      if (!picked) return null;
+      return api(API + '/tree-nodes/' + node.id, { method: 'PUT', body: { card: picked.id } })
+        .then(function (data) {
+          node.card = data.card;
+          node.card_name = data.card_name;
+          node.name = data.name;
+          render();
+          renderCardTools();
+          toast('已分配给「' + data.card_name + '」');
+        });
+    }).catch(function (err) { toast(err.message || '分配失败'); });
+  }
+
+  /* ------------------------------------------------------------ 落库 */
+  var pendingTimers = Object.create(null);
+
+  function saveNode(node, patch) {
+    S.dirty[node.id] = Object.assign(S.dirty[node.id] || {}, patch);
+    saveState('保存中…', 'busy');
+    clearTimeout(pendingTimers[node.id]);
+    pendingTimers[node.id] = setTimeout(function () { flushNode(node.id); }, 320);
+  }
+
+  function flushNode(nodeId) {
+    var patch = S.dirty[nodeId];
+    if (!patch) return;
+    delete S.dirty[nodeId];
+    delete pendingTimers[nodeId];
+    api(API + '/tree-nodes/' + nodeId, { method: 'PUT', body: patch })
+      .then(function () { saveState('已保存'); })
+      .catch(function (err) { saveState('没存上', 'error'); toast(err.message || '保存失败'); });
+  }
+
+  function editEdge(edge) {
+    var current = labelOf(edge.kind, edge.label);
+    var value = window.prompt('这条关系叫什么？（留空即删除这条关系）', current);
+    if (value === null) return;
+    var label = value.trim();
+    if (!label) {
+      if (!window.confirm('删除这条关系？')) return;
+      api(API + '/tree-edges/' + edge.id, { method: 'DELETE' }).then(function () {
+        S.edges = S.edges.filter(function (item) { return item.id !== edge.id; });
+        render();
+      }).catch(function (err) { toast(err.message || '删除失败'); });
+      return;
+    }
+    api(API + '/tree-edges/' + edge.id, { method: 'PUT', body: { label: label } })
+      .then(function (data) {
+        edge.label = data.label;
+        render();
+      })
+      .catch(function (err) { toast(err.message || '改名失败'); });
+  }
+
+  /* ------------------------------------------------------------ 顶栏动作 */
+  document.querySelector('.rt-topbar-tools').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-action]');
+    if (!button) return;
+    var action = button.dataset.action;
+    if (action === 'fit') { fit(); return; }
+    if (action === 'zoom-in') { zoomBy(1.15); return; }
+    if (action === 'zoom-out') { zoomBy(1 / 1.15); return; }
+    if (action === 'add-person' || action === 'add-note') {
+      var wrap = $('rtCanvasWrap').getBoundingClientRect();
+      var point = {
+        x: (wrap.width / 2 - S.view.x) / S.view.z - cardW() / 2,
+        y: (wrap.height / 2 - S.view.y) / S.view.z - cardH() / 2
+      };
+      // 别叠在已有的卡片上：往下顺延一格
+      var candidate = { x: snap(point.x), y: snap(point.y) };
+      var guard = 0;
+      while (hitNode({ x: candidate.x + 1, y: candidate.y + 1 }) && guard < 60) {
+        candidate.y += S.grid.row_step * grid();
+        guard++;
+      }
+      createCard({
+        x: candidate.x, y: candidate.y,
+        kind: action === 'add-note' ? 'note' : 'person',
+        generation: rowIndex(candidate.y)
+      });
+      return;
+    }
+    if (action === 'relations') { openRelationEditor(); }
+  });
+
+  document.querySelector('.rt-zoom').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-action]');
+    if (!button) return;
+    if (button.dataset.action === 'zoom-in') zoomBy(1.15);
+    if (button.dataset.action === 'zoom-out') zoomBy(1 / 1.15);
+    if (button.dataset.action === 'fit') fit();
+  });
+
+  /* 关系清单编辑器：和第二步那个左栏是同一套数据，只是搬到了编辑区里 */
+  function openRelationEditor() {
+    var label = window.prompt(
+      '当前可用关系：\n' + S.relations.map(function (r, i) {
+        return (i + 1) + '. ' + r.label + (r.enabled === false ? '（已停用）' : '');
+      }).join('\n') + '\n\n输入序号改名或停用/启用；输入新名字则新增一条。',
+      ''
+    );
+    if (label === null) return;
+    var text = label.trim();
+    if (!text) return;
+    var index = parseInt(text, 10) - 1;
+    if (String(index + 1) === text && S.relations[index]) {
+      var relation = S.relations[index];
+      var next = window.prompt('怎么改？', relation.label);
+      if (next === null) return;
+      relation.label = next.trim() || relation.label;
+    } else {
+      S.relations.push({ kind: 'custom_' + Date.now().toString(36), label: text, style: '', enabled: true });
+    }
+    api(API + '/relationship/trees/' + S.docId + '/relations', {
+      method: 'PUT', body: { relations: S.relations }
+    }).then(function (data) { S.relations = data.relations || S.relations; toast('关系清单已更新'); })
+      .catch(function (err) { toast(err.message || '更新失败'); });
+  }
+
+  /* ------------------------------------------------------------ 事件绑定 */
+  var wrap = $('rtCanvasWrap');
+  wrap.addEventListener('pointerdown', function (event) {
+    if (event.target.closest && event.target.closest('.rt-node')) return;
+    hideMenus();
+    renderCardTools();
+    if (event.button === 0 || event.button === 1) beginPan(event);
+  });
+  wrap.addEventListener('wheel', function (event) {
+    event.preventDefault();
+    if (event.shiftKey) {                    // Shift + 滚轮：左右平移
+      S.view.x -= (event.deltaY || event.deltaX);
+      applyView();
+      return;
+    }
+    zoomBy(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.clientX, event.clientY);
+  }, { passive: false });
+
+  window.addEventListener('resize', function () { positionRelations(); positionCardTools(); });
+  window.addEventListener('scroll', function () { positionRelations(); positionCardTools(); }, true);
+
+  document.addEventListener('pointerdown', function (event) {
+    if (event.target.closest && (event.target.closest('.rt-menu') || event.target.closest('.rt-relations-pop') ||
+        event.target.closest('.rt-card-tools'))) return;
+    hideMenus();
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') { hideMenus(); select(null); }
+    if (event.key === 'f' || event.key === 'F') {
+      if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+      fit();
+    }
+  });
+
+  /* ------------------------------------------------------------ 启动 */
+  boot();
+})();

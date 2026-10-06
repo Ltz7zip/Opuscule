@@ -3289,6 +3289,30 @@ async function typeManager(focusTypeId = null) {
 
 /* ================================================================ 关系树 */
 /**
+ * 关系树成员的落点有两个来源，得区分开：
+ *
+ * * **grid**：``/relationship`` 那个网格编辑器画的，``x/y`` 都是像素落点，
+ *   ``generation`` 只是"第几行"的附带信息。这里必须照 y 摆，不然同一棵树
+ *   在两个地方长得不一样。
+ * * **generation**：工作区自己那个简版只写 ``x`` + ``generation``（``y`` 恒为 0），
+ *   所以照旧按世代行排。
+ *
+ * 判据很简单：只要有一个成员的 y 不是 0，这棵树就是按网格摆的。
+ */
+function treeLayout(nodes) {
+  return (nodes || []).some((node) => node.y) ? 'grid' : 'generation';
+}
+
+function treePoint(node, index, spread, layout) {
+  // 注意是 != null 而不是 ||：x = 0 是合法落点（网格第一列），不能被当成"没填"
+  const x = (node.x != null ? node.x : index * 190) * spread;
+  const y = layout === 'grid'
+    ? (node.y || 0) * spread
+    : (node.generation || 0) * 150 * spread;
+  return { x, y };
+}
+
+/**
  * 对齐 familyTree：多变体（variant）、世代行、可重命名的关系、交汇点、
  * 卡片吸附（有卡就显示卡片名，没有就纯占位），节点栏里还能"新建一张卡片"。
  */
@@ -3380,6 +3404,16 @@ function renderTreeTool(entry) {
     const target = $('.tree-canvas', wrap) || document.querySelector('.tree-canvas');
     if (target) fitTree(entry, target);
   }));
+  // 一个大画布才画得开的关系树：工作区里这只是"够用"的简版，
+  // 网格吸附 / 右键长人 / 拖加号连线那套在独立的 /relationship 页上
+  if (!isEmbedded()) {
+    const full = el('a', 'mini-btn tree-tool-edit', '⛶ 全屏编辑');
+    full.href = `/relationship?doc=${entry.document.id}`;
+    full.target = '_blank';
+    full.rel = 'noopener';
+    full.title = '在新标签页里用关系树编辑器打开（网格吸附 / 右键添加人物 / 拖加号连线）';
+    bar.appendChild(full);
+  }
   wrap.appendChild(bar);
 
   /* 画布 */
@@ -3391,26 +3425,30 @@ function renderTreeTool(entry) {
   inner.setAttribute('transform', `translate(${ui.offset.x} ${ui.offset.y}) scale(${ui.zoom})`);
   svg.appendChild(inner);
 
-  /* 世代行 + 节点坐标（x 为像素，缺省按顺序排开） */
+  /* 落点 + 世代行。两套坐标来源见 treeLayout() */
+  const spread = isEmbedded() ? 1.3 : 1;
+  const layout = treeLayout(variant.nodes);
   const rows = new Map();
   variant.nodes.forEach((node, index) => {
     const gen = node.generation || 0;
     const list = rows.get(gen) || [];
     list.push(node);
     rows.set(gen, list);
-    // 嵌入站点时排得松一些：留白多一点，读起来像时间线那样透气
-    const spread = isEmbedded() ? 1.3 : 1;
-    node._px = (node.x || index * 190) * spread;
-    node._py = gen * 150 * spread;
+    const point = treePoint(node, index, spread, layout);
+    node._px = point.x;
+    node._py = point.y;
   });
 
-  rows.forEach((list, gen) => {
-    const line = document.createElementNS(svgNS, 'line');
-    line.setAttribute('x1', -4000); line.setAttribute('x2', 4000);
-    line.setAttribute('y1', gen * 150 + 46); line.setAttribute('y2', gen * 150 + 46);
-    line.setAttribute('stroke', 'rgba(255,255,255,.06)');
-    inner.appendChild(line);
-  });
+  // 世代横线只在"按世代排"的模式下画：网格模式的 y 是自由的，画横线反而误导
+  if (layout === 'generation') {
+    rows.forEach((list, gen) => {
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', -4000); line.setAttribute('x2', 4000);
+      line.setAttribute('y1', gen * 150 + 46); line.setAttribute('y2', gen * 150 + 46);
+      line.setAttribute('stroke', 'rgba(255,255,255,.06)');
+      inner.appendChild(line);
+    });
+  }
 
   const byId = new Map(variant.nodes.map((n) => [n.id, n]));
   variant.edges.forEach((edge) => {
@@ -3556,9 +3594,10 @@ function renderTreeTool(entry) {
         document.removeEventListener('pointerup', up);
         canvas.classList.remove('is-dragging-node');
         try {
-          await api(`/api/world/tree-nodes/${node.id}`, {
-            method: 'PUT', body: { x: node.x, generation: node.generation },
-          });
+          const body = { x: node.x, generation: node.generation };
+          // 网格模式下 y 才是真正的落点，不一起存的话下次渲染会跳回去
+          if (layout === 'grid') body.y = Math.round(node._py);
+          await api(`/api/world/tree-nodes/${node.id}`, { method: 'PUT', body });
         } catch (error) {
           if (!error || !error.isReadonly) throw error;
         }
@@ -3656,8 +3695,10 @@ function fitTree(entry, canvas) {
   if (!nodes.length) { ui.fitted = true; return; }
   // 和渲染时用同一套间距（嵌入时 1.3 倍），否则算出来的包围盒偏小、底行会被裁
   const spread = isEmbedded() ? 1.3 : 1;
-  const xs = nodes.map((n, i) => (n.x || i * 190) * spread);
-  const ys = nodes.map((n) => (n.generation || 0) * 150 * spread);
+  const layout = treeLayout(nodes);
+  const points = nodes.map((n, i) => treePoint(n, i, spread, layout));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs) + 156;
   const minY = Math.min(...ys);
@@ -4695,7 +4736,10 @@ async function runPalette(query) {
       S.docs.delete(doc.id);
       await openDoc(doc.id);
     } },
-    { kind: '动作', name: '新建关系树', run: async () => { await createDoc('familyTree'); } },
+    { kind: '动作', name: '新建关系树（选模版）', run: () => {
+      window.open('/relationship', '_blank', 'noopener');
+    } },
+    { kind: '动作', name: '新建关系树（留在此页）', run: async () => { await createDoc('familyTree'); } },
     { kind: '动作', name: '新建地图', run: async () => { await createDoc('map'); } },
     { kind: '动作', name: '分享与发布', run: () => publishDialog() },
     { kind: '动作', name: '类型与属性', run: () => typeManager() },
@@ -5131,6 +5175,7 @@ function bindEvents() {
     openCtx(event.clientX, event.clientY, [
       { label: '新建卡片', run: () => createDoc('card') },
       { label: '新建时间线', run: () => createDoc('timeline') },
+      { label: '新建关系树', run: () => window.open('/relationship', '_blank', 'noopener') },
       { label: '新建文件夹', run: () => createDoc('folder') },
     ]);
   });

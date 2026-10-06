@@ -51,11 +51,11 @@ from .models import (
     MOON_FULL,
     MOON_QUARTERS,
     PRECISIONS,
+    RELATION_LABELS,
     ROLE_EDITOR,
     ROLE_OWNER,
     ROLE_VIEWER,
     TREE_EDGE_KINDS,
-    TREE_EDGE_LABELS,
     TREE_KINDS,
     Calendar,
     Card,
@@ -77,6 +77,7 @@ from .models import (
     make_slug,
 )
 from .classic import ERA_ID_BASE
+from .relations import relation_style
 from .normalize import (
     ValueErrorCN,
     as_alias_list,
@@ -1426,7 +1427,7 @@ def tree_variant_detail(request, variant_id):
 @csrf_exempt
 @require_http_methods(["POST"])
 def tree_node_collection(request, variant_id):
-    """往树上加一个人（可以顺手吸附一张已有卡片）。"""
+    """往树上加一格：一个人（可以顺手吸附一张已有卡片），或者一张备注。"""
     world = current_world()
     variant = get_variant(world, variant_id)
     if variant is None:
@@ -1434,10 +1435,24 @@ def tree_node_collection(request, variant_id):
 
     payload = parse_json(request)
     card = get_document(world, payload.get("card")) if payload.get("card") else None
+    kind = as_text(payload.get("kind"), 8)
+    if kind not in {value for value, _label in TreeNode.NODE_KINDS}:
+        kind = TreeNode.NODE_PERSON
+    note = as_text(payload.get("note"), 4000)
+    # 显式传了 name 就照办，**空字符串也算数**——网格编辑器右键长出来的新卡片
+    # 就是"还没有名字"的状态（虚线空卡 + 添加名称），那时该由前端就地起名。
+    if "name" in payload:
+        name = as_text(payload.get("name"), 120)
+    elif kind == TreeNode.NODE_NOTE:
+        name = "备注"
+    else:
+        name = card.name if card else "新成员"
     node = TreeNode.objects.create(
         variant=variant,
         card=card,
-        name=as_text(payload.get("name"), 120) or (card.name if card else "新成员"),
+        kind=kind,
+        note=note,
+        name=name,
         subtitle=as_text(payload.get("subtitle"), 120),
         image=as_text(payload.get("image"), 4000),
         group=as_text(payload.get("group"), 60),
@@ -1453,7 +1468,7 @@ def tree_node_collection(request, variant_id):
 @csrf_exempt
 @require_http_methods(["GET", "PUT", "DELETE"])
 def tree_node_detail(request, node_id):
-    """树上一个人：读 / 改（姓名、头像、分组、位置…）/ 删。"""
+    """树上的一格：读 / 改（姓名、头像、分组、位置、备注、已故…）/ 删。"""
     world = current_world()
     node = get_tree_node(world, node_id)
     if node is None:
@@ -1469,20 +1484,26 @@ def tree_node_detail(request, node_id):
     payload = parse_json(request)
     if "card" in payload:
         node.card = get_document(world, payload.get("card")) if payload.get("card") else None
-    for field, limit in (("name", 120), ("subtitle", 120), ("image", 4000), ("group", 60), ("group_color", 24)):
+    for field, limit in (("name", 120), ("subtitle", 120), ("image", 4000),
+                         ("group", 60), ("group_color", 24), ("note", 4000)):
         if field in payload:
             setattr(node, field, as_text(payload.get(field), limit))
+    if "kind" in payload:
+        kind = as_text(payload.get("kind"), 8)
+        if kind in {value for value, _label in TreeNode.NODE_KINDS}:
+            node.kind = kind
     for field in ("generation", "position"):
         if field in payload:
             setattr(node, field, as_int(payload.get(field), getattr(node, field)))
     for field in ("x", "y"):
         if field in payload:
             setattr(node, field, float(payload.get(field) or 0.0))
-    for field in ("junction", "deceased"):
+    for field in ("junction", "deceased", "favourite"):
         if field in payload:
             setattr(node, field, bool(payload.get(field)))
-    if node.card is not None and node.name != node.card.name:
-        node.name = node.card.name      # 吸了卡片就以卡片名为准
+    # 吸了卡片就以卡片名为准（备注没有卡片，不受这条约束）
+    if node.card is not None and not node.is_note and node.name != node.card.name:
+        node.name = node.card.name
     node.save()
     return json_response(node.to_payload())
 
@@ -1537,10 +1558,14 @@ def tree_edge_collection(request, variant_id):
         return error("两个人不在同一棵树上")
 
     kind = as_text(payload.get("kind"), 20) or "parent"
-    label = as_text(payload.get("label"), 40) or dict(TREE_EDGE_LABELS).get(kind, "")
+    # 显式传了 label 就照办，**空字符串也算数**——"暂时跳过"留下的那条线就是
+    # "先连上、以后再命名"，不该被兜底成「自定义」印在线上。
+    label = (as_text(payload.get("label"), 40) if "label" in payload
+             else RELATION_LABELS.get(kind, ""))
     edge, created = TreeEdge.objects.get_or_create(
         variant=variant, source=source, target=target, kind=kind,
-        defaults={"label": label, "style": as_text(payload.get("style"), 20)},
+        defaults={"label": label, "style": as_text(payload.get("style"), 20)
+                  or relation_style(kind)},
     )
     return json_response(edge.to_payload())
 

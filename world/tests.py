@@ -728,12 +728,14 @@ class TreeTests(BaseWorldCase):
         renamed = self.client.put(f"/api/world/tree-variants/{self.variant_id}", data=json.dumps(
             {"edge_labels": {"parent": "生父"}}), content_type="application/json").json()
         self.assertEqual(renamed["resolved_labels"]["parent"], "生父")
-        self.assertEqual(renamed["resolved_labels"]["spouse"], "配偶")   # 其余仍走模板
+        self.assertEqual(renamed["resolved_labels"]["spouse"], "伴侣")   # 其余仍走模板
 
     def test_military_template_labels(self):
+        # 模版的关系名按 /relationship 的设计稿走（军事那份：军团长 / 百夫长 / 护民官…）
         variant = self.client.post(f"/api/world/trees/{self.tree_id}/variants", data=json.dumps(
             {"name": "军团", "kind": "military"}), content_type="application/json").json()
-        self.assertEqual(variant["resolved_labels"]["parent"], "上级")
+        self.assertEqual(variant["resolved_labels"]["parent"], "军团长")
+        self.assertEqual(variant["resolved_labels"]["child"], "百夫长")
 
     def test_fork_copies_nodes_and_edges(self):
         a = self.add_node("甲")
@@ -782,6 +784,161 @@ class TreeTests(BaseWorldCase):
     def test_tree_state_rejects_non_tree_document(self):
         card_doc, _ = self.make_card(name="卡片")
         self.assertEqual(self.client.get(f"/api/world/trees/{card_doc.id}").status_code, 400)
+
+
+class RelationshipPageTests(BaseWorldCase):
+    """独立的「关系树」页（/relationship）：模版目录 / 按模版建树 / 关系清单 / 网格。"""
+
+    def test_page_renders_and_accepts_doc_id(self):
+        page = self.client.get("/relationship")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "选择您要构建的树的类型")
+        self.assertContains(page, 'data-doc="0"')
+
+        document = self._new_tree("family")["document"]
+        with_doc = self.client.get(f"/relationship?doc={document['id']}")
+        self.assertContains(with_doc, f'data-doc="{document["id"]}"')
+
+    def test_templates_cover_the_five_design_specs(self):
+        data = self.client.get("/api/world/relationship/templates").json()
+        self.assertEqual([item["id"] for item in data["templates"]],
+                         ["family", "corporate", "military", "royal", "blank"])
+        family = data["templates"][0]
+        # 图2 那一列：现成的关系名，顺序就是设计稿的顺序
+        self.assertEqual([item["label"] for item in family["relations"]],
+                         ["父母", "子女", "伴侣", "前任", "兄弟姐妹",
+                          "同父异母/同母异父兄弟姐妹", "养父母/养子女", "继父母"])
+        self.assertTrue(all(item["label"] for item in data["templates"][1]["relations"]))
+        self.assertEqual(data["templates"][4]["relations"], [])
+        # 网格参数前后端共用一份，卡片宽高必须是整数格
+        grid = data["grid"]
+        self.assertEqual(grid["col_step"], grid["card_cols"] + grid["gap_x"])
+        self.assertEqual(grid["row_step"], grid["card_rows"] + grid["gap_y"])
+
+    def test_create_tree_seeds_relations_and_optional_demo(self):
+        created = self._new_tree("family", with_demo=True)
+        self.assertEqual(len(created["variant"]["nodes"]), 9)
+        self.assertEqual(len(created["variant"]["edges"]), 10)
+        self.assertEqual(created["variant"]["kind"], "family")
+
+        # 示例人物落库时是**像素**坐标，且必须是网格整数倍（"边框严格贴网格"）
+        step = 28
+        for node in created["variant"]["nodes"]:
+            self.assertEqual(node["x"] % step, 0)
+            self.assertEqual(node["y"] % step, 0)
+
+        plain = self._new_tree("corporate", with_demo=False)
+        self.assertEqual(plain["variant"]["nodes"], [])
+        self.assertEqual([item["kind"] for item in plain["variant"]["relations"]],
+                         ["parent", "child", "spouse", "ex", "sibling", "half_sibling", "adoptive", "step"])
+
+        listing = self.client.get("/api/world/relationship/trees").json()["trees"]
+        self.assertEqual({item["id"] for item in listing},
+                         {created["document"]["id"], plain["document"]["id"]})
+        self.assertEqual(next(item for item in listing if item["id"] == created["document"]["id"])["people"], 9)
+
+    def test_tree_detail_shape_and_relation_editing(self):
+        created = self._new_tree("military", with_demo=False)
+        doc_id = created["document"]["id"]
+
+        state = self.client.get(f"/api/world/relationship/trees/{doc_id}").json()
+        self.assertEqual(state["variant"]["kind_label"], "军事")
+        self.assertEqual(state["variant"]["resolved_labels"]["parent"], "军团长")
+        self.assertEqual(state["grid"]["grid"], 28)
+        self.assertIn({"value": "half_sibling", "label": "同父异母/同母异父兄弟姐妹", "style": "dashed"},
+                      state["relation_kinds"])
+
+        # 整份替换：改名 + 停用 + 加一条自定义
+        replaced = self.client.put(f"/api/world/relationship/trees/{doc_id}/relations", data=json.dumps({
+            "relations": [
+                {"kind": "parent", "label": "老军团长", "enabled": True},
+                {"kind": "child", "enabled": False},
+                {"kind": "sworn", "label": "结义兄弟"},
+            ]
+        }), content_type="application/json").json()
+        self.assertEqual([item["label"] for item in replaced["relations"]],
+                         ["老军团长", "百夫长", "结义兄弟"])
+        self.assertEqual(replaced["relations"][1]["enabled"], False)
+        self.assertEqual(replaced["relations"][2]["style"], "")
+        self.assertEqual(replaced["resolved_labels"]["parent"], "老军团长")
+
+        # 关系清单是**这棵树**的设置，不能串到别的树上
+        other = self._new_tree("military", with_demo=False)
+        other_state = self.client.get(
+            f"/api/world/relationship/trees/{other['document']['id']}").json()
+        self.assertEqual([item["label"] for item in other_state["variant"]["relations"]][0], "军团长")
+
+    def test_relations_must_be_a_list(self):
+        doc_id = self._new_tree("family", with_demo=False)["document"]["id"]
+        response = self.client.put(f"/api/world/relationship/trees/{doc_id}/relations",
+                                   data=json.dumps({"relations": "父母"}), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_detail_rejects_non_tree_document(self):
+        card_doc, _ = self.make_card(name="卡片")
+        self.assertEqual(
+            self.client.get(f"/api/world/relationship/trees/{card_doc.id}").status_code, 400)
+        self.assertEqual(
+            self.client.get("/api/world/relationship/trees/999999").status_code, 404)
+
+    def test_nodes_can_be_notes_with_grid_free_positions(self):
+        created = self._new_tree("blank", with_demo=False)
+        variant_id = created["variant"]["id"]
+
+        person = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes",
+                                {"name": "某人", "x": 0, "y": 0}).json()
+        self.assertEqual(person["kind"], "person")
+        self.assertFalse(person["is_note"])
+
+        # 不给名字就给"新成员"；**显式给空名字**表示"还没起名"（网格编辑器的空卡片）
+        unnamed = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes",
+                                 {"name": "", "x": 224, "y": 0}).json()
+        self.assertEqual(unnamed["name"], "")
+        fallback = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes", {"x": 448}).json()
+        self.assertEqual(fallback["name"], "新成员")
+
+        note = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes",
+                              {"kind": "note", "note": "这里以前是一片海", "x": 672, "y": 0}).json()
+        self.assertEqual(note["kind"], "note")
+        self.assertTrue(note["is_note"])
+        self.assertEqual(note["name"], "备注")
+
+        moved = self.client.put(f"/api/world/tree-nodes/{note['id']}", data=json.dumps(
+            {"note": "改过了", "x": 196.5, "favourite": True}), content_type="application/json").json()
+        self.assertEqual(moved["note"], "改过了")
+        # 备注不是人：位置可以落在网格之外（只有卡片边框要贴网格）
+        self.assertEqual(moved["x"], 196.5)
+        self.assertTrue(moved["favourite"])
+
+    def test_edge_style_and_blank_label(self):
+        created = self._new_tree("family", with_demo=False)
+        variant_id = created["variant"]["id"]
+        a = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes", {"name": "甲"}).json()
+        b = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes", {"name": "乙"}).json()
+        c = self.post_json(f"/api/world/tree-variants/{variant_id}/nodes", {"name": "丙"}).json()
+
+        edge = self.post_json(f"/api/world/tree-variants/{variant_id}/edges", {
+            "source": a["id"], "target": b["id"], "kind": "half_sibling",
+        }).json()
+        # 虚线关系（非婚生直系）自动带 dashed 线型
+        self.assertEqual(edge["style"], "dashed")
+        self.assertEqual(edge["display_label"], "同父异母/同母异父兄弟姐妹")
+
+        # 显式给空 label：这条线就是"先连上、以后再命名"，别被兜底成「自定义」
+        blank = self.post_json(f"/api/world/tree-variants/{variant_id}/edges", {
+            "source": a["id"], "target": c["id"], "kind": "custom", "label": "",
+        }).json()
+        self.assertEqual(blank["label"], "")
+        # 没给 label 才走兜底
+        filled = self.post_json(f"/api/world/tree-variants/{variant_id}/edges", {
+            "source": b["id"], "target": c["id"], "kind": "custom",
+        }).json()
+        self.assertEqual(filled["label"], "自定义")
+
+    def _new_tree(self, template, with_demo=False):
+        return self.post_json("/api/world/relationship/trees", {
+            "template": template, "name": f"{template} 树", "with_demo": with_demo,
+        }).json()
 
 
 class MapTests(BaseWorldCase):
