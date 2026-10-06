@@ -3535,24 +3535,32 @@ function renderTreeTool(entry) {
     });
     group.addEventListener('pointerdown', (event) => {
       if (ui.mode === 'pan') return;
+      if (isEmbedded()) return;        // 只读：读者不能拖动成员（以前会每帧重绘整块面板 -> 一片空白）
       event.stopPropagation();
-      const rectPaper = canvas.getBoundingClientRect();
       const start = { x: event.clientX, y: event.clientY, px: node._px, py: node._py };
+      // 拖动过程中只挪这一张卡（含它两端的连线），松手才整块重绘 + 落库。
+      // 以前每次 pointermove 都 renderPanels()，整块面板每帧重建，又卡又闪。
       const move = (e) => {
         node._px = start.px + (e.clientX - start.x) / ui.zoom;
         node._py = start.py + (e.clientY - start.y) / ui.zoom;
         node.x = Math.round(node._px);
         node.generation = Math.round(node._py / 150);
-        const label = $(`.tree-node[data-id="${node.id}"] .tree-node-sub`, wrap);
-        void label; void rectPaper;
-        renderPanels();
+        // 只挪这张卡：连线在松手后的整体重绘里更新（每帧重建整块面板才是问题所在）
+        group.setAttribute('transform', `translate(${node._px} ${node._py})`);
+        canvas.classList.add('is-dragging-node');
       };
       const up = async () => {
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', up);
-        await api(`/api/world/tree-nodes/${node.id}`, {
-          method: 'PUT', body: { x: node.x, generation: node.generation },
-        });
+        canvas.classList.remove('is-dragging-node');
+        try {
+          await api(`/api/world/tree-nodes/${node.id}`, {
+            method: 'PUT', body: { x: node.x, generation: node.generation },
+          });
+        } catch (error) {
+          if (!error || !error.isReadonly) throw error;
+        }
+        renderPanels();
       };
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);

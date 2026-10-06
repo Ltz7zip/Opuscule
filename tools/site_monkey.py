@@ -169,8 +169,51 @@ def main() -> int:
                         if after_nodes != info["count"]:
                             problems.append(f"关系树：点击后节点数从 {info['count']} 变成 {after_nodes}（被重绘）")
                 page.close()
-        browser.close()
 
+        # 关系树上模拟"长按拖动"：只读视图不该被拖走，更不该变空白
+        if slug:
+            tree = next((d for d in docs if d["type"] == "familyTree" and d.get("slug")), None)
+            if tree:
+                page = browser.new_page(viewport={"width": 1400, "height": 920})
+                page.goto(f"{BASE}/s/{slug}/{tree['slug']}/", wait_until="domcontentloaded")
+                page.wait_for_timeout(4000)
+                frame = page.frames[1] if len(page.frames) > 1 else None
+                if frame:
+                    try:
+                        info = frame.evaluate("""() => {
+                          const n = document.querySelector('.tree-node');
+                          if (!n) return null;
+                          const r = n.getBoundingClientRect();
+                          return {x: r.x + r.width / 2, y: r.y + r.height / 2,
+                                  count: document.querySelectorAll('.tree-node').length};
+                        }""")
+                    except Exception:                # noqa: BLE001
+                        info = None
+                    if info:
+                        box = page.locator("iframe").first.bounding_box()
+                        page.mouse.move(box["x"] + info["x"], box["y"] + info["y"])
+                        page.mouse.down()
+                        for step in range(1, 6):
+                            page.mouse.move(box["x"] + info["x"] + step * 40, box["y"] + info["y"] + step * 25)
+                            page.wait_for_timeout(120)
+                        page.mouse.up()
+                        page.wait_for_timeout(1200)
+                        try:
+                            after = frame.evaluate("""() => ({
+                              count: document.querySelectorAll('.tree-node').length,
+                              canvas: (() => { const c = document.querySelector('.tree-canvas');
+                                return c ? [c.clientWidth, c.clientHeight] : [0, 0]; })(),
+                            })""")
+                        except Exception:                # noqa: BLE001
+                            after = {"count": 0, "canvas": [0, 0]}
+                        print(f"{'关系树拖动（只读）':24s} 节点 {info['count']}→{after['count']} · 画布 {after['canvas']}")
+                        if after["count"] != info["count"]:
+                            problems.append(f"关系树：只读拖动后节点数变了（{info['count']}→{after['count']}）")
+                        if after["canvas"][1] < 120:
+                            problems.append("关系树：只读拖动后画布被压没了（疑似空白）")
+                page.close()
+
+        browser.close()
     print("\n问题：", problems or "（无）")
     return 1 if problems else 0
 
