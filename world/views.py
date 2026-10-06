@@ -60,7 +60,9 @@ from .models import (
     MARKER_LABEL,
     MARKER_PIN,
     MAX_VERSIONS,
+    ROLE_EDITOR,
     ROLE_OWNER,
+    ROLE_VIEWER,
     TREE_EDGE_KINDS,
     TREE_EDGE_LABELS,
     TREE_KINDS,
@@ -1758,3 +1760,400 @@ def graph_view(request):
     payload["center_name"] = center_doc.name if center_doc is not None else ""
     payload["isolated_suggestions"] = graph_service.suggestions(world)
     return json_response(payload)
+
+
+# --------------------------------------------------------------------------- #
+# 账号 / 成员 / 在线 / 版本历史
+# --------------------------------------------------------------------------- #
+def _user_payload(user) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "handle": user.username,
+        "initial": (user.get_full_name() or user.username or "?")[:1].upper(),
+        "email": user.email,
+    }
+
+
+def _register_user(payload: dict, request=None):
+    """注册的公共逻辑：返回 ``(user, error_message)``。
+
+    第一个账号直接成为所有者；之后的账号必须带一个还能用的邀请码。
+    """
+    from django.contrib.auth import get_user_model, login
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    User = get_user_model()
+    username = as_text(payload.get("username"), 150).strip()
+    password = payload.get("password") or ""
+    invite_code = as_text(payload.get("invite"), 64).strip()
+    display = as_text(payload.get("display_name"), 150).strip()
+
+    if len(username) < 3:
+        return None, "用户名至少 3 个字符"
+    if User.objects.filter(username__iexact=username).exists():
+        return None, "这个用户名已经被用了"
+    try:
+        validate_password(password)
+    except ValidationError as exc:
+        return None, "；".join(exc.messages)
+
+    first_user = not User.objects.exists()
+    invite = None
+    if not first_user:
+        invite = InviteCode.objects.filter(code__iexact=invite_code).first()
+        if invite is None or not invite.is_valid():
+            return None, "邀请码不对或者已经用完了"
+
+    user = User.objects.create_user(username=username, password=password)
+    if display:
+        parts = display.split(" ", 1)
+        user.first_name = parts[0][:150]
+        user.last_name = (parts[1][:150] if len(parts) > 1 else "")
+        user.save(update_fields=["first_name", "last_name"])
+
+    world = current_world()
+    role = ROLE_OWNER if first_user else (invite.role if invite else ROLE_VIEWER)
+    permissions.ensure_membership(user, world, role)
+    if first_user and world.owner_id is None:
+        world.owner = user
+        world.save(update_fields=["owner"])
+    if invite is not None:
+        invite.uses += 1
+        invite.save(update_fields=["uses"])
+    if request is not None:
+        login(request, user)
+    return user, ""
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def auth_me(request):
+    """我是谁、能不能编辑、要不要先做初始化。"""
+    world = current_world()
+    if request.method == "POST":
+        payload = parse_json(request)
+        user, message = _register_user(payload, request)
+        if user is None:
+            return error(message)
+        return json_response({"viewer": permissions.viewer_payload(request.user, world),
+                              "created_owner": not permissions.users_exist()})
+    return json_response({
+        "viewer": permissions.viewer_payload(request.user, world),
+        "needs_setup": not permissions.users_exist(),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def auth_register(request):
+    """注册（JSON）。第一个账号直接成为所有者；之后必须带有效的邀请码。"""
+    world = current_world()
+    created_owner = not permissions.users_exist() or world.memberships.count() <= 1
+    user, message = _register_user(parse_json(request), request)
+    if user is None:
+        return error(message)
+    return json_response({
+        "viewer": permissions.viewer_payload(request.user, world),
+        "created_owner": bool(created_owner),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def auth_login(request):
+    """登录（JSON）。"""
+    from django.contrib.auth import authenticate, login
+
+    world = current_world()
+    payload = parse_json(request)
+    username = as_text(payload.get("username"), 150).strip()
+    password = payload.get("password") or ""
+    user = authenticate(request, username=username, password=password)
+    if user is None:
+        return json_response({"error": "用户名或密码不对"}, status=400)
+    login(request, user)
+    permissions.ensure_membership(user, world, ROLE_OWNER if world.owner_id in (None, user.id) else ROLE_VIEWER)
+    return json_response({"viewer": permissions.viewer_payload(request.user, world)})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def auth_logout(request):
+    """退出（JSON）。"""
+    from django.contrib.auth import logout
+
+    logout(request)
+    return json_response({"ok": True})
+
+
+def _auth_page(request, mode: str = "login", error: str = "", status: int = 200):
+    """登录 / 注册页的公共渲染。"""
+    world = current_world_or_none()
+    needs_setup = not permissions.users_exist()
+
+    # 邀请链接里带的码：预填 + 先告诉用户它还能不能用（别等提交才说"用完了"）
+    invite_hint = ""
+    code_from_link = (request.POST.get("invite") or request.GET.get("invite") or "").strip()
+    if code_from_link and not needs_setup:
+        candidate = InviteCode.objects.filter(code__iexact=code_from_link).first()
+        if candidate is None:
+            invite_hint = "这个邀请码不存在，检查一下是不是复制少了字符"
+        elif not candidate.is_valid():
+            invite_hint = "这个邀请码已经用完了，找所有者再要一个"
+        else:
+            invite_hint = "邀请码有效，填好用户名和密码就能进"
+
+    return render(request, "auth.html", {
+        "mode": mode,
+        "needs_setup": needs_setup,
+        "world": world,
+        "page_title": "创建所有者账号" if needs_setup else ("注册" if mode == "register" else "登录"),
+        "page_lead": ("第一次使用：这个账号会成为世界的所有者，之后邀请别人来一起写。"
+                      if needs_setup else ""),
+        "error": error,
+        "username": request.POST.get("username", ""),
+        "invite": request.POST.get("invite") or request.GET.get("invite", ""),
+        "invite_hint": invite_hint,
+    }, status=status)
+
+
+@require_http_methods(["GET", "POST"])
+def login_page(request):
+    """登录页（表单）。已经是登录状态就直接进工作区。"""
+    from django.contrib.auth import authenticate, login
+
+    if request.user.is_authenticated:
+        return redirect("/world")
+    if request.method != "POST":
+        if not permissions.users_exist():
+            return redirect("/register")
+        return _auth_page(request, "login")
+
+    username = as_text(request.POST.get("username"), 150).strip()
+    password = request.POST.get("password") or ""
+    user = authenticate(request, username=username, password=password)
+    if user is None:
+        return _auth_page(request, "login", "用户名或密码不对", status=400)
+    login(request, user)
+    world = current_world()
+    permissions.ensure_membership(user, world, ROLE_OWNER if world.owner_id in (None, user.id) else ROLE_VIEWER)
+    return redirect("/world")
+
+
+@require_http_methods(["GET", "POST"])
+def register_page(request):
+    """注册页（表单）。第一个账号不需要邀请码。"""
+    from django.contrib.auth import login
+
+    if request.user.is_authenticated:
+        return redirect("/world")
+    if request.method != "POST":
+        return _auth_page(request, "register")
+
+    payload = {
+        "username": request.POST.get("username"),
+        "password": request.POST.get("password"),
+        "invite": request.POST.get("invite"),
+        "display_name": request.POST.get("display_name"),
+    }
+    user, message = _register_user(payload, None)
+    if user is None:
+        return _auth_page(request, "register", message, status=400)
+    login(request, user)
+    return redirect("/world")
+
+
+@require_http_methods(["GET", "POST"])
+def logout_page(request):
+    """退出并回到工作区（未登录也能看）。"""
+    from django.contrib.auth import logout
+
+    logout(request)
+    return redirect("/world")
+
+
+@csrf_exempt
+@require_safe
+def collaborators(request):
+    """成员列表 + 邀请码（有权限的人才能看邀请码）。"""
+    world = current_world()
+    viewer = permissions.viewer_payload(request.user, world)
+    members = []
+    for membership in world.memberships.select_related("user").order_by("id"):
+        members.append({
+            **_user_payload(membership.user),          # id 会被下面覆盖成成员 id
+            "id": membership.id,
+            "user_id": membership.user_id,
+            "role": membership.role,
+            "joined_at": membership.created_at.isoformat() if membership.created_at else None,
+        })
+    # 邀请码只给管理员看；没权限的人拿到空列表（而不是没有这个键，前端就不用分支了）
+    data = {"members": members, "viewer": viewer, "invites": []}
+    if viewer.get("can_admin"):
+        data["invites"] = [
+            {
+                "id": invite.id,
+                "code": invite.code,
+                "role": invite.role,
+                "note": invite.note,
+                "uses": invite.uses,
+                "max_uses": invite.max_uses,
+                "valid": invite.is_valid(),
+            }
+            for invite in world.invites.all()[:20]
+        ]
+    return json_response(data)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def invite_create(request):
+    """发一个邀请码（只有所有者能发）。"""
+    world = current_world()
+    if not permissions.can_admin(request.user, world):
+        return json_response({"error": "只有所有者能发邀请码"}, status=403)
+
+    payload = parse_json(request)
+    role = as_text(payload.get("role"), 20) or ROLE_EDITOR
+    if role not in (ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER):
+        role = ROLE_EDITOR
+    code = as_text(payload.get("code"), 64).strip().replace("-", "").replace("_", "")
+    if not code:
+        code = secrets.token_urlsafe(12)[:12]
+    if InviteCode.objects.filter(code__iexact=code).exists():
+        return error("这个邀请码已经存在")
+    invite = InviteCode.objects.create(
+        world=world,
+        code=code,
+        role=role,
+        note=as_text(payload.get("note"), 120),
+        max_uses=clamp_int(payload.get("max_uses", 1), 1, 100),
+        created_by=request.user if request.user.is_authenticated else None,
+    )
+    return json_response({"id": invite.id, "code": invite.code, "role": invite.role,
+                          "url": f"/register?invite={invite.code}"})
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def invite_delete(request, invite_id):
+    """作废一个邀请码。"""
+    world = current_world()
+    if not permissions.can_admin(request.user, world):
+        return json_response({"error": "只有所有者能改邀请码"}, status=403)
+    invite = world.invites.filter(pk=as_int(invite_id)).first()
+    if invite is None:
+        return json_response({"error": "邀请码不存在"}, status=404)
+    invite.delete()
+    return json_response({"ok": True})
+
+
+@csrf_exempt
+@require_http_methods(["PUT", "DELETE"])
+def member_detail(request, member_id):
+    """改成员角色 / 移除成员（只有所有者能动）。"""
+    world = current_world()
+    if not permissions.can_admin(request.user, world):
+        return json_response({"error": "只有所有者能改成员"}, status=403)
+
+    membership = world.memberships.filter(pk=as_int(member_id)).select_related("user").first()
+    if membership is None:
+        return json_response({"error": "成员不存在"}, status=404)
+
+    if request.method == "DELETE":
+        if membership.role == ROLE_OWNER and world.memberships.filter(role=ROLE_OWNER).count() <= 1:
+            return error("至少要留一个所有者")
+        membership.delete()
+        return json_response({"ok": True})
+
+    payload = parse_json(request)
+    role = as_text(payload.get("role"), 20)
+    if role in (ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER):
+        if membership.role == ROLE_OWNER and role != ROLE_OWNER \
+                and world.memberships.filter(role=ROLE_OWNER).count() <= 1:
+            return error("至少要留一个所有者")
+        membership.role = role
+        membership.save(update_fields=["role"])
+    return json_response({"ok": True, "role": membership.role})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def presence(request):
+    """在线状态：GET 看谁在，POST 打一次心跳。"""
+    world = current_world()
+    if request.method == "POST":
+        payload = parse_json(request)
+        document = get_document(world, payload.get("document")) if payload.get("document") else None
+        if request.user.is_authenticated:
+            Presence.touch(world, request.user, document)
+    online = Presence.online(world)
+    return json_response({
+        "online": [entry.to_payload() for entry in online],
+        "count": len(online),
+    })
+
+
+@csrf_exempt
+@require_safe
+def document_versions(request, doc_id):
+    """一份文档的版本历史（最近的在前面）。"""
+    world = current_world()
+    document = get_document(world, doc_id)
+    if document is None:
+        return json_response(DOC_NOT_FOUND, status=404)
+    versions = document.versions.order_by("-index")
+    return json_response({
+        "document": {"id": document.id, "name": document.name},
+        "versions": [version.to_payload() for version in versions],
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def document_version_detail(request, doc_id, index):
+    """看某一版的内容 / 回滚到那一版（回滚前会自动备份当前状态）。"""
+    from . import exchange
+
+    world = current_world()
+    document = get_document(world, doc_id)
+    if document is None:
+        return json_response(DOC_NOT_FOUND, status=404)
+
+    version = document.versions.filter(index=as_int(index, 1)).first()
+    if version is None:
+        return json_response({"error": "没有这一版"}, status=404)
+
+    if request.method == "GET":
+        # 顶层就是这一版（含 payload），前端直接预览
+        return json_response(version.to_payload(with_body=True))
+
+    # 回滚：先给"现在"留一版，再把快照写回去（名字、设置、卡片正文与属性一起回来）
+    snapshot_document(document, label="回滚前的自动备份", author=request.user)
+    payload = version.payload if isinstance(version.payload, dict) else {}
+
+    card_payload = payload.get("card")
+    if isinstance(card_payload, dict):
+        card, _created = Card.objects.get_or_create(
+            document=document, defaults={"entity_type": document.entity_type})
+        card.aliases = as_alias_list(card_payload.get("aliases"))
+        card.blocks = normalize_blocks(card_payload.get("blocks") or [])
+        card.body = blocks_to_text(card.blocks)
+        card.values = card_payload.get("values") or {}
+        card.era_mode = card_payload.get("era_mode") or card.era_mode
+        card.era_ids = card_payload.get("era_ids") or card.era_ids
+        card.save()
+
+    if payload.get("name"):
+        document.name = as_text(payload.get("name"), 200)
+    if isinstance(payload.get("settings"), dict):
+        document.settings = payload["settings"]
+    document.save(update_fields=["name", "settings", "updated_at"])
+    touch_document(document, label=f"回滚到 v{version.index}", author=request.user)
+    return json_response({
+        "ok": True,
+        "document": document.to_payload(with_card=True),
+        "revision": as_int((document.settings or {}).get("revision"), 0),
+    })
