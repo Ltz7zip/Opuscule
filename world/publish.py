@@ -130,10 +130,25 @@ def search_documents(world: World, keyword: str, limit: int = 400) -> list[dict]
         if position < 0:
             position = 0
         window = haystack[max(0, position - 40):position + len(keyword) + 60].replace("\n", " ").strip()
+        # 排序权重：名字开头 > 名字里 > 别名 > 正文 > 属性/事件
+        name_low = document.name.lower()
+        if name_low.startswith(lowered):
+            score = 100
+        elif lowered in name_low:
+            score = 80
+        elif any(lowered in (alias or "").lower() for alias in (card.aliases if card else []) or []):
+            score = 60
+        elif lowered in (card.body or "").lower() if card else False:
+            score = 40
+        elif matched_events:
+            score = 35
+        else:
+            score = 20
         hits.append({
             "document": document,
+            "score": score,
             "name": document.name,
-            "name_hit": lowered in document.name.lower(),
+            "name_hit": lowered in name_low,
             "type_label": document.get_document_type_display(),
             "type_name": document.entity_type.name if document.entity_type else "",
             "era_name": document.era.name if document.era else "",
@@ -143,7 +158,26 @@ def search_documents(world: World, keyword: str, limit: int = 400) -> list[dict]
         })
         if len(hits) >= limit:
             break
+    hits.sort(key=lambda item: (-item["score"], item["name"]))
     return hits
+
+
+def suggest_similar(world: World, keyword: str, limit: int = 5) -> list[dict]:
+    """搜不到时的"你是不是想找"：拿已发布文档的名字做近似匹配。"""
+    import difflib
+
+    keyword = (keyword or "").strip()
+    if len(keyword) < 2:
+        return []
+    names = {}
+    for document in site_documents(world):
+        names[document.name] = document
+    close = difflib.get_close_matches(keyword, list(names), n=limit, cutoff=0.6)
+    if not close:
+        lowered = keyword.lower()
+        close = [name for name in names if lowered in name.lower() or name.lower() in lowered][:limit]
+    return [{"name": name, "slug": names[name].slug, "type": names[name].document_type}
+            for name in close]
 
 
 def paginate(items: list, page: int = 1, per_page: int = 20) -> dict:
@@ -171,9 +205,12 @@ def publish_preview(world: World) -> dict:
     """
     from .models import publish_state
 
+    first_time = not world.is_published      # 第一次发布：所有该上站的都是"新增"
     added, changed, removed = [], [], []
     for document in world.documents.filter(deleted_at__isnull=True).exclude(document_type=DOC_FOLDER):
         state = publish_state(document)
+        if first_time and state == "unpublished":
+            state = "pending"
         entry = {"id": document.id, "name": document.name, "type": document.document_type,
                  "state": state, "updated_at": document.updated_at.isoformat() if document.updated_at else None}
         if state == "pending":
@@ -222,13 +259,15 @@ def era_summary(world: World, era) -> dict:
 
 def site_eras(world: World) -> list[dict]:
     """站点上"有内容"的纪元（有事件、或挂着文档）。"""
-    shown = {item["id"] for item in site_filters(world)["eras"]}
+    counts = {item["id"]: item["count"] for item in site_filters(world)["eras"]}
     rows = []
     for era in world.eras.order_by("position", "id"):
-        if era.id in shown or TimelineEvent.objects.filter(document__world=world, era=era).exists():
+        events = TimelineEvent.objects.filter(document__world=world, era=era).count()
+        if era.id in counts or events:
             rows.append({"id": era.id, "name": era.name, "theme": era.theme,
                          "description": era.description, "cover": era.cover,
-                         "length_years": era.length_years})
+                         "length_years": era.length_years,
+                         "count": counts.get(era.id, 0) + events})
     return rows
 
 
@@ -274,8 +313,11 @@ def site_sections(world: World, documents=None) -> list[dict]:
 
 @transaction.atomic
 def publish(world: World, *, audience: str | None = None, password: str | None = None,
-            note_hidden: bool = True) -> dict:
-    """发布 / 重新发布：推进版本号，并把当前所有该上站点的文档打上这个版本。"""
+            note_hidden: bool = True, author=None) -> dict:
+    """发布 / 重新发布：推进版本号，把该上站点的文档打上这个版本，并留一条发布记录。"""
+    from .models import PublishLog
+
+    diff = publish_preview(world)
     if audience:
         world.audience = audience if audience in AUDIENCE_LABELS else AUDIENCE_PUBLIC
     if password is not None:
@@ -293,6 +335,21 @@ def publish(world: World, *, audience: str | None = None, password: str | None =
     if note_hidden:
         targets = targets.exclude(hidden=True)
     targets.update(published_version=version, published_at=now)
+
+    def names(rows):
+        return [{"id": row["id"], "name": row["name"], "type": row["type"]} for row in rows][:60]
+
+    PublishLog.objects.create(
+        world=world,
+        version=version,
+        audience=world.audience,
+        counts=world.publish_summary()["counts"],
+        added=names(diff["added"]),
+        changed=names(diff["changed"]),
+        removed=names(diff["removed"]),
+        author=author if getattr(author, "is_authenticated", False) else None,
+        author_name=(author.get_username() if getattr(author, "is_authenticated", False) else "匿名"),
+    )
     return {"publish": world.publish_summary(), "version": version}
 
 

@@ -16,10 +16,14 @@
       {% endfor %}
     {% endif %}
     {% if site_eras %}
-      <div class="fc-group">按纪元</div>
+      <div class="fc-group">按纪元筛选网格</div>
       {% for item in site_eras %}
         <a class="fc-item{% if active_filter.era_id == item.id %} is-on{% endif %}"
            href="{% url 'site:home' world.published_slug %}?era={{ item.id }}">{{ item.name }}<span class="fc-count">{{ item.count }}</span></a>
+      {% endfor %}
+      <div class="fc-group">按纪元浏览时间</div>
+      {% for item in site_eras %}
+        <a class="fc-item" href="{% url 'site:era' world.published_slug item.id %}">{{ item.name }}<span class="fc-count">→</span></a>
       {% endfor %}
     {% endif %}
   </div>

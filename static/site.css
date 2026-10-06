@@ -280,3 +280,11 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
   .era-event { flex-direction: column; gap: 4px; }
   .ee-date { flex: none; }
 }
+
+/* 搜不到时的"你是不是想找" */
+.similar { display: block; margin-top: 8px; color: var(--ink-dim, #857c6b); font-size: 13.5px; }
+.similar a { color: var(--ink, #1b1710); }
+
+/* 纪元页顶部的两个跳转按钮 */
+.era-actions { display: flex; gap: 8px; margin: 4px 0 16px; }
+.era-actions .te-btn { text-decoration: none; display: inline-flex; align-items: center; height: 30px; }

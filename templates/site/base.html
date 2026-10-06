@@ -38,6 +38,18 @@
     </div>
   </footer>
   <script>
+    // 嵌进去的画布（地图 / 关系树 / 图谱）里点了节点 -> 跳到那张卡的站点页面
+    (function () {
+      window.addEventListener('message', function (event) {
+        if (event.origin !== window.location.origin) return;
+        var data = event.data || {};
+        if (data.type !== 'ws-open-doc') return;
+        var slug = data.slug || '';
+        if (!slug) return;
+        window.location.href = '/s/{{ world.published_slug }}/' + encodeURIComponent(slug) + '/';
+      });
+    })();
+
     // 筛选 chip 的展开/收起（点外面或按 Esc 关掉）
     (function () {
       var chip = document.querySelector('[data-filter]');

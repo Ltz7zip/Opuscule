@@ -35,14 +35,25 @@ def _node_payload(document, degree, entity_type_names):
 
 
 def build_graph(world, *, query: str = "", hide_isolated: bool = False, limit: int = MAX_NODES,
-                center: int | None = None, depth: int = 1) -> dict:
+                center: int | None = None, depth: int = 1, published_only: bool = False) -> dict:
     """算出世界的节点与连线。
 
     ``center`` 不为空时只返回该节点 ``depth`` 跳以内的邻域（VVD 的「以某节点为中心看邻域」）。
+    ``published_only`` 给只读的访客用：只画已经发布到站点上的文档，
+    这样点节点跳转不会跳到站点上不存在的页面。
     """
-    documents = list(
+    documents_qs = (
         world.documents.filter(deleted_at__isnull=True)
         .exclude(document_type=DOC_FOLDER)
+    )
+    if published_only:
+        from .publish import SITE_DOC_TYPES      # 局部导入，避免与 publish 循环依赖
+
+        documents_qs = documents_qs.filter(
+            hidden=False, is_published=True, document_type__in=SITE_DOC_TYPES,
+        )
+    documents = list(
+        documents_qs
         .select_related("entity_type")
         .order_by("document_type", "position", "id")[:limit]
     )

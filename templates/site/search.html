@@ -26,7 +26,14 @@
           {% endif %}
         </li>
       {% empty %}
-        <li class="empty">没找到。「{{ query }}」换个说法，或者清掉筛选再试。</li>
+        <li class="empty">
+          没找到「{{ query }}」。换个说法，或者清掉筛选再试。
+          {% if similar %}
+            <span class="similar">你是不是想找：
+              {% for item in similar %}<a href="{% url 'site:page' world.published_slug item.slug %}">{{ item.name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}
+            </span>
+          {% endif %}
+        </li>
       {% endfor %}
     </ul>
     {% if pager.pages > 1 %}

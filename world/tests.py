@@ -1940,3 +1940,99 @@ class SiteEraAndPreviewTests(BaseWorldCase):
         again = self.client.get("/api/world/publish/preview").json()
         names = [row["name"] for row in again["added"]]
         self.assertIn("发布之后才写的", names)
+
+
+class PublishLogAndRankingTests(BaseWorldCase):
+    """发布记录、搜索排序、近似名字建议。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+
+    def test_publish_writes_a_log_with_the_diff(self):
+        from . import publish
+        self.make_card(name="第一份")
+        publish.publish(self.world, audience="public", author=None)
+        log = self.world.publish_logs.first()
+        self.assertIsNotNone(log)
+        self.assertEqual(log.version, self.world.publish_version)
+        names = [row["name"] for row in log.added]
+        self.assertIn("第一份", names)
+        # 再发布一次：这次没有新增，应该记成 0
+        publish.publish(self.world, audience="public")
+        self.assertEqual(self.world.publish_logs.count(), 2)
+        self.assertEqual(self.world.publish_logs.first().added, [])
+
+    def test_publish_log_endpoint_lists_newest_first(self):
+        from . import publish
+        publish.publish(self.world, audience="public")
+        publish.publish(self.world, audience="public")
+        logs = self.client.get("/api/world/publish/log").json()["logs"]
+        self.assertGreaterEqual(len(logs), 2)
+        self.assertGreater(logs[0]["version"], logs[1]["version"])
+
+    def test_publish_preview_agrees_with_the_log(self):
+        from . import publish
+        self.make_card(name="待上线的一份")
+        preview = self.client.get("/api/world/publish/preview").json()
+        publish.publish(self.world, audience="public")
+        log = self.world.publish_logs.first()
+        self.assertEqual(preview["summary"]["added"], len(log.added))
+
+    def test_search_ranks_name_matches_first(self):
+        from . import publish
+        name_hit, _ = self.make_card(name="青铜门")
+        body_hit, _ = self.make_card(name="别的地方",
+                                     blocks=normalize_blocks([{"type": "text", "text": "这里提到青铜门"}]))
+        publish.publish(self.world, audience="public")
+        results = self.client.get(f"/s/{self.world.published_slug}/search?q=青铜门").json() \
+            if False else None
+        hits = publish.search_documents(self.world, "青铜门")
+        self.assertEqual(hits[0]["name"], "青铜门")
+        self.assertGreater(hits[0]["score"], hits[1]["score"])
+
+    def test_similar_names_when_nothing_found(self):
+        from . import publish
+        self.make_card(name="Harrowdeep")
+        publish.publish(self.world, audience="public")
+        self.assertEqual(publish.search_documents(self.world, "Harrowdeap"), [])
+        similar = publish.suggest_similar(self.world, "Harrowdeap")
+        self.assertIn("Harrowdeep", [row["name"] for row in similar])
+
+
+class GraphVisibilityTests(BaseWorldCase):
+    """图谱：只读访客只看到已发布的节点（点了才跳得到站点页面）。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+
+    def test_guest_graph_hides_unpublished_nodes(self):
+        from . import publish
+        shown, _ = self.make_card(name="已发布的")
+        hidden, _ = self.make_card(name="没发布的")
+        hidden.is_published = False
+        hidden.save(update_fields=["is_published"])
+        publish.publish(self.world, audience="public")
+
+        guest = self.client.get("/api/world/graph").json()
+        names = [node["name"] for node in guest["nodes"]]
+        self.assertIn("已发布的", names)
+        self.assertNotIn("没发布的", names)
+
+    def test_editor_graph_shows_everything(self):
+        from . import publish
+        owner, _ = self.make_card(name="所有者自己看")
+        publish.publish(self.world, audience="public")
+        self.client.post("/api/world/auth/register",
+                         data=json.dumps({"username": "图谱所有者", "password": "secret-pass-1"}),
+                         content_type="application/json")
+        graph = self.client.get("/api/world/graph").json()
+        self.assertIn("所有者自己看", [node["name"] for node in graph["nodes"]])
+
+    def test_era_page_links_back_to_grid_filter(self):
+        era = Era.objects.create(world=self.world, name="筛选纪元")
+        from . import publish
+        publish.publish(self.world, audience="public")
+        body = self.client.get(f"/s/{self.world.published_slug}/era/{era.id}").content.decode()
+        self.assertIn(f"?era={era.id}", body)
