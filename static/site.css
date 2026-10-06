@@ -189,8 +189,12 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
 }
 
 
-/* 嵌进页面的只读画布（地图 / 关系树 / 图谱） */
-.canvas-embed { margin: 20px 0 8px; }
+/* 嵌进页面的只读画布（地图 / 关系树 / 图谱）：和时间线一样铺满窗口宽 */
+.canvas-embed {
+  margin: 20px 0 8px;
+  padding: 0 clamp(12px, 3vw, 40px);
+  box-sizing: border-box;
+}
 .canvas-embed iframe {
   display: block; width: 100%;
   height: clamp(420px, 68vh, 760px);        /* 跟着窗口长，别写死 */

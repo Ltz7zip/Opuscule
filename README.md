@@ -100,6 +100,15 @@
 
 ## 画布嵌入的样式（地图 / 关系树 / 图谱）
 
+> ⚠️ 三个坑（都踩过，改动这块前先读）：
+> 1. **`fitTree()` 结尾会调 `renderPanels()`** —— 在渲染路径里反复排"适应视野"就是**死循环**
+>    （页面疯狂刷新）。嵌入时只适应一次，之后靠 `ResizeObserver` 最多补两次（总计 ≤3）。
+> 2. **画布要有真实尺寸再适应**：flex 布局 + 站点给的 iframe 高度都要到位，
+>    否则会按 150px 高算出 0.4 的缩放，整棵树缩成一小团。等 `clientWidth≥360 && clientHeight≥260`。
+> 3. **高度链要撑满**：`html/body/.body/.workspace/.panels/.panel/.panel-body/.tree-wrap` 一路 `height:100%`，
+>    少一环画布就只有一条窄带。
+
+
 嵌进站点的画布**不是**深色工作区，而是和站点同一套纸面设计（对齐 `~/Desktop/Minimalist`）：
 
 * `body.is-embed.is-paper`：工作区的 `--mn-*` token 在嵌入时换成站点的羊皮纸配色

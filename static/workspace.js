@@ -529,13 +529,9 @@ function renderPanels() {
             fitTree(entry, treeCanvas);
           });
         }
-        // 嵌在站点里时"适应视野"要等画布尺寸稳定（iframe 高度是站点给的，会晚一步到位）
+        // 嵌在站点里时只适应一次：fitTree() 结尾会 renderPanels()，反复调度会变成死循环
         if (isEmbedded()) {
-          requestAnimationFrame(() => {
-            const treeCanvas = body.querySelector('.tree-canvas');
-            if (!treeCanvas) return;
-            [120, 420, 900].forEach((delay) => setTimeout(() => fitTree(entry, treeCanvas), delay));
-          });
+          requestAnimationFrame(() => embedFitOnce(entry, body.querySelector('.tree-canvas')));
         }
       }
       else if (entry.document.type === 'map') body.appendChild(renderMapTool(entry));
@@ -3577,6 +3573,33 @@ function renderTreeTool(entry) {
 }
 
 /** 把整棵树缩放到视野中央（只在首次打开时做一次）。 */
+/** 嵌进站点时：等画布有实际尺寸后适应一次；窗口/iframe 尺寸变了最多再补两次。 */
+function embedFitOnce(entry, canvas, attempt = 0) {
+  if (!canvas || entry.embedFitCount >= 3) return;
+  // 画布得先有"像样"的尺寸：flex 布局 + 站点给的 iframe 高度都要到位，
+  // 否则会按一个很小的尺寸算出 0.4 的缩放，整棵树缩成一小团
+  const ready = canvas.clientWidth >= 360 && canvas.clientHeight >= 260;
+  if (!ready || !canvas.clientWidth || !canvas.clientHeight) {
+    if (attempt < 12) setTimeout(() => embedFitOnce(entry, canvas, attempt + 1), 150);
+    return;
+  }
+  entry.embedFitCount = (entry.embedFitCount || 0) + 1;
+  fitTree(entry, canvas);
+  if (!canvas.__embedObserver && window.ResizeObserver) {
+    let timer = null;
+    canvas.__embedObserver = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (entry.embedFitCount >= 3) return;
+        if (canvas.clientWidth < 360 || canvas.clientHeight < 260) return;
+        entry.embedFitCount += 1;
+        fitTree(entry, canvas);
+      }, 260);
+    });
+    canvas.__embedObserver.observe(canvas);
+  }
+}
+
 /** 嵌进站点时：树画好之后自动适应一次视野（只在第一次，之后交给读者自己缩放）。 */
 function autoFitTree(entry, canvas) {
   if (!isEmbedded() || entry.treeFitted) return;

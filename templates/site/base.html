@@ -68,7 +68,7 @@
 
     // 让时间线区块铺满浏览器宽度：量出当前左边距，直接拉负值（窗口变化时重算）
     (function () {
-      var boxes = Array.prototype.slice.call(document.querySelectorAll('.timeline-embed'));
+      var boxes = Array.prototype.slice.call(document.querySelectorAll('.timeline-embed, .canvas-embed'));
       if (!boxes.length) return;
       function bleed() {
         boxes.forEach(function (box) {
