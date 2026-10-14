@@ -4700,13 +4700,19 @@ class AppVersionTests(TestCase):
 
         from . import version
 
+        # CI 会注入 OPUSCULE_BUILD（github.run_number），此时完整串带 `+build.N`、
+        # 展示串尾部追加 `· build N`（见 version.py）；期望值按同一约定拼出来，
+        # 本地（无构建号）与 CI 都能过。
+        build = getattr(settings, "APP_BUILD", "")
+        suffix = f"+build.{build}" if build else ""
         info = version.app_info()
         self.assertEqual(info["name"], settings.APP_NAME)
         self.assertEqual(info["version"], settings.APP_VERSION)
         self.assertEqual(info["channel"], settings.APP_CHANNEL)
         self.assertEqual(info["channel_label"], "Dev")
-        self.assertEqual(info["version_string"], f"{settings.APP_VERSION}-dev")
-        self.assertEqual(info["display"], f"{settings.APP_NAME} {settings.APP_VERSION} · Dev")
+        self.assertEqual(info["version_string"], f"{settings.APP_VERSION}-dev{suffix}")
+        display = f"{settings.APP_NAME} {settings.APP_VERSION} · Dev"
+        self.assertEqual(info["display"], f"{display} · build {build}" if build else display)
 
     def test_version_string_per_channel(self):
         from . import version
@@ -4719,12 +4725,18 @@ class AppVersionTests(TestCase):
         self.assertEqual(version.channel_label("release"), "Release")
 
     def test_meta_endpoint_is_public(self):
+        from django.conf import settings
+
         response = self.client.get("/meta")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["version_string"], "0.4.0-dev")
+        # 同 test_app_info_derives_from_settings：设了构建号时 `/meta` 也要带上。
+        build = getattr(settings, "APP_BUILD", "")
+        suffix = f"+build.{build}" if build else ""
+        self.assertEqual(payload["version_string"], f"0.4.0-dev{suffix}")
         self.assertEqual(payload["channel_label"], "Dev")
-        self.assertEqual(payload["display"], "Opuscule 0.4.0 · Dev")
+        display = "Opuscule 0.4.0 · Dev"
+        self.assertEqual(payload["display"], f"{display} · build {build}" if build else display)
 
     def test_explore_footer_shows_version(self):
         response = self.client.get("/explore")
