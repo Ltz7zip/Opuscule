@@ -81,7 +81,7 @@ CSRF_TRUSTED_ORIGINS = [
 INSTALLED_APPS = [
     # 后台用自定义站点（只让超级管理员进，见 world/admin.py）：把默认 admin 换成
     # AdminConfig 子类，admin.site 即 OpusculeAdminSite，auth 的 User/Group 后台也随之注册。
-    'world.adminconfig.OpusculeAdminConfig',
+    'apps.world.adminconfig.OpusculeAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -92,13 +92,13 @@ INSTALLED_APPS = [
     'django_otp',
     'django_otp.plugins.otp_totp',
     'django_otp.plugins.otp_static',
-    # 本项目自己的应用
-    'timeline',   # 次应用：一条经典横向时间轴（/legacy 页面与 /api 接口）
-    'world',      # 主应用：世界工作区（世界 / 类型 / 属性 / 成员 / 治理）+ 只读站点
-    'documents',  # 文档树：文档 / 卡片 / 纪元 / 日历 / 时间线事件 / 版本 / 在线状态
-    'graph',      # 关系树：TreeVariant / TreeNode / TreeEdge
-    'maps',       # 经典地图：MapLayer / MapMarker
-    'publishing', # 发布记录：PublishLog
+    # 本项目自己的应用（都收在 apps/ 包下，app label 仍取末段名）
+    'apps.timeline',   # 次应用：一条经典横向时间轴（/legacy 页面与 /api 接口）
+    'apps.world',      # 主应用：世界工作区（世界 / 类型 / 属性 / 成员 / 治理）+ 只读站点
+    'apps.documents',  # 文档树：文档 / 卡片 / 纪元 / 日历 / 时间线事件 / 版本 / 在线状态
+    'apps.graph',      # 关系树：TreeVariant / TreeNode / TreeEdge
+    'apps.maps',       # 经典地图：MapLayer / MapMarker
+    'apps.publishing', # 发布记录：PublishLog
 ]
 
 # 工作区把经典时间线编辑器用同源 iframe 嵌进来，所以这里允许同源框嵌
@@ -119,14 +119,14 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # 请求级世界作用域：先解析"当前世界"（会话选定 → 自己的第一个世界 → 兜底），
     # 后面的守门人与视图都读它。
-    'world.middleware.ActiveWorldMiddleware',
+    'apps.world.middleware.ActiveWorldMiddleware',
     # 读守门人：登录 + 世界成员才读得到工作区接口，只给"发布站点只读嵌入"开口子
-    'world.middleware.ReadPermissionMiddleware',
-    # 写操作守门人：登录 + 编辑权限（白名单见 world/permissions.py）
-    'world.middleware.EditPermissionMiddleware',
+    'apps.world.middleware.ReadPermissionMiddleware',
+    # 写操作守门人：登录 + 编辑权限（白名单见 apps/world/permissions.py）
+    'apps.world.middleware.EditPermissionMiddleware',
     # 维护模式：只在 OPUSCULE_MAINTENANCE=1 时拦请求，
     # 平时这一层等于不存在（放最后，别影响上面几层的正常判断）。
-    'world.maintenance.MaintenanceMiddleware',
+    'apps.world.maintenance.MaintenanceMiddleware',
 ]
 
 ROOT_URLCONF = 'worldbuilding_timeline.urls'
@@ -146,8 +146,8 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
-                'world.context.static_version',
-                'world.context.app_version',
+                'apps.world.context.static_version',
+                'apps.world.context.app_version',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -350,13 +350,13 @@ LOGGING = {
         'django': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
         # 请求出错（4xx/5xx）单独收在这里：500 会带堆栈，是排查的第一现场
         'django.request': {'handlers': _LOG_ACTIVE, 'level': 'WARNING', 'propagate': False},
-        # 本项目各应用的业务日志
-        'world': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
-        'documents': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
-        'graph': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
-        'maps': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
-        'publishing': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
-        'timeline': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
+        # 本项目各应用的业务日志（logger 名 = 模块 __name__，随 apps/ 包前缀）
+        'apps.world': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
+        'apps.documents': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
+        'apps.graph': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
+        'apps.maps': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
+        'apps.publishing': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
+        'apps.timeline': {'handlers': _LOG_ACTIVE, 'level': 'INFO'},
     },
     # 兜底：没在上面点名的 logger 只记 WARNING 及以上，别让第三方库刷屏
     'root': {'handlers': _LOG_ACTIVE, 'level': 'WARNING'},

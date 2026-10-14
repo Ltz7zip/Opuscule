@@ -125,28 +125,29 @@ worldbuilding_timeline/
 ├── worldbuilding_timeline/       项目配置
 │   ├── settings.py               全局配置（环境变量驱动）
 │   └── urls.py                   总路由表
-├── world/                        【主应用】世界 / 类型 / 属性 / 成员 / 治理 + 只读站点
-│   ├── models/                   数据模型（世界 / 类型 / 属性 / 成员 / 治理）
-│   ├── views/                    工作区的全部 JSON 接口
-│   ├── services/                 领域服务（发布 / 图谱 / 地图桥 / 导入导出 / 名字识别 / 净化）
-│   ├── urls.py                   /api/world/* 路由
-│   ├── middleware.py             世界作用域、编辑守门人
-│   ├── permissions.py            谁能编辑这个世界
-│   ├── normalize.py              属性值清洗、公式求值、引用解析
-│   ├── calendarview.py           月视图与月相
-│   ├── relationship.py           关系树独立页
-│   ├── mapdoc.py                 /map 地图独立页
-│   ├── classic.py                经典时间轴适配层
-│   ├── site_views.py             只读站点（/s/<slug>/）
-│   └── relations.py              关系树词表（纯数据）
-├── documents/                    【应用】文档树：文档 / 卡片 / 纪元 / 日历 / 时间线事件 / 版本 / 在线状态
-├── graph/                        【应用】关系树：TreeVariant / TreeNode / TreeEdge
-├── maps/                         【应用】经典地图：MapLayer / MapMarker
-├── publishing/                   【应用】发布记录：PublishLog
-├── timeline/                     【次应用】经典横向时间轴
-│   ├── models.py                 TimelineItem / TimelineView
-│   ├── views.py                  /legacy 页面 + /api/* 接口
-│   └── normalize.py              字段规范化
+├── apps/                         本项目自己的六个 Django 应用（app label 取末段名，如 apps.world → world）
+│   ├── world/                    【主应用】世界 / 类型 / 属性 / 成员 / 治理 + 只读站点
+│   │   ├── models/               数据模型（世界 / 类型 / 属性 / 成员 / 治理）
+│   │   ├── views/                工作区的全部 JSON 接口
+│   │   ├── services/             领域服务（发布 / 图谱 / 地图桥 / 导入导出 / 名字识别 / 净化）
+│   │   ├── urls.py               /api/world/* 路由
+│   │   ├── middleware.py         世界作用域、编辑守门人
+│   │   ├── permissions.py        谁能编辑这个世界
+│   │   ├── normalize.py          属性值清洗、公式求值、引用解析
+│   │   ├── calendarview.py       月视图与月相
+│   │   ├── relationship.py       关系树独立页
+│   │   ├── mapdoc.py             /map 地图独立页
+│   │   ├── classic.py            经典时间轴适配层
+│   │   ├── site_views.py         只读站点（/s/<slug>/）
+│   │   └── relations.py          关系树词表（纯数据）
+│   ├── documents/                【应用】文档树：文档 / 卡片 / 纪元 / 日历 / 时间线事件 / 版本 / 在线状态
+│   ├── graph/                    【应用】关系树：TreeVariant / TreeNode / TreeEdge
+│   ├── maps/                     【应用】经典地图：MapLayer / MapMarker
+│   ├── publishing/               【应用】发布记录：PublishLog
+│   └── timeline/                 【次应用】经典横向时间轴
+│       ├── models.py             TimelineItem / TimelineView
+│       ├── views.py              /legacy 页面 + /api/* 接口
+│       └── normalize.py          字段规范化
 ├── templates/                    服务端渲染的页面模板
 ├── static/                       前端资源（CSS / JS / SVG / 图标）
 │   ├── terminal.css              当前权威的视觉语言（最后加载）

@@ -4,7 +4,7 @@
 > **用途**：记录 Opuscule（世界观共建工作台）每个**程序版本**的显著变更。
 > **格式**：参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)；**版本号规范**见 [`推进计划.md` §8](推进计划.md)。
 > **单一来源**：程序和页脚显示的版本号来自 `settings.APP_VERSION` + `APP_CHANNEL` 一处，
-> 派生的展示串由 `world/version.py::app_info()` 生成；本文件只**记录**、不**定义**版本号。
+> 派生的展示串由 `apps/world/version.py::app_info()` 生成；本文件只**记录**、不**定义**版本号。
 >
 > **渠道写法**：`dev → X.Y.Z-dev`，`alpha → X.Y.Z-alpha.N`，`beta → X.Y.Z-beta.N`，`release → X.Y.Z`（无后缀）。
 > **日期**：为避免臆造，发布前不预填具体日期；正式发版时再补 `YYYY-MM-DD`。
@@ -20,13 +20,13 @@
   - 精确名字补全：`autolink.complete_names`（NFKC + casefold 归一化）+ `GET /api/world/complete`，
     前端 `attachNameCompleter` 打字即时弹出、支持键盘选择、兼容中文输入法。
   - 文件夹多选批量操作（移动到 / 隐藏 / 删除）+ 列表 / 网格视图切换。
-- **`/robots.txt`（阶段 5 · O1）**：根路径新增爬虫公约视图 `world/views.robots_txt`——
+- **`/robots.txt`（阶段 5 · O1）**：根路径新增爬虫公约视图 `apps/world/views/robots_txt`——
   禁 `/api/`、`/world`、`/media/`、账号表单页与后台，放行公开只读站点 `/s/`、`/explore`；
   后台路径按 `settings.ADMIN_URL_PATH` 动态禁。
 - **后台路径可配（阶段 5 · O2a）**：新增 `settings.ADMIN_URL_PATH`（环境变量 `OPUSCULE_ADMIN_PATH`，
   默认仍为 `admin`），根路由后台前缀由它生成；维护模式白名单 `allowed_prefixes()` 同步跟随，
   改路径后维护期间仍可进后台。
-- **`/healthz` 健康检查（阶段 5 · O3）**：根路径新增轻量探针 `world/views.healthz`
+- **`/healthz` 健康检查（阶段 5 · O3）**：根路径新增轻量探针 `apps/world/views/healthz`
   （`@require_safe`）——进程存活 + 数据库连通返回 `200 {"status":"ok"}`，数据库不通返回 `503`；
   供外部 uptime 监控高频调用（只跑一句 `SELECT 1`，别当业务接口）。
 - **应用日志与轮转（阶段 5 · O3）**：新增 `settings.LOGGING`——默认 console → journald
@@ -34,7 +34,7 @@
   （单文件 10 MB × 5 份，文件轮转自管）。
 - **CI 与构建号（阶段 5 · O4）**：新增 GitHub Actions 工作流 `.github/workflows/ci.yml`
   （装 `requirements.txt` + 跑 `manage.py test`）；引入构建号 `OPUSCULE_BUILD`（CI 注入，
-  如 `github.run_number`），接入 `settings.py` 与 `world/version.py`——`/meta` 与页脚展示
+  如 `github.run_number`），接入 `settings.py` 与 `apps/world/version.py`——`/meta` 与页脚展示
   `· build N`、完整串变为 `0.5.0-dev+build.N`（不设则不显示，本地开发不受影响）。
 - **后台两步验证（阶段 5 · O2b）**：引入 `django-otp==1.7.4`（**目前唯一第三方依赖**），
   后台站点 `OpusculeAdminSite` 继承 `OTPAdminSite`——除口令外还要过 TOTP 第二步；
@@ -66,6 +66,15 @@
   避免迁 app 后默认表名变成 `documents_*`；(3) **依赖环解锁**——`Presence` 是唯一造成
   `world ↔ documents` 环的模型（它指向 `Document` 又属核心），并入 `documents` 后新 app 之间为干净 DAG。
   `manage.py check` 无问题、`makemigrations --check` 无变化、全量 394 测试通过、迁移前后逐表行数完全一致。
+- **应用归拢进 `apps/` 包（架构重构 · 收尾）**：六个应用 `world` / `documents` / `graph` / `maps` /
+  `publishing` / `timeline` 从项目根目录整体移入 `apps/` 包，根目录只留项目配置与顶层目录。
+  关键点：(1) **app label 不变**——`AppConfig.label` 默认取 `name` 的末段（`apps.documents` → `documents`），
+  故物理表名、`django_migrations` 记录、content types、迁移依赖（如 `("world", "0018_split_apps")`）一律照旧；
+  (2) **零迁移漂移**——`makemigrations --check` 无变化；(3) 对外 import 路径整体加一层前缀
+  （`from documents.models import Document` → `from apps.documents.models import Document`），
+  `INSTALLED_APPS` / `MIDDLEWARE` / `TEMPLATES` 上下文处理器 / `LOGGING` logger / `ROOT_URLCONF` 的 `include` 同步改写；
+  **迁移里的 `to="world.Model"` 与 `dependencies` 仍是两段 app label，不能加前缀**（`apps.world` 会解析失败）。
+  `manage.py check` 无问题、全量 399 测试通过（`apps/world/tests.py` 两处 `static/` 路径推断相应改为 `parents[2]`）。
 
 ---
 
@@ -85,7 +94,8 @@
 - **页脚展示版本**：`/explore`、`/login`、站点基础模板页脚统一显示 `Opuscule 0.4.0 · Dev`
   （取自 `{{ app.display }}`，不再硬编码）。
 - **文档头部**：16 处 Markdown 头部由焊死的 `版本：Dev 1.0` 统一改标为**「文档版本」**（不删内容），
-  与程序版本解耦，避免「文档版本」被误认为「程序版本」。
+  取值**跟随程序版本**——写 `settings.APP_VERSION` + `APP_CHANNEL` 派生出的版本串（当前 `0.4.0-dev`），
+  不另立一套文档编号，避免「文档版本」与「程序版本」对不上。
 
 ### 说明
 
