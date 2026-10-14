@@ -220,7 +220,7 @@ WORLD · 1,204 CARDS                 ← mono / 11px / letter-spacing 1.2px / mu
 **理解要点：** 浅色主题改的是 token 的**取值**，不是结构。
 所以任何按「引用 token、不写死颜色」规则写的组件，切换主题时自动正确。
 
-主题通过 `<html data-theme="light">` 切换，由 [world/context.py](world/context.py) 与工作区脚本管理。
+主题通过 `<html data-theme="light">` 切换，由 [apps/world/context.py](apps/world/context.py) 与工作区脚本管理。
 
 ---
 

@@ -15,9 +15,9 @@ jobs:
       # 这样 /meta 与页脚能显示「· build 42」，把一次部署对应到唯一一次 CI 运行。
       OPUSCULE_BUILD: ${{ github.run_number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip

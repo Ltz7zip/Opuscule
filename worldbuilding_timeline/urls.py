@@ -21,16 +21,16 @@ from django.conf import settings
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from world import views as world_views
-from world import relationship as relationship_views
-from world import mapdoc as map_views
-from world import maintenance
+from apps.world import views as world_views
+from apps.world import relationship as relationship_views
+from apps.world import mapdoc as map_views
+from apps.world import maintenance
 
 urlpatterns = [
     # 后台路径可配（OPUSCULE_ADMIN_PATH，见 settings.ADMIN_URL_PATH）：正式部署改成
     # 猜不到的路径，扫描器按 /admin/ 找不到门。默认仍是 "admin/"，本地开发不受影响。
     path(f"{settings.ADMIN_URL_PATH}/", admin.site.urls),
-    path("api/world/", include("world.urls", namespace="world")),
+    path("api/world/", include("apps.world.urls", namespace="world")),
     path("world", world_views.workspace, name="workspace"),
     # robots.txt：约束正规搜索引擎（禁爬工作区 / 接口 / 后台，放行公开只读站点）
     path("robots.txt", world_views.robots_txt, name="robots-txt"),
@@ -51,10 +51,10 @@ urlpatterns = [
     path("w", RedirectView.as_view(url="/world", permanent=False)),
     path("w/timeline/<int:doc_id>",
          RedirectView.as_view(pattern_name="timeline:classic-embedded", permanent=False)),
-    path("s/", include("world.site_urls", namespace="site")),
-    path("", include("timeline.urls")),
+    path("s/", include("apps.world.site_urls", namespace="site")),
+    path("", include("apps.timeline.urls")),
     # 上传文件（地图底图、语音、图片…）也要鉴权：按「所属文档是否公开」放行，
-    # 不再由前置静态服务器直发，否则知道路径就能下载未公开的图（见 world.views.media_file）。
+    # 不再由前置静态服务器直发，否则知道路径就能下载未公开的图（见 apps/world/views 的 media_file）。
     path("media/<path:path>", world_views.media_file, name="media"),
     # 账号：表单式页面（浏览器原生提交） + /api/world/auth/* 的 JSON 接口
     path("login", world_views.login_page, name="login"),
@@ -73,5 +73,5 @@ urlpatterns = [
 
 # 非 /api/ 的 404 给一页"信号丢失"，500 给一页"重试"。
 # DEBUG=True 时 Django 显示调试页，不会走到这里；测试里 DEBUG 被强制为 False，会走。
-handler404 = "timeline.views.page_not_found"
-handler500 = "timeline.views.server_error"
+handler404 = "apps.timeline.views.page_not_found"
+handler500 = "apps.timeline.views.server_error"

@@ -30,17 +30,21 @@
 ## 2. 六个 Django 应用：`world` / `timeline` + 四个内容 app
 
 一个 Django 项目可以包含多个 **app**（应用），每个 app 是一组相关的模型 + 视图 + 路由。
-Opuscule 有六个：
+Opuscule 有六个，全部收在 `apps/` 包下：
 
 ```
 worldbuilding_timeline/      ← 项目配置（settings / 总路由）
-├── world/                   ← 【主应用】世界 / 类型与属性 / 成员 / 治理 + 工作区与只读站点的视图
-├── timeline/                ← 【次应用】经典横向时间轴（/legacy）
-├── documents/               ← 内容模型：文档树 / 卡片 / 纪元 / 日历 / 事件 / 协作
-├── graph/                   ← 内容模型：关系树
-├── maps/                    ← 内容模型：经典地图
-└── publishing/              ← 内容模型：发布记录
+├── apps/                    ← 本项目自己的 app 都收在这里
+│   ├── world/               ← 【主应用】世界 / 类型与属性 / 成员 / 治理 + 工作区与只读站点的视图
+│   ├── timeline/            ← 【次应用】经典横向时间轴（/legacy）
+│   ├── documents/           ← 内容模型：文档树 / 卡片 / 纪元 / 日历 / 事件 / 协作
+│   ├── graph/               ← 内容模型：关系树
+│   ├── maps/                ← 内容模型：经典地图
+│   └── publishing/          ← 内容模型：发布记录
 ```
+
+> app label 取 `name` 的末段名（`apps.world` → `world`），所以表名、迁移记录、
+> `ForeignKey(to="world.world")` 这类 **app label 引用**一律不受归拢影响。
 
 ### 2.1 `world`（主应用）
 
@@ -71,7 +75,7 @@ worldbuilding_timeline/      ← 项目配置（settings / 总路由）
 
 把它们塞进一个 app 会让「时间」这个概念出现两套彼此打架的实现。
 分成两个 app，各自管好自己的时间模型，通过一个很薄的**适配层**
-（[world/classic.py](world/classic.py)）让工作区能内嵌经典时间轴，互不污染。
+（[apps/world/classic.py](apps/world/classic.py)）让工作区能内嵌经典时间轴，互不污染。
 
 **`documents` / `graph` / `maps` / `publishing` 为什么从 `world` 里拆出来？**
 它们原本全摊在一个 `world/models.py` 里，模型之间的**导入依赖**容易缠成环
@@ -84,7 +88,7 @@ worldbuilding_timeline/      ← 项目配置（settings / 总路由）
 ## 3. 目录与分层
 
 ```
-world/
+apps/world/
 ├── models/            数据模型（拆成子模块：world / entity / membership / invite / governance / constants）
 ├── views/             工作区的全部 JSON 接口（按主题拆成子模块，业务编排）
 ├── services/          领域服务：publish / graph / geo / exchange / autolink / sanitize
@@ -124,17 +128,17 @@ world/
   ▼
 Django 请求管道
   │
-  ├─ ① ActiveWorldMiddleware        ← world/middleware.py
+  ├─ ① ActiveWorldMiddleware        ← apps/world/middleware.py
   │     解析"当前世界"并写进 contextvar
   │     （会话选定 → 自己的第一个世界 → 兜底）
   │
-  ├─ ② EditPermissionMiddleware     ← world/middleware.py
+  ├─ ② EditPermissionMiddleware     ← apps/world/middleware.py
   │     这是写操作（POST）吗？是 → 拦下来判权限
   │     没登录 → 401；登录了但没权限 → 403；通过 → 放行
   │
   ├─ ③ CSRF 校验（Django 内置）
   │
-  ├─ ④ 路由 → world/urls.py → world/views/ 的某个函数
+  ├─ ④ 路由 → apps/world/urls.py → apps/world/views/ 的某个函数
   │
   └─ ⑤ 视图里：current_world() 取当前世界 → 读写模型 → 返回 JSON
 ```
@@ -226,7 +230,7 @@ World（世界 = 一部作品）
 
 ## 6. 权限模型
 
-五条规则，实现在 [world/permissions.py](world/permissions.py)：
+五条规则，实现在 [apps/world/permissions.py](apps/world/permissions.py)：
 
 | 规则 | 说明 |
 | --- | --- |
