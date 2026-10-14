@@ -68,18 +68,61 @@ def ensure_login(opener=None, *, username: str = DEV_USER, password: str = DEV_P
     )
 
 
-def ensure_login_page(page, *, username: str = DEV_USER, password: str = DEV_PASSWORD):
-    """Playwright 页面登录（把 cookie 落在浏览器上下文里）。"""
+def ensure_login_page(page, *, username: str = DEV_USER, password: str = DEV_PASSWORD,
+                      navigate: bool = True):
+    """让一个 Playwright 页面处于登录态。
+
+    **不用表单登录**，直接造一个 Django 会话塞进浏览器 cookie —— 和
+    ``tools/shots.py`` 的办法一样（那边也是这么绕开密码的）：
+
+      * ``_auth.ensure_login()`` 的 cookie 在 urllib 的 CookieJar 里，
+        Playwright 的浏览器上下文看不到，两者不共享；
+      * 想省掉这一步、改在页面里敲用户名口令的话，注意 ``page.add_cookies``
+        只在 ``BrowserContext`` 上有（``Browser.new_page()`` 拿不到），
+        而且不要在 Playwright 的事件回调里同步发 urllib 请求。
+
+    ``navigate=False`` 时只塞 cookie、不打开页面——需要"第一次进入"这种
+    时机敏感的探针（启动屏、首屏骨架）自己 ``page.goto()``。
+    """
+    import os
+    import sys
+    from pathlib import Path
+
+    root = str(Path(__file__).resolve().parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)                 # 让 Django 找得到 settings 模块
+    os.chdir(root)
+
+    import django
+    from django.apps import apps as django_apps
+
+    if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "worldbuilding_timeline.settings")
+    # Playwright 的同步 API 底下跑着 asyncio 事件循环，Django 默认会拦下 ORM 调用
+    # （SynchronousOnlyOperation）。这里是探针脚本的单线程短查询，显式放行。
+    os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "1")
+    if not django_apps.ready:
+        django.setup()
+
+    from django.contrib.auth import get_user_model
+    from django.contrib.sessions.backends.db import SessionStore
+
     ensure_login(username=username, password=password)      # 保证账号存在
-    page.goto(f"{BASE}/login", wait_until="domcontentloaded")
-    if page.url.endswith("/register") or page.query_selector("#invite"):
-        # 还没有账号：走注册
-        page.goto(f"{BASE}/register", wait_until="domcontentloaded")
-        page.fill("#username", username)
-        page.fill("#password", password)
-    else:
-        page.fill("#username", username)
-        page.fill("#password", password)
-    page.click("button[type=submit]")
-    page.wait_for_load_state("networkidle")
+    user = get_user_model().objects.filter(username=username).first()
+    if user is None:
+        raise RuntimeError(f"账号 {username!r} 不存在")
+
+    store = SessionStore()
+    store["_auth_user_id"] = str(user.pk)
+    store["_auth_user_backend"] = "django.contrib.auth.backends.ModelBackend"
+    store["_auth_user_hash"] = user.get_session_auth_hash()
+    store.create()
+
+    host = BASE.split("//", 1)[1].split(":", 1)[0]
+    context = page.context
+    context.add_cookies([{
+        "name": "sessionid", "value": store.session_key, "domain": host, "path": "/",
+    }])
+    if navigate:
+        page.goto(f"{BASE}/world", wait_until="domcontentloaded")
     return page

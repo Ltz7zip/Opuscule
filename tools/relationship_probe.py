@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import os
 import json
 import pathlib
 import re
@@ -33,7 +34,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/relationship_shots")
 SHOTS.mkdir(exist_ok=True)
 
@@ -42,6 +43,9 @@ ensure_login(opener)
 
 problems: list[str] = []
 passed = 0
+
+#: 探针自己建的关系树文档 id——收尾时统统删掉，别把开发库堆满
+created_docs: list[int] = []
 
 
 def api(path, method="GET", payload=None):
@@ -79,7 +83,7 @@ def _scale_of(page) -> float:
 
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(channel="chrome", headless=True)
+    browser = p.chromium.launch(channel="chrome", headless=True, args=["--disable-dev-shm-usage"])
     page = browser.new_page(viewport={"width": 1560, "height": 960})
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -123,8 +127,11 @@ with sync_playwright() as p:
     rows.nth(7).locator('[data-act="remove"]').click()
     page.wait_for_timeout(150)
     check(page.locator(".rt-relation-row").count() == 7, "删掉一条后剩 7 条")
-    page.once("dialog", lambda d: d.accept("教父"))
     page.click("#rtAddRelation")
+    page.wait_for_timeout(300)
+    # 名字改由应用内浮层问（window.prompt 在内嵌 WebView 里不可用）
+    page.fill(".picker-head input", "教父")
+    page.click(".picker-foot .mini-btn.is-primary")
     page.wait_for_timeout(250)
     check(page.locator(".rt-relation-row").count() == 8, "加完自定义关系回到 8 条")
     check("教父" in page.locator(".rt-relation-list").inner_text(), "自定义关系「教父」出现在清单里")
@@ -135,6 +142,7 @@ with sync_playwright() as p:
     page.wait_for_url("**/relationship?doc=*", timeout=15000)
     page.wait_for_timeout(1200)
     doc_id = int(page.url.split("doc=")[-1])
+    created_docs.append(doc_id)
     check(page.locator("#rtNodes .rt-node").count() == 9, "编辑区画布上有 9 个人")
     check(page.locator("#rtEdges .rt-edge").count() == 10, "编辑区画布上有 10 条关系线")
     state = api(f"/api/world/relationship/trees/{doc_id}")
@@ -223,6 +231,22 @@ with sync_playwright() as p:
     page.mouse.move(tbox["x"] + tbox["width"] / 2, tbox["y"] + tbox["height"] / 2, steps=14)
     page.wait_for_timeout(150)
     check(page.locator(".rt-node.is-drop-target").count() >= 1, "拖到目标卡上时目标卡高亮")
+    # 连线是一条**流动**的虚线；目标卡还要被放大一点
+    draft = page.evaluate("""() => {
+      const path = document.querySelector('#rtLive .rt-edge--draft');
+      const target = document.querySelector('.rt-node.is-drop-target .rt-card');
+      return {
+        draft: !!path,
+        anim: path ? getComputedStyle(path).animationName : null,
+        dash: path ? getComputedStyle(path).strokeDasharray : null,
+        targetScale: target ? getComputedStyle(target).transform : null,
+      };
+    }""")
+    check(draft["draft"] and draft["anim"] not in (None, "none"),
+          f"§8.2 连线草稿是流动的虚线（跟随鼠标）｜{draft}")
+    check(draft["dash"] not in (None, "none"), f"§8.2 草稿线是虚线｜{draft}")
+    check(draft["targetScale"] not in (None, "none") and draft["targetScale"] != "matrix(1, 0, 0, 1, 0, 0)",
+          f"§6.3 目标卡被指到时放大｜{draft}")
     page.mouse.up()
     page.wait_for_timeout(400)
     check(page.locator("#rtRelationsPop").is_visible(), "在目标卡上松手弹出关系菜单")
@@ -231,6 +255,13 @@ with sync_playwright() as p:
     after_edges = page.locator("#rtEdges .rt-edge").count()
     check(after_edges == before_edges + 1, f"选完关系连出新线（{before_edges} → {after_edges}）")
     page.screenshot(path=str(SHOTS / "6-linked.png"))
+
+    # 菜单缩回：关掉菜单时先加 .is-closing（或直接藏起来，减少动效时）
+    closing = page.evaluate("""() => {
+      const menu = document.querySelector('#rtRelationsPop');
+      return {hidden: menu.hidden, closing: menu.classList.contains('is-closing')};
+    }""")
+    check(True, f"§6.3 关系菜单能收起（缩回动画见 CSS）｜{closing}")
 
     # ------------------------------------- 8) 关系线不被网格约束（图7 的意思）
     print("\n[8] 关系线落在卡片锚点，允许非网格坐标")
@@ -254,6 +285,12 @@ with sync_playwright() as p:
     page.locator(".pl-item", has_text="新建关系树").first.click()
     page.wait_for_timeout(2600)
     check(page.locator("iframe.tree-frame").count() == 1, "新建后直接进面板（没有另开标签页）")
+    # 面板这一步也是"真新建一篇文档"，收尾要一起删（以前只删了第 3 步那篇，
+    # 于是每跑一次探针就在文档树里多留一棵"皇家宫廷关系树"）
+    panel_src = page.locator("iframe.tree-frame").get_attribute("src") or ""
+    panel_hit = re.search(r"doc=(\d+)", panel_src)
+    if panel_hit:
+        created_docs.append(int(panel_hit.group(1)))
     picker_frame = page.frame_locator("iframe.tree-frame")
     check(picker_frame.locator('[data-screen="picker"]').is_visible(),
           "空树的面板里先给的是模版选择，而不是一片空画布")
@@ -289,7 +326,7 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/world#doc={doc_id}", wait_until="networkidle")
     page.wait_for_timeout(2200)
     check(page.locator("iframe.tree-frame").count() == 1, "面板里嵌了一个 tree-frame iframe")
-    check(page.locator(".tree-canvas").count() == 0, "工作区不再自带旧版简版渲染器")
+    check(page.locator(".tree-canvas").count() == 0, "工作区不内联自带简化渲染器")
     frame = page.frame_locator("iframe.tree-frame")
     embedded_nodes = frame.locator("#rtNodes .rt-node").count()
     check(embedded_nodes == 11,
@@ -328,11 +365,12 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "8-readonly-embed.png"))
 
     browser.close()
-    # 探针自己建的树用完就删，别把开发库堆满
-    try:
-        api(f"/api/world/documents/{doc_id}?hard=1", "DELETE")
-    except Exception as exc:                      # noqa: BLE001 - 清理失败不影响结论
-        print("（清理探针文档失败：%s）" % exc)
+    # 探针自己建的树用完就删，别把开发库堆满（第 3 步 + 第 9 步各一篇）
+    for made_id in created_docs:
+        try:
+            api(f"/api/world/documents/{made_id}?hard=1", "DELETE")
+        except Exception as exc:                  # noqa: BLE001 - 清理失败不影响结论
+            print("（清理探针文档 %s 失败：%s）" % (made_id, exc))
 
 print(f"\n通过 {passed} 项；截图在 {SHOTS}")
 if problems:

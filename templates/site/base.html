@@ -1,14 +1,58 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="{{ theme_mode|default:'dark' }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   {% if noindex %}<meta name="robots" content="noindex, nofollow" />{% endif %}
   <title>{% block title %}{{ world.name }}{% endblock %}</title>
+  <meta name="description" content="{{ world.description|default:world.name }}" />
+  <meta name="theme-color" content="#121110" />
+  <!-- 分享卡片（DESIGN.md）：暗色画布 + 纪元主题色标题 + 世界名。
+       备注：这里给的是 SVG（本项目不引图片库），Slack / Telegram 这类现代预览器吃，
+       Facebook 只认 PNG —— 要 PNG 得再挂一个 Pillow 渲染，暂时不做。 -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="{{ world.name }}" />
+  <meta property="og:title" content="{% block og_title %}{{ world.name }}{% endblock %}" />
+  <meta property="og:description" content="{{ world.description|default:'一个被共建出来的世界' }}" />
+  <meta property="og:url" content="{{ request.build_absolute_uri }}" />
+  <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% url 'site:og' world.published_slug %}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  <!-- 到达前（DESIGN.md）：本站所有资源同源，preconnect / dns-prefetch 没有可建的连；
+       真正有用的是"首屏样式预载 + 大概率下一页的预取 / 预渲染"。 -->
+  <link rel="preload" as="style" href="{% static 'site.css' %}?v={{ static_version }}" />
+  <link rel="preload" as="style" href="{% static 'terminal.css' %}?v={{ static_version }}" />
   <link rel="stylesheet" href="{% static 'site.css' %}?v={{ static_version }}" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231b1710'/%3E%3Cpath d='M8 22V10h3l5 7 5-7h3v12h-3v-7l-5 6-5-6v7z' fill='%23faf7f0'/%3E%3C/svg%3E" />
+  <!-- Apple 皮肤层：定义 --ap-* 原始调色板，取值随后被 terminal.css 整体覆盖 -->
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <!-- 现代终端设计语言（仓库根目录 DESIGN.md）—— 全站外观权威：把前几层的语义 token 整体重映射到终端取值，
+       并覆写硬编码色 / 等宽元素 / 装饰手法。合成 VoltAgent 的近黑+电光绿、Ollama 的等宽眉标、Warp 的暖调与紧圆角 -->
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <!-- 动效与观感收尾：统一时长/曲线、导航与卡片的微交互 -->
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <!-- 全链路体验层（仓库根目录 DESIGN.md）：入场编排 / 滚动显现 / 导航进度线 / 分级提示 -->
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射变量，必须最后加载；删掉即回滚 -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+  <script type="speculationrules">
+  {
+    "prerender": [{
+      "source": "document",
+      "where": { "href_matches": "/s/*/era/*" },
+      "eagerness": "moderate"
+    }],
+    "prefetch": [{
+      "source": "document",
+      "where": { "href_matches": "/s/*/*" },
+      "eagerness": "conservative"
+    }]
+  }
+  </script>
 </head>
-<body style="--site-primary: {{ theme.primaryColor }}; --site-heading: '{{ theme.headingFont }}', Georgia, serif; --site-body: '{{ theme.bodyFont }}', system-ui, sans-serif;">
+<body class="site" data-surface="site" data-sw="{% if sw_enabled %}1{% else %}0{% endif %}" data-sw-version="{{ static_version }}" style="--site-primary: {{ theme.primaryColor }}; --site-heading: '{{ theme.headingFont }}', Georgia, serif; --site-body: '{{ theme.bodyFont }}', system-ui, sans-serif;">
+  <a class="skip-link" href="#siteMain">跳到正文</a>
   <header class="nav">
     <a class="nav-brand" href="{% url 'site:home' world.published_slug %}">{{ world.name }}</a>
     <nav class="nav-links">
@@ -25,7 +69,7 @@
     </form>
   </header>
 
-  <main class="wrap">
+  <main class="wrap" id="siteMain" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 
@@ -37,6 +81,7 @@
       发布版本 v{{ world.publish_version }} · {{ audience_label }}
       {% if world.published_at %} · {{ world.published_at|date:"Y-m-d" }}{% endif %}
     </div>
+    <div class="foot-app">Powered by {{ app.display }}</div>
   </footer>
   <script>
     // 嵌进去的画布（地图 / 关系树 / 图谱）里点了节点 -> 跳到那张卡的站点页面
@@ -144,5 +189,8 @@
       });
     })();
   </script>
+  <!-- 全链路体验层（DESIGN.md）：
+       遮罩揭开、打字机标题、导航进度线、滚动显现、共享元素、离开上报 -->
+  <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
 </body>
 </html>

@@ -1,0 +1,113 @@
+{# 我们自己的面板骨架（不是对内嵌界面的 DOM 换色）。 #}
+{# 左栏两块：图层 / 标注 —— 与工作区左栏同一套分布。 #}
+{# 服务端渲染，脚本就位后被搬进对应标签页里；内嵌界面自己那份内容留在 DOM 里但不再渲染。 #}
+<section id="tx-panel-layers" class="tx-panel">
+  <div class="tx-panel__head">
+    <span class="tx-panel__icon" data-icon="layers" aria-hidden="true"></span>
+    <label class="tx-field">
+      <span class="tx-field__label">图层预设</span>
+      <span id="tx-preset-dd" class="tx-dd-slot"></span>
+    </label>
+  </div>
+  {# 统一不透明度：一条总滑杆，按比例缩放各层原有的透明度 #}
+  <div id="tx-layers-opacity"></div>
+  <ul id="tx-layers-list" class="tx-list"></ul>
+  <div class="tx-panel__hint">点一行开关图层，点分组标题收起 / 展开这一组，↑↓ 调整叠放顺序，Ctrl + 点击编辑该层样式。最上面那条滑杆统一调整所有图层的透明度。</div>
+</section>
+
+<section id="tx-panel-markers" class="tx-panel">
+  <div class="tx-panel__head">
+    <span class="tx-panel__icon" data-icon="map-pin" aria-hidden="true"></span>
+    <span class="tx-field__label">标注</span>
+    <span class="tx-panel__count" id="tx-markers-count">0</span>
+    {% if shell.can_edit %}
+      <button type="button" class="tx-iconbtn tx-iconbtn--shown" id="tx-marker-add" title="在地图中心加一个图钉">＋</button>
+    {% endif %}
+  </div>
+  {% if shell.can_edit %}
+    <div class="tx-param">
+      <span class="tx-param__name">新标注默认</span>
+      <span id="tx-marker-default-color" class="tx-dd-slot"></span>
+      <input id="tx-marker-default-scale" class="tx-input tx-input--num" type="number" min="0.2" max="4" step="0.1"
+             value="1" title="新标注的大小（1 = 标准）" aria-label="新标注的大小" />
+    </div>
+  {% endif %}
+  <ul id="tx-markers-list" class="tx-list"></ul>
+  <div class="tx-panel__hint">点一行把地图移到该标注；指到行上可以删。</div>
+</section>
+
+{# 地图生长：开局只有地形与自然，往后每一级由用户自己点出来。 #}
+{# 纯写操作（每一级都改地图数据），只读场景整块不给。 #}
+{% if shell.can_edit %}
+<section id="tx-panel-growth" class="tx-panel">
+  <div class="tx-panel__head">
+    <span class="tx-panel__icon" data-icon="refresh-cw" aria-hidden="true"></span>
+    <span class="tx-field__label">地图生长</span>
+    <button type="button" class="tx-grow__all" id="tx-growth-all" title="按上游那套一次生成到齐（会重新生成整张图）">一次到齐</button>
+  </div>
+  <ul id="tx-growth-list" class="tx-list"></ul>
+  <div class="tx-panel__hint">开局只有地形与自然。往后的每一级都要你自己点：前置不齐时按钮会写明缺哪一级。</div>
+</section>
+{% endif %}
+
+{# 右栏：参数（视图 / 生成 / 三维地形）—— 与工作区右栏同一套分布，行样式同「标签 + 绿值 + 通栏滑杆」 #}
+<aside id="tx-rail-right" class="tx-rail">
+  <section class="tx-panel">
+    <div class="tx-panel__head">
+      <span class="tx-panel__icon" data-icon="sliders" aria-hidden="true"></span>
+      <span class="tx-field__label">视图</span>
+    </div>
+    <div class="tx-params" id="tx-params-view"></div>
+    <div class="tx-btns">
+      <button type="button" class="tx-btn" data-zoom="in">放大</button>
+      <button type="button" class="tx-btn" data-zoom="out">缩小</button>
+      <button type="button" class="tx-btn" data-zoom="reset">复位</button>
+    </div>
+  </section>
+
+  {# 「生成」整块是写操作（换种子 / 重新生成），只读时不渲染，但容器留着。 #}
+  {# params.ts 找不到 #tx-params-generate 会连「视图」一起不初始化， #}
+  {# 所以只读时改成用 CSS 整块收起来（见 panel.css 的 data-map-readonly）。 #}
+  <section class="tx-panel" id="tx-panel-generate">
+    <div class="tx-panel__head">
+      <span class="tx-panel__icon" data-icon="mountain" aria-hidden="true"></span>
+      <span class="tx-field__label">生成</span>
+    </div>
+    <div class="tx-params" id="tx-params-generate"></div>
+    <div class="tx-param">
+      <span class="tx-param__name">种子</span>
+      <input id="tx-seed" class="tx-input" type="text" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="tx-btns">
+      <button type="button" class="tx-btn tx-btn--primary" id="tx-regenerate-seed">按这个种子生成</button>
+      <button type="button" class="tx-btn" id="tx-regenerate">换个随机地图</button>
+    </div>
+    <div class="tx-panel__hint">改尺寸、密度或种子后，要重新生成才会体现；生成会清掉当前地图未保存的改动。</div>
+  </section>
+
+  {# 这一块只在地形 / 地球仪视图下出现（脚本按 #canvas3d 有无来显隐） #}
+  <section class="tx-panel" id="tx-panel-3d" hidden>
+    <div class="tx-panel__head">
+      <span class="tx-panel__icon" data-icon="mountain-snow" aria-hidden="true"></span>
+      <span class="tx-field__label">三维地形</span>
+    </div>
+    <div class="tx-param">
+      <span class="tx-param__name">侵蚀地形</span>
+      <input type="checkbox" class="tx-check" id="tx-3d-erosion" aria-label="侵蚀地形" />
+    </div>
+    <div id="tx-3d-erosion-params">
+      <div class="tx-params" id="tx-params-erosion"></div>
+      <div class="tx-param">
+        <span class="tx-param__name">细节网格</span>
+        <span id="tx-3d-detail" class="tx-dd-slot"></span>
+      </div>
+      <div class="tx-param">
+        <span class="tx-param__name">细节倍频</span>
+        <span id="tx-3d-octaves" class="tx-dd-slot"></span>
+      </div>
+    </div>
+    {# 边界阴影与侵蚀无关：海岸线那圈压暗，让陆地与海面的边界读得出来 #}
+    <div class="tx-params" id="tx-params-3d-shadow"></div>
+    <div class="tx-panel__hint">侵蚀只影响三维地形，不改地图数据；改动会重新烘焙地形，松手才生效。边界阴影是海岸线那圈接触阴影。</div>
+  </section>
+</aside>

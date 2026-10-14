@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""时间轴的 URL 表。路径与 Flask 版完全一致（结尾都不带斜杠）。"""
+"""时间轴的 URL 表（所有路径结尾都不带斜杠）。
+
+``/legacy`` 是独立成页的入口，``/world/timeline/<doc_id>`` 是被工作区嵌入的
+同一套编辑器，其余 ``/api/*`` 是它自身的 JSON 接口。
+"""
 
 from django.urls import path, re_path
 

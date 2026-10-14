@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """把前端传来的任意 JSON 规范成一条合法记录。
 
-这段逻辑是从 Flask 版 app.py 原样搬过来的（``_as_float`` / ``_as_int`` /
-``_as_text`` / ``_as_cards`` / ``normalize``），一行为改动都没有，
-区别只是：不再往 data.json 里写，而是把结果交给调用方存进 TimelineItem。
+这里的取值清洗（``as_float`` / ``as_int`` / ``as_text`` / ``as_cards``）与
+``normalize`` 都是纯函数：吃进任意 JSON，吐出可直接写进 ``TimelineItem`` 的
+字典。模型本身只负责存储，写入路径（接口 / admin / 导入脚本）都走这里，
+所以规范结果始终一致。
 
 本模块刻意不 import 任何 Django 东西，方便被数据迁移复用。
 """
@@ -65,9 +66,8 @@ def as_cards(value):
 def normalize(payload, fallback=None):
     """把任意 JSON 变成一条合法记录，返回可直接赋给 TimelineItem 的字典。
 
-    ``fallback`` 是「原记录」，用于复刻 Flask 版 PUT/PATCH 的合并语义：
-    请求里出现的键覆盖原值，没出现的键沿用原值。所以只发 ``{"start": 5}``
-    也能改时间而不丢标题。
+    ``fallback`` 是「原记录」，用于实现 PUT/PATCH 的合并语义：请求里出现的键
+    覆盖原值，没出现的键沿用原值。所以只发 ``{"start": 5}`` 也能改时间而不丢标题。
     """
     source = payload if isinstance(payload, dict) else {}
     base = fallback if isinstance(fallback, dict) else {}
@@ -97,7 +97,7 @@ def normalize(payload, fallback=None):
     if kind == "era":
         theme = theme if theme in THEMES else "blue"
     else:
-        # 事件没有配色，清空即可（Flask 版是干脆不写这个键）
+        # 事件没有配色，清空即可（前端对事件不渲染 theme）
         theme = ""
 
     return {

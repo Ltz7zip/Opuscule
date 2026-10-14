@@ -1,0 +1,214 @@
+/* ==========================================================================
+   opuscule.css —— 深色优先的调色板重映射层
+   --------------------------------------------------------------------------
+   功能模块：一层可选皮肤，给全站换一套调色板（默认深色）。
+   定位：本文件**只做变量重映射**，不含任何选择器样式，不改变页面结构，
+   也不碰组件逻辑。
+
+   加载顺序与原理：terminal.css 已把全站 token（--mn-* / --ap-* / --panel /
+   --line / --ink / --paper …）统一别名到 --tx-* 这一层原语。CSS 自定义属性
+   是"使用时求值"，所以只要在**最后加载**的本文件里改写 --tx-* 原语，
+   全站组件就会跟着变——一处改动，全站生效。本文件因此必须排在各页面样式
+   之后加载，否则会被反压回去；好处是换肤不必逐条覆写选择器。
+
+   取值来源：本层设计语言的实际采样值
+     [实测] = 真实采样值
+     [推导] = 按明暗阶梯推出来的，待补采
+
+   本层刻意**不动字号/行高/字体**：typography 会牵动每一处布局，
+   需要逐页核对，暂不纳入本层。
+
+   回滚：从模板里删掉本文件的那一行 <link> 即可，无残留。
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 本层调色板（原语）
+   ========================================================================== */
+:root {
+  /* —— 表面：三级台阶 —— */
+  --nb-canvas:        #191919;   /* [实测] 画布 */
+  --nb-canvas-soft:   #202020;   /* [实测] 侧边栏 / 面板（比画布亮一档） */
+  --nb-canvas-raised: #2c2c2b;   /* [实测] 芯片 / 浮层 */
+  --nb-canvas-sunken: #101010;   /* [推导] 写入框 */
+
+  /* —— 线：本层的线是**暖调**，不是中性灰，这是手感的关键 —— */
+  --nb-hairline:        rgba(255, 255, 243, 0.082);  /* [实测] */
+  --nb-hairline-strong: rgba(255, 255, 243, 0.16);   /* [推导] */
+  --nb-hairline-soft:   rgba(255, 255, 243, 0.05);   /* [推导] */
+
+  /* —— 墨色 —— */
+  --nb-ink:  #f0efed;   /* [实测] 主文本 */
+  --nb-body: #ada9a3;   /* [实测] 次级 */
+  --nb-mute: #bcbab6;   /* [实测] 三级 */
+  --nb-dim:  #8a8680;   /* [推导] */
+
+  /* —— 强调：本层只有一支蓝 —— */
+  --nb-accent:      #2383e2;                    /* [实测] 经典链接蓝 */
+  --nb-accent-hi:   #3b92e8;                    /* [推导] hover */
+  --nb-accent-lo:   #1a6fc2;                    /* [推导] press */
+  --nb-on-accent:   #ffffff;                    /* [实测] 蓝底白字 */
+  --nb-accent-wash: rgba(35, 131, 226, 0.2);    /* [实测] 文本选中高亮 */
+  --nb-accent-line: rgba(35, 131, 226, 0.4);    /* [推导] */
+
+  /* —— 语义：本层未逐一采到，能实测的用实测，其余沿用旧值 —— */
+  --nb-success: #5ed4ad;   /* [实测] 薄荷绿 */
+  --nb-info:    #2383e2;   /* [实测] */
+
+  /* —— 圆角：本层实测 3.5 / 4 / 6 / 12 / 胶囊，收敛成 5 档 —— */
+  --nb-r-xxs:  3.5px;    /* [实测] 小图标 */
+  --nb-r-sm:   4px;      /* [实测] 行内元素 */
+  --nb-r-md:   6px;      /* [实测] 按钮主档 */
+  --nb-r-card: 12px;     /* [实测] 卡片 / 菜单 */
+  --nb-r-pill: 9999px;   /* [实测] 胶囊 / 圆形 */
+
+  /* —— 透明灰阶叠色档（沿用上游 token 名 --ca-palTraGra*）：hover / 选中 / 遮罩通用 —— */
+  --nb-alpha-75:  rgba(255, 255, 255, 0.016);
+  --nb-alpha-100: rgba(255, 255, 255, 0.03);
+  --nb-alpha-200: rgba(255, 255, 255, 0.055);  /* = hover / 当前页选中 */
+  --nb-alpha-300: rgba(255, 255, 255, 0.094);
+  --nb-alpha-400: rgba(255, 255, 255, 0.13);
+
+  /* 本层的 hover 与"当前页选中"同值，都取 200 档 */
+  --nb-hover: var(--nb-alpha-200);
+
+  /* —— 阴影阶梯（--c-shaBas*）——
+     反直觉的一点：深色的 alpha 反而更重（.08 → .64），因为黑影压在深底上
+     需要更高不透明度才看得见。 */
+  --nb-shadow-sm: 0 2px 4px rgba(25, 25, 25, .08);
+  --nb-shadow-md: 0 4px 12px -2px rgba(25, 25, 25, .08);
+  --nb-shadow-lg: 0 14px 28px -6px rgba(25, 25, 25, .2), 0 2px 4px -1px rgba(25, 25, 25, .118);
+  --nb-shadow-xl: 0 24px 48px rgba(25, 25, 25, .64), 0 4px 12px rgba(25, 25, 25, .56);
+  /* Out 变体 = 基础影 + 一圈 1px 描边（描边色就是边框色） */
+  --nb-shadow-out-sm: 0 0 0 1px #383836, 0 2px 4px rgba(25, 25, 25, .08);
+  --nb-shadow-out-md: 0 0 0 1px #383836, 0 4px 12px -2px rgba(25, 25, 25, .08);
+}
+
+/* 浅色：本层的两套主题严格明暗互逆 ——
+   浅色的分割线色 = 深色的主文本色；深色的分割线色 = 浅色的主文本色。 */
+:root[data-theme="light"] {
+  --nb-canvas:        #ffffff;   /* [实测] */
+  --nb-canvas-soft:   #f9f8f7;   /* [实测] 侧边栏 */
+  --nb-canvas-raised: #ffffff;   /* [实测] */
+  --nb-canvas-sunken: #f2f1ef;   /* [推导] */
+
+  --nb-hairline:        rgba(42, 28, 0, 0.07);   /* [实测] 暖褐黑 */
+  --nb-hairline-strong: rgba(42, 28, 0, 0.14);   /* [推导] */
+  --nb-hairline-soft:   rgba(42, 28, 0, 0.05);   /* [推导] */
+
+  --nb-ink:  #2c2c2b;   /* [实测] */
+  --nb-body: #7d7a75;   /* [实测] */
+  --nb-mute: #a5a29c;   /* [推导] */
+  --nb-dim:  #b8b5af;   /* [推导] */
+
+  --nb-accent-wash: rgba(35, 131, 226, 0.12);   /* [推导] */
+  --nb-accent-line: rgba(35, 131, 226, 0.35);   /* [推导] */
+
+  /* —— 透明灰阶叠色档：与深色按同一档位对齐 —— */
+  --nb-alpha-75:  rgba(0, 0, 0, 0.05);
+  --nb-alpha-100: rgba(0, 0, 0, 0.06);
+  --nb-alpha-200: rgba(0, 0, 0, 0.07);   /* = hover / 当前页选中 */
+  --nb-alpha-300: rgba(0, 0, 0, 0.11);
+  --nb-alpha-400: rgba(0, 0, 0, 0.157);
+
+  /* 注：本层浅色的"按钮 hover"另有一支偏暖的 rgba(55,53,47,.06)（--ca-butHovBac）；
+     这里统一走中性叠加档，保持与深色对称。 */
+  --nb-hover: var(--nb-alpha-200);
+
+  /* —— 阴影阶梯 —— */
+  --nb-shadow-sm: 0 4px 12px rgba(25, 25, 25, .027), 0 1px 2px rgba(25, 25, 25, .02);
+  --nb-shadow-md: 0 8px 12px rgba(25, 25, 25, .027), 0 2px 6px rgba(25, 25, 25, .027);
+  --nb-shadow-lg: 0 20px 24px rgba(25, 25, 25, .05), 0 5px 8px rgba(25, 25, 25, .027);
+  --nb-shadow-xl: 0 24px 48px rgba(25, 25, 25, .24), 0 4px 12px rgba(25, 25, 25, .14);
+  --nb-shadow-out-sm: 0 2px 4px rgba(0, 0, 0, .04), 0 0 0 1px rgba(42, 28, 0, .07);
+  --nb-shadow-out-md: 0 8px 12px rgba(25, 25, 25, .027), 0 2px 6px rgba(25, 25, 25, .027), 0 0 0 1px rgba(42, 28, 0, .07);
+}
+
+/* ==========================================================================
+   2. 把 --tx-* 原语指向本层取值
+   --------------------------------------------------------------------------
+   必须同时命中 [data-theme="light"] 与 [data-theme="dark"]：
+   terminal.css 里这两个选择器特异性更高（0,2,0），只用 :root 会被反压回去。
+
+   注意：变量名仍叫 --tx-green，值已经是本层的蓝——这正是别名层的本意：
+   全站组件问"界面唯一强调色是什么"，答案是 #2383e2。
+   ========================================================================== */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  /* 表面 */
+  --tx-canvas:        var(--nb-canvas);
+  --tx-canvas-soft:   var(--nb-canvas-soft);
+  --tx-canvas-raised: var(--nb-canvas-raised);
+  --tx-canvas-sunken: var(--nb-canvas-sunken);
+
+  /* 线 */
+  --tx-hairline:        var(--nb-hairline);
+  --tx-hairline-strong: var(--nb-hairline-strong);
+  --tx-hairline-soft:   var(--nb-hairline-soft);
+
+  /* 墨色 */
+  --tx-ink:      var(--nb-ink);
+  --tx-body:     var(--nb-body);
+  --tx-mute:     var(--nb-mute);
+  --tx-dim:      var(--nb-dim);
+  --tx-ink-mono: var(--nb-ink);
+
+  /* 强调：终端绿 → 本层蓝 */
+  --tx-green:       var(--nb-accent);
+  --tx-green-hover: var(--nb-accent-hi);
+  --tx-green-press: var(--nb-accent-lo);
+  --tx-green-dim:   var(--nb-accent-lo);
+  --tx-on-green:    var(--nb-on-accent);
+  --tx-green-wash:  var(--nb-accent-wash);
+  --tx-green-line:  var(--nb-accent-line);
+
+  /* 语义 */
+  --tx-success: var(--nb-success);
+  --tx-info:    var(--nb-info);
+
+  /* 圆角 */
+  --tx-r-xxs:  var(--nb-r-xxs);
+  --tx-r-sm:   var(--nb-r-sm);
+  --tx-r-md:   var(--nb-r-md);
+  --tx-r-pill: var(--nb-r-pill);
+
+  /* 卡片档：terminal.css 把 lg / xl 都压在 md(6px) 上，这里放回本层的 12px */
+  --mn-radius-lg: var(--nb-r-card);
+  --mn-radius-xl: var(--nb-r-card);
+
+  /* 模态档：终端语言的"唯一一道投影"换成本层的最大档 */
+  --tx-shadow-modal: var(--nb-shadow-xl);
+}
+
+/* ==========================================================================
+   3. 标签 / 块颜色色板（9 族 × 底 / 字）
+   --------------------------------------------------------------------------
+   来源不是采样 UI，而是直接取自设计规范的 CSS token：
+   `:root` 明色与暗色两个块里的 --cd-palXxx50
+   （底色）与 --cd-palXxx700（字色）。共 9 族：灰 / 棕 / 橙 / 黄 / 绿 / 蓝 / 紫 / 粉 / 红。
+   深色底是半透明叠加，会跟着画布走；浅色底是不透明实色。
+   深色是默认（与 terminal.css 的约定一致），浅色走 [data-theme="light"] 覆盖。
+   ========================================================================== */
+:root {
+  --nb-tag-gray-bg:   #191919;              --nb-tag-gray-fg:   #9b9b9b;
+  --nb-tag-brown-bg:  rgba(184, 101, 72, .08);  --nb-tag-brown-fg:  rgba(187, 125, 100, .91);
+  --nb-tag-orange-bg: rgba(233, 126, 40, .06);  --nb-tag-orange-fg: rgba(233, 126, 32, .91);
+  --nb-tag-yellow-bg: rgba(162, 105, 50, .1);   --nb-tag-yellow-fg: rgba(221, 154, 34, .91);
+  --nb-tag-green-bg:  rgba(45, 153, 100, .08);  --nb-tag-green-fg:  rgba(44, 167, 106, .91);
+  --nb-tag-blue-bg:   rgba(51, 126, 169, .08);  --nb-tag-blue-fg:   rgba(51, 126, 169, .91);
+  --nb-tag-purple-bg: rgba(155, 97, 211, .08);  --nb-tag-purple-fg: rgba(155, 97, 211, .91);
+  --nb-tag-pink-bg:   rgba(220, 76, 145, .06);  --nb-tag-pink-fg:   rgba(216, 87, 149, .91);
+  --nb-tag-red-bg:    rgba(222, 85, 88, .1);    --nb-tag-red-fg:    rgba(222, 85, 80, .91);
+}
+
+:root[data-theme="light"] {
+  --nb-tag-gray-bg:   #f8f8f7;   --nb-tag-gray-fg:   #484743;
+  --nb-tag-brown-bg:  #f4eeee;   --nb-tag-brown-fg:  #613e2e;
+  --nb-tag-orange-bg: #fbecdd;   --nb-tag-orange-fg: #6a3b12;
+  --nb-tag-yellow-bg: #fbf3db;   --nb-tag-yellow-fg: #5f4023;
+  --nb-tag-green-bg:  #edf3ec;   --nb-tag-green-fg:  #1f4f3b;
+  --nb-tag-blue-bg:   #e7f3f8;   --nb-tag-blue-fg:   #1f4a68;
+  --nb-tag-purple-bg: #f8f3fc;   --nb-tag-purple-fg: #5a3872;
+  --nb-tag-pink-bg:   #fcf1f6;   --nb-tag-pink-fg:   #6f3151;
+  --nb-tag-red-bg:    #fdebec;   --nb-tag-red-fg:    #862120;
+}

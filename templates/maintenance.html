@@ -1,0 +1,28 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>系统维护中</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射变量，必须最后加载；删掉即回滚 -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+</head>
+<body>
+  {% comment %}
+    维护页：终端启动序列风格，逐行显示（每行延迟 300ms，由 --xp-i 排）。
+    行的静止态就是 CSS 原始状态，所以 prefers-reduced-motion 下三行直接全在。
+  {% endcomment %}
+  <main class="maint">
+    <div class="maint-line" style="--xp-i:0"><b>&gt;</b> 系统维护中…</div>
+    <div class="maint-line" style="--xp-i:1"><b>&gt;</b> 预计恢复时间：{{ eta|default:"15 分钟后" }}</div>
+    <div class="maint-line" style="--xp-i:2"><b>&gt;</b> 感谢你的耐心</div>
+    <div class="maint-line maint-box" style="--xp-i:3">
+      <b>&gt;</b> 需要马上看一眼？<a href="/legacy">经典时间轴</a>还在。
+    </div>
+  </main>
+</body>
+</html>

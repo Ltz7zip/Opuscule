@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import json
 import pathlib
 import sys
@@ -16,7 +17,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/ux_shots")
 SHOTS.mkdir(exist_ok=True)
 opener = make_opener()   # 带 cookie jar，登录态才留得住
@@ -49,10 +50,12 @@ def main() -> int:
         print("没有时间线文档，先跑 seed_demo")
         return 1
     doc_id = timeline["id"]
-    before = len(api(f"/api/world/timelines/{doc_id}")["events"])
+    before_ids = {row["id"] for row in api(f"/api/world/timelines/{doc_id}")["events"]}
+    before = len(before_ids)
     print(f"时间线「{timeline['name']}」id={doc_id}，现有事件 {before} 个")
 
     problems: list[str] = []
+    created: list[int] = []          # 这一轮点出来的事件，跑完删掉（别把演示数据越堆越乱）
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": 1680, "height": 1000})
@@ -84,7 +87,9 @@ def main() -> int:
         page.mouse.click(box["x"] + box["width"] * 0.55, box["y"] + box["height"] * 0.5)
         page.wait_for_timeout(1200)
         page.screenshot(path=str(SHOTS / "timeline_after_click.png"))
-        after = len(api(f"/api/world/timelines/{doc_id}")["events"])
+        after_ids = {row["id"] for row in api(f"/api/world/timelines/{doc_id}")["events"]}
+        created.extend(sorted(after_ids - before_ids))
+        after = len(after_ids)
         print(f"点击画布后事件数：{before} -> {after}")
         if after <= before:
             problems.append("在嵌入的编辑器里点画布没有新建事件")
@@ -127,6 +132,15 @@ def main() -> int:
             problems.append(f"打开日历面板失败：{exc}")
 
         browser.close()
+
+    # 这一轮点出来的事件收尾删掉：探针要能反复跑，演示数据不该越跑越乱
+    for event_id in created:
+        try:
+            api(f"/api/items/{event_id}", "DELETE")
+        except Exception:                                   # noqa: BLE001
+            pass
+    if created:
+        print(f"（已清理这一轮点出来的 {len(created)} 个事件）")
 
     print("\n报错：", errors or "（无）")
     print("问题：", problems or "（无）")

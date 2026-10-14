@@ -72,7 +72,7 @@ RELATION_KINDS = [
 RELATION_KIND_VALUES = [value for value, _label in RELATION_KINDS]
 
 #: 关系画出来是什么线型。前任 / 收养 / 继这种"非婚生直系"的关系用虚线，
-#: 一眼就能和血缘直系区分开（对齐模版示意图里的画法）。
+#: 一眼就能和血缘直系区分开（与模版示意图里的画法一致）。
 RELATION_STYLES = {
     REL_EX: "dashed",
     REL_HALF_SIBLING: "dashed",
@@ -294,7 +294,7 @@ TREE_TEMPLATE_IDS = [item["id"] for item in TREE_TEMPLATES]
 
 
 def template(template_id: str) -> dict:
-    """按 id 取模版，取不到就退回"家庭"（老数据只有 family 这类值）。"""
+    """按 id 取模版，取不到就退回"家庭"模版。"""
     return TREE_TEMPLATE_MAP.get(template_id) or TREE_TEMPLATE_MAP["family"]
 
 

@@ -1,103 +1,398 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" class="no-js" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ page_title }} · 世界工作区</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0b08'/%3E%3Cpath d='M6 20c4-6 8-6 12 0s6 4 8 2' stroke='%23e0a83c' stroke-width='2' fill='none'/%3E%3C/svg%3E" />
+  <title>{{ page_title }} · {{ world_name }}</title>
+  <meta name="color-scheme" content="dark" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+
+  {# 渐进增强的开关：必须在样式之前同步执行，避免「仅 JS 可见」的元素闪一下 #}
+  <script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
+
   <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
-  <link rel="stylesheet" href="{% static 'responsive.css' %}" />
-  <style>
-    body { display: grid; place-items: center; min-height: 100dvh; background: var(--mn-surface-sunken); }
-    .auth-card {
-      width: min(420px, 92vw); padding: 28px;
-      background: var(--mn-surface); border: 1px solid var(--mn-border);
-      border-radius: var(--mn-radius-lg); box-shadow: var(--mn-shadow-pop);
-      animation: mn-pop var(--mn-dur) var(--mn-ease) both;
-    }
-    .auth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-    .auth-mark {
-      width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
-      background: var(--mn-primary); color: var(--mn-primary-ink); font-weight: 600;
-    }
-    .auth-card h1 { font-size: 20px; margin: 10px 0 4px; }
-    .auth-card p.lead { color: var(--mn-ink-dim); font-size: 12.5px; line-height: 1.7; margin-bottom: 18px; }
-    .field { display: grid; gap: 6px; margin-bottom: 12px; }
-    .field label { font-size: 12.5px; color: var(--mn-ink-muted); }
-    .field-hint { font-size: 12px; color: var(--mn-ink-dim); }
-    .field input {
-      height: 38px; padding: 0 12px; font: inherit; font-size: 13px;
-      background: var(--mn-surface); color: var(--mn-ink);
-      border: 1px solid var(--mn-border); border-radius: var(--mn-radius-sm);
-    }
-    .field input:focus { outline: none; border-color: var(--mn-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-accent) 22%, transparent); }
-    .auth-actions { display: flex; gap: 8px; align-items: center; margin-top: 18px; }
-    .auth-error {
-      margin: 4px 0 12px; padding: 10px 12px; font-size: 12.5px;
-      color: var(--mn-danger); background: color-mix(in srgb, var(--mn-danger) 10%, transparent);
-      border: 1px solid color-mix(in srgb, var(--mn-danger) 30%, transparent); border-radius: var(--mn-radius-sm);
-    }
-    .auth-note { margin-top: 16px; font-size: 12px; color: var(--mn-ink-dim); line-height: 1.7; }
-    .auth-switch { margin-top: 14px; font-size: 12.5px; }
-    .auth-switch a { color: var(--mn-accent); }
-  </style>
+  <link rel="stylesheet" href="{% static 'responsive.css' %}?v={{ static_version }}" />
+  <!-- Apple 皮肤层（中间层，仓库根目录 DESIGN.md）：在 :root 定义 --ap-* 原始调色板，
+       并把 minimal 的语义 token 与组件外观覆盖成浅色外观 -->
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <!-- 现代终端设计语言（仓库根目录 DESIGN.md）—— 全站外观权威：把前几层的语义 token 整体
+       重映射到终端取值，并覆写硬编码色 / 等宽元素 / 装饰手法。排在 base 与 apple 之后，
+       它的取值才不会被反压回去 -->
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <!-- 动效与观感收尾（polish.css）：统一时长与曲线、浮层出入场、控件微交互——只加动效，不改配色 -->
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <!-- 全链路体验层（仓库根目录 DESIGN.md）：导航进度线 / 分级提示 / 焦点与无障碍。
+       排在 auth.css 之前：登录页的专属组件规则加载更晚，能盖过体验层的通用规则 -->
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- 登录页专属层（auth.css）：只作用于 .auth-shell 这一块（见 static/auth.css 顶部说明） -->
+  <link rel="stylesheet" href="{% static 'auth.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射 --tx-* 等变量、不含任何选择器；
+       靠"变量使用时求值"让全站跟着变，所以放最后也不会与 auth.css 的组件规则冲突。删掉即回滚。 -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
 </head>
-<body>
-  <form class="auth-card" method="post" action="{{ form_action }}">
-    {% csrf_token %}
+<body class="auth-body">
+{% comment %}
+  「开启世界线」闸门页。
+
+  设计语言纪律（DESIGN.md）：
+    · 唯一的彩色界面信号是电光绿 #3ddc97 —— 只给「可交互 / 活着 / 选中」。
+    · 层级由 1px 发丝线与表面明度表达；全页只有闸门卡一道模态投影。
+    · 等宽字承担一切机器语言：眉标 / ID / 计数 / 日志 / 时钟 / 快捷键。
+    · 唯一允许的纹理是点阵；不发光的氛围、不加装饰渐变。
+
+  结构契约（动它之前先读这里）：
+    1) 表单控件全在真正的 <form> 里，舞台（世界线 / 闸门 / 覆盖层）不在 form 内。
+       控件是**原生 POST**：无 JS 时照常提交，服务端渲染错误页回来。
+    2) 拒绝 / 校验 / 授权是同一套 DOM，靠 `.auth-shell[data-state]` 切换；
+       无 JS 时 data-state 由服务端按 {{ error }} 预置。
+    3) 视觉层三层兜底：Canvas 世界线 → 静态 SVG 世界线（#authLine）→ 纯 CSS。
+{% endcomment %}
+<div class="auth-shell" id="authShell"
+     data-mode="{% if needs_setup %}setup{% elif mode == 'register' %}register{% else %}login{% endif %}"
+     data-state="{% if error %}{{ notice.kind|default:'denied' }}{% else %}sealed{% endif %}"
+     data-has-error="{% if error %}1{% else %}0{% endif %}"
+     data-error="{% if error %}{{ error }}{% endif %}"
+     data-notice-kind="{% if error %}{{ notice.kind|default:'denied' }}{% endif %}"
+     data-notice-en="{% if error %}{{ notice.en }}{% endif %}"
+     data-invite-hint="{% if invite_hint %}{{ invite_hint }}{% endif %}"
+     data-clock="{% if clock %}{{ clock.stamp }}{% endif %}">
+
+  {# 世界线画布：整页最底层，铺满外壳；其余栏目都盖在它上面且不铺底色 #}
+  <canvas class="auth-canvas" id="authCanvas" aria-hidden="true"></canvas>
+
+  {# 兜底之三：静态 SVG 世界线（无 JS / 引擎全挂 / 静态模式）#}
+  <div class="auth-line" id="authLine" aria-hidden="true">
+    <svg viewBox="0 0 720 300" role="img" aria-label="世界线">
+      <path d="M20 150 H700" stroke="#2c2a27" stroke-width="1" />
+      <path d="M20 150 H360" stroke="#1f8f5f" stroke-width="1" />
+      <g fill="#3ddc97">
+        <rect x="118" y="146" width="8" height="8" />
+        <rect x="246" y="146" width="8" height="8" />
+        <rect x="360" y="146" width="8" height="8" opacity=".85" />
+      </g>
+      <g fill="#2c2a27">
+        <rect x="474" y="146" width="8" height="8" />
+        <rect x="588" y="146" width="8" height="8" />
+      </g>
+      <g fill="none" stroke="#3ddc97" stroke-width="1" opacity=".55">
+        <circle cx="360" cy="150" r="46" stroke-dasharray="3 7" />
+        <circle cx="360" cy="150" r="34" stroke-dasharray="14 10" />
+      </g>
+      <circle cx="360" cy="150" r="14" fill="none" stroke="#f4f2ee" stroke-width="1.2" />
+      <path d="M360 141 L370 158 H350 Z" fill="none" stroke="#3ddc97" stroke-width="1.2" />
+      <circle cx="360" cy="150" r="3.2" fill="#3ddc97" />
+    </svg>
+  </div>
+
+  {# 开机序列：仅 JS 可见，播完自动退场 #}
+  <div class="auth-boot" id="authBoot" aria-hidden="true">
+    <div class="auth-boot-in">
+      <div class="auth-boot-mark">OPUSCULE<i>∞</i></div>
+      <ol class="auth-boot-lines" id="authBootLines"></ol>
+      <div class="auth-boot-bar"><i></i></div>
+    </div>
+  </div>
+
+  <!-- ================= 顶栏：字标 / 世界 / 状态芯片 / 时钟 ================= -->
+  <header class="auth-top">
+    <span class="auth-top-brand">OPUSCULE<i>∞</i></span>
+    <span class="auth-top-rule" aria-hidden="true"></span>
+    <span class="auth-top-world">{{ world_name }}</span>
+    <span class="auth-top-spacer"></span>
+    <span class="auth-top-chip" id="authStateChip">Sealed</span>
+    <span class="auth-top-clock">
+      <b id="authClockHM">{{ clock.hm|default:"--:--" }}</b><i id="authClockSec">{{ clock.sec|default:"00" }}</i>
+    </span>
+  </header>
+
+  <!-- ================= 左栏：世界说明 / 会话流水 / 快捷键 ================= -->
+  <aside class="auth-rail">
     <div class="auth-brand">
-      <span class="auth-mark">{{ initial|default:"W" }}</span>
-      <b>{{ world_name|default:"世界工作区" }}</b>
-    </div>
-    <h1>{{ page_title }}</h1>
-    <p class="lead">{{ page_lead }}</p>
-
-    {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
-
-    <div class="field">
-      <label for="username">用户名</label>
-      <input id="username" name="username" autocomplete="username" required autofocus
-             value="{{ username|default:'' }}" />
-    </div>
-    {% if mode == 'register' %}
-      <div class="field">
-        <label for="display_name">显示名（可选）</label>
-        <input id="display_name" name="display_name" autocomplete="name" />
-      </div>
-    {% endif %}
-    <div class="field">
-      <label for="password">密码</label>
-      <input id="password" name="password" type="password"
-             autocomplete="{% if mode == 'register' %}new-password{% else %}current-password{% endif %}" required />
-    </div>
-    {% if mode == 'register' %}
-      <div class="field">
-        <label for="invite">邀请码{% if needs_setup %}（第一个账号不需要）{% endif %}</label>
-        <input id="invite" name="invite" {% if not needs_setup %}required{% endif %}
-               value="{{ invite|default:'' }}"
-               placeholder="{% if needs_setup %}你是第一个账号，直接成为所有者{% else %}向世界所有者索取{% endif %}" />
-        {% if invite_hint %}<span class="field-hint">{{ invite_hint }}</span>{% endif %}
-      </div>
-    {% endif %}
-
-    <div class="auth-actions">
-      <button class="mini-btn is-primary" type="submit">{{ submit_label }}</button>
-      {% if mode == 'login' %}
-        <a class="mini-btn" href="/register">注册</a>
-      {% else %}
-        <a class="mini-btn" href="/login">已有账号</a>
-      {% endif %}
-      <a class="mini-btn" href="/world">先看看</a>
+      <div class="auth-secttl"><span>World Workspace</span></div>
+      <h1 class="auth-brand-mark">{{ world_name }}</h1>
+      <div class="auth-brand-sub">Sealed · {{ page_title }}</div>
     </div>
 
     <p class="auth-note">
-      {% if needs_setup %}
-        这是第一次启动：注册的第一个账号会成为这个世界的所有者，
-        之后注册都需要所有者发的邀请码。
-      {% else %}
-        登录后才能编辑；没登录也能浏览工作区，发布出来的站点一直是公开的。
-      {% endif %}
+      {% if world_lead %}{{ world_lead }}{% else %}把设定写成卡片、排成时间线、连成关系树、画成地图；整理好之后，一键发布成读者可以直接浏览的只读站点。{% endif %}
     </p>
-  </form>
+
+    <div class="auth-logwrap">
+      <div class="auth-secttl"><span>Session Stream</span></div>
+      <ul class="auth-log" id="authLog" role="log" aria-label="会话流水">
+        {% comment %}首帧由服务端渲染：无 JS 时这里显示后端返回的最后一次错误。{% endcomment %}
+        {% if error %}
+          <li class="is-error"><span class="auth-log-cmd">DENIED</span><span class="auth-log-val">{{ error }}</span></li>
+        {% else %}
+          <li><span class="auth-log-cmd">SESSION</span><span class="auth-log-val">SEALED</span></li>
+        {% endif %}
+      </ul>
+    </div>
+
+    <div class="auth-foot">
+      <div class="auth-keys">
+        <span><b>ENTER</b> 提交</span>
+        <span><b>ESC</b> 清空</span>
+        <span><b>TAB</b> 换字段</span>
+      </div>
+      <div class="auth-sealmark auth-mark-sealed">World · Sealed Section</div>
+      <div class="auth-sealmark auth-mark-lockdown" hidden>Defense · Lockdown</div>
+      <div class="auth-elapsed">Uptime <b id="authElapsed">00:00:00</b></div>
+    </div>
+  </aside>
+
+  <!-- ================= 舞台：闸门光环 / 世界线 / 标注 / 覆盖层 ================= -->
+  <main class="auth-stage" id="authStage">
+
+    {# 闸门（组件 01）：同心虚线环 + 扫描弧 + 品牌字形。状态色由 --g-accent 驱动 #}
+    <div class="auth-core" id="authCore" aria-hidden="true">
+      <svg class="auth-core-svg" viewBox="0 0 260 260">
+        <circle class="g-ring g-a" cx="130" cy="130" r="122" />
+        <circle class="g-ring g-b" cx="130" cy="130" r="104" />
+        <circle class="g-ring g-c" cx="130" cy="130" r="78" />
+        <g class="g-ticks">
+          <line x1="130" y1="6" x2="130" y2="16" />
+          <line x1="254" y1="130" x2="244" y2="130" />
+          <line x1="130" y1="254" x2="130" y2="244" />
+          <line x1="6" y1="130" x2="16" y2="130" />
+          <line x1="217" y1="43" x2="210" y2="50" />
+          <line x1="217" y1="217" x2="210" y2="210" />
+          <line x1="43" y1="217" x2="50" y2="210" />
+          <line x1="43" y1="43" x2="50" y2="50" />
+        </g>
+        <circle class="g-scan" cx="130" cy="130" r="92" />
+        <g class="g-glyph">
+          <circle cx="130" cy="130" r="27" />
+          <path d="M130 101 L158 149 H102 Z" />
+          <circle class="g-dot" cx="130" cy="130" r="6.4" />
+        </g>
+      </svg>
+      <div class="g-sparks" id="authSparks"></div>
+    </div>
+
+    <div class="auth-anno auth-anno-tl" aria-hidden="true">
+      <span class="auth-anno-tag">Sealed Sect</span>
+      <b>Terminal Node</b>
+      <span class="auth-anno-sub">{{ world_name }} · Local Access</span>
+    </div>
+    <div class="auth-anno auth-anno-br" aria-hidden="true">
+      <span class="auth-anno-tag">Sealed Sect</span>
+      <b>Session Seal</b>
+      <span class="auth-anno-sub">Opened {{ clock.hm|default:"--:--" }} · 1 World Unopened</span>
+    </div>
+
+    {# 校验中：径向进度（组件 02）#}
+    <div class="auth-verify" aria-hidden="true">
+      <div class="auth-verify-box">
+        <div class="auth-verify-name">Verifying Identity</div>
+        <div class="auth-verify-bar"><i id="authVerifyBar"></i></div>
+        <div class="auth-verify-pct" id="authVerifyPct">00%</div>
+      </div>
+    </div>
+
+    {# WARNING / NOTICE 封锁面板（组件 03）：三变体共用骨架，权限交给 data-state #}
+    <div class="auth-warn" id="authWarn" role="alert" aria-live="assertive">
+      <div class="auth-warn-box">
+        <div class="auth-warn-t"><span id="authWarnIcon">{{ notice.icon|default:"!" }}</span><span id="authWarnTitle">{{ notice.title|default:"Warning" }}</span></div>
+        <div class="auth-warn-lines">
+          <div><b id="authWarnL1">{{ notice.l1|default:"Authentication Failed" }}</b></div>
+          <div id="authWarnL2">{{ notice.l2 }}</div>
+          <div id="authWarnL3">{{ notice.l3 }}</div>
+          <div class="auth-cn" id="authWarnCn">{{ error }}</div>
+        </div>
+      </div>
+    </div>
+
+    {# 授权通过 #}
+    <div class="auth-grant" role="status" aria-live="polite">
+      <div class="auth-grant-box"><span class="g-blink"></span><span>Permission Authorized · Unfolding The World Line</span></div>
+    </div>
+
+    <div class="auth-engine auth-js-only" id="authEngineTag">World Line</div>
+  </main>
+
+  <!-- ================= 右栏：闸门卡（浮在舞台上的访问契约） ================= -->
+  <section class="auth-panel" id="authPanel" aria-label="访问契约">
+    <header class="auth-panel-head">
+      <span class="auth-secttl"><span>Access Contract</span></span>
+      <span class="auth-headmeta">
+        <span class="auth-headmeta-line">General Access</span>
+        <span class="auth-headmeta-badge">{{ world_name }}</span>
+      </span>
+    </header>
+
+    {% comment %}
+      档案区：身份条 → 姓名牌 → 信息条 → 输入区 → 切换链接 → 页脚。
+      输入区：用户名 / 显示名（注册）/ 通行口令（提交按钮在条右端）/ 邀请码。
+      字段名与后端 _auth_page / _register_user 一一对应，无 JS 时原生 POST。
+    {% endcomment %}
+    <div class="auth-id-body">
+        <div class="auth-id-head">
+          <span class="auth-op">Operator</span>
+          <span class="auth-chip" id="authSessionChip">Session {% if mode == 'register' and not needs_setup %}Unjoined{% else %}Locked{% endif %}</span>
+          <span class="auth-attempt">Attempt <b id="authAttempt">00</b></span>
+        </div>
+
+        <div class="auth-nameplate">
+          <span class="auth-name is-pending" id="authName">{% if needs_setup %}世界无主{% else %}未认领{% endif %}</span>
+        </div>
+
+        <div class="auth-infostrip">
+          <span class="auth-infostrip-logo">∞</span>
+          <span class="auth-infostrip-txt">Personal Information Loaded</span>
+          <span class="auth-infostrip-row"><span>■ SESSION-01</span><span>SEALED</span></span>
+        </div>
+
+        {% comment %}
+          输入区：用户名 / 显示名（注册）/ 授权口令（提交按钮在条右端）/ 邀请码。
+          字段名与后端 _auth_page / _register_user 一一对应，无 JS 时原生 POST。
+        {% endcomment %}
+        <form id="authForm" class="auth-creds" method="post" action="{{ form_action }}"
+              data-mode="{% if needs_setup %}setup{% elif mode == 'register' %}register{% else %}login{% endif %}">
+          {% csrf_token %}
+
+          {# 无 JS 时看得见的那条错误（有 JS 时由封锁面板接管）#}
+          <div class="auth-error auth-nojs-only" id="authError" {% if not error %}hidden{% endif %}>{{ error }}</div>
+
+          <div class="auth-field" data-field="username">
+            <div class="auth-fl"><span class="auth-dash"></span>Username<span class="auth-r">Identifier</span></div>
+            <div class="auth-bar" data-bar>
+              <input class="auth-input" id="id_username" name="username" type="text"
+                     autocomplete="username" autocapitalize="off" spellcheck="false"
+                     required autofocus value="{{ username|default:'' }}" aria-label="用户名" />
+              <span class="auth-mirror" data-mirror aria-hidden="true"></span>
+              <span class="auth-val" data-val></span>
+            </div>
+            <div class="auth-under" data-under></div>
+          </div>
+
+          <div class="auth-field" data-field="display_name" {% if mode != 'register' or needs_setup %}hidden{% endif %}>
+            <div class="auth-fl"><span class="auth-dash"></span>Display Name<span class="auth-r">可选</span></div>
+            <div class="auth-bar" data-bar>
+              <input class="auth-input" id="id_display_name" name="display_name" type="text"
+                     autocomplete="name" aria-label="显示名（可选）" />
+              <span class="auth-mirror" data-mirror aria-hidden="true"></span>
+              <span class="auth-val" data-val>Optional</span>
+            </div>
+            <div class="auth-under" data-under></div>
+          </div>
+
+          <div class="auth-field" data-field="email" {% if mode != 'register' or needs_setup %}hidden{% endif %}>
+            <div class="auth-fl"><span class="auth-dash"></span>Email<span class="auth-r">可选 · 找回密码用</span></div>
+            <div class="auth-bar" data-bar>
+              <input class="auth-input" id="id_email" name="email" type="email"
+                     autocomplete="email" autocapitalize="off" spellcheck="false"
+                     value="{{ email|default:'' }}" aria-label="邮箱（可选）" />
+              <span class="auth-mirror" data-mirror aria-hidden="true"></span>
+              <span class="auth-val" data-val>Optional</span>
+            </div>
+            <div class="auth-under" data-under></div>
+          </div>
+
+          <div class="auth-field" data-field="password">
+            <div class="auth-fl">
+              <span class="auth-dash"></span>{% if needs_setup %}New Passphrase{% else %}Passphrase{% endif %}
+              <span class="auth-r"><span id="authAttemptTag"></span><span class="auth-level">Level-A</span></span>
+            </div>
+            <div class="auth-bar has-action" data-bar>
+              <input class="auth-input is-secret" id="id_password" name="password" type="password"
+                     autocomplete="{% if mode == 'register' or needs_setup %}new-password{% else %}current-password{% endif %}"
+                     required aria-label="密码" />
+              <span class="auth-blocks" data-blocks aria-hidden="true"></span>
+              <span class="auth-val" data-val></span>
+              <button class="auth-submit" id="authSubmit" type="submit">
+                <span class="auth-submit-fill" aria-hidden="true"></span>
+                <span class="auth-submit-label" data-submit-label>Request</span><i class="auth-submit-arrow">→</i>
+              </button>
+            </div>
+            <div class="auth-under" data-under></div>
+          </div>
+
+          <div class="auth-field" data-field="invite">
+            <div class="auth-fl"><span class="auth-dash"></span>Invite Key<span class="auth-r" id="authInviteTag">{% if mode == 'register' and not needs_setup %}必填 · 实时校验{% elif needs_setup %}免填 · 首个账号{% else %}仅注册需要{% endif %}</span></div>
+            <div class="auth-bar" data-bar>
+              <input class="auth-input" id="id_invite" name="invite" type="text"
+                     autocomplete="off" autocapitalize="off" spellcheck="false"
+                     value="{{ invite|default:'' }}"
+                     {% if mode == 'register' and not needs_setup %}required{% endif %}
+                     placeholder="{% if mode == 'register' and not needs_setup %}填入邀请码以加入对应世界{% elif needs_setup %}首个账号免填{% else %}注册时必填{% endif %}" aria-label="邀请码" />
+              <span class="auth-mirror" data-mirror aria-hidden="true"></span>
+              <span class="auth-val" data-val>{% if mode == 'register' and not needs_setup %}Required{% else %}Optional{% endif %}</span>
+            </div>
+            <div class="auth-under" data-under></div>
+            <p class="auth-hint" id="authInviteHint"
+               data-ok="邀请码有效，填好用户名和密码就能进"
+               data-bad="这个邀请码不存在，检查一下是不是复制少了字符"
+               data-used="这个邀请码已经用完了，找所有者再要一个"
+               {% if not invite_hint %}hidden{% endif %}>{{ invite_hint }}</p>
+          </div>
+
+          {% if mode == 'register' and not needs_setup %}
+          <p class="auth-hint" id="authInviteRequired">邀请制：必须持有效邀请码才能注册，向所有者索取。</p>
+          {% endif %}
+
+          <p class="auth-statusline-msg" id="authStatusMsg" {% if not error %}hidden{% endif %}>{{ error }}</p>
+        </form>
+
+        <div class="auth-switch">
+          {% if needs_setup %}
+            <a href="/world">先看看 →</a>
+          {% elif mode == 'register' %}
+            <a href="/login">已有账号 · 去登录</a>
+            <a href="/world">先看看 →</a>
+          {% else %}
+            <a href="/register">没有账号 · 注册（需邀请码）</a>
+            <a href="/reset">忘记密码？</a>
+            <a href="/world">先看看 →</a>
+          {% endif %}
+        </div>
+
+        <footer class="auth-panel-foot">
+          <div class="auth-lamps" aria-hidden="true">
+            <span class="auth-lamp"><i></i>Caps</span>
+            <span class="auth-lamp is-on"><i></i>Num</span>
+            <span class="auth-lamp is-on"><i></i>Key</span>
+          </div>
+          <div class="auth-ctrl">
+            <button type="button" class="auth-ctrl-btn" data-noop>Hibernate</button>
+            <button type="button" class="auth-ctrl-btn" data-noop>Reboot</button>
+          </div>
+        </footer>
+    </div><!-- /.auth-id-body -->
+  </section>
+
+  <!-- ================= 底栏：双语字幕 + 状态行 ================= -->
+  <footer class="auth-bottom">
+    <div class="auth-cap" id="authCaption" role="status" aria-live="polite">
+      <span class="auth-cap-zh" id="authCapZh">{% if needs_setup %}这里还没有主人。第一个账号将成为这个世界的所有者。{% elif mode == 'register' %}你正在加入一个世界。请出示邀请码。{% else %}世界工作区已封存。请出示你的凭据。{% endif %}</span>
+      <span class="auth-cap-en" id="authCapEn">{% if needs_setup %}NO OWNER YET · THE FIRST ACCOUNT BECOMES THE OWNER OF THIS WORLD{% elif mode == 'register' %}YOU ARE JOINING A WORLD. PRESENT YOUR INVITE KEY.{% else %}THE WORKSPACE IS SEALED. PRESENT YOUR CREDENTIALS.{% endif %}</span>
+    </div>
+    <div class="auth-statusline">
+      <a href="/world">Browse</a> · {% if mode == 'register' or needs_setup %}<a href="/login">Login</a>{% else %}<a href="/register">Register</a>{% endif %} ｜ Powered by {{ app.display }}
+    </div>
+  </footer>
+</div>
+
+{% comment %}
+  文案表：JS 只负责按状态取值，不硬编码中文——保证后端渲染的首帧与 JS
+  接管后的文案同源，改文案只需要改这一处。
+{% endcomment %}
+<div hidden id="authCopy"
+     data-sealed-zh="世界工作区已封存。请出示你的凭据。"
+     data-sealed-en="THE WORKSPACE IS SEALED. PRESENT YOUR CREDENTIALS."
+     data-setup-zh="这里还没有主人。第一个账号将成为这个世界的所有者。"
+     data-setup-en="NO OWNER YET · THE FIRST ACCOUNT BECOMES THE OWNER OF THIS WORLD"
+     data-register-zh="你正在加入一个世界。请出示邀请码。"
+     data-register-en="YOU ARE JOINING A WORLD. PRESENT YOUR INVITE KEY."
+     data-verifying-zh="正在比对凭据……"
+     data-verifying-en="VERIFYING IDENTITY · COMPARING CREDENTIALS"
+     data-denied-zh="凭据不符，访问已被拒绝。"
+     data-denied-en="WARNING · AUTHENTICATION FAILED · CREDENTIALS MISMATCH"
+     data-granted-zh="授权通过，世界线正在展开。"
+     data-granted-en="PERMISSION AUTHORIZED · UNFOLDING THE WORLD LINE"></div>
+
+<script type="module" src="{% static 'auth.js' %}?v={{ static_version }}"></script>
+<!-- 体验层：导航进度线 / Ripple / 焦点管理 / 离开处理（不接管登录页自己的外壳） -->
+<script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
 </body>
 </html>

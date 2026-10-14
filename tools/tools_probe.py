@@ -98,8 +98,12 @@ with sync_playwright() as p:
         primary = page.locator(".tool-actions .mini-btn.is-primary")
         if primary.count():
             try:
-                page.on("dialog", lambda d: d.accept("点测项"))
                 primary.first.click()
+                page.wait_for_timeout(600)
+                # 新建动作的名字改由应用内浮层问（window.prompt 在内嵌 WebView 里不可用）
+                if page.locator(".picker-head input").count():
+                    page.fill(".picker-head input", "点测项")
+                    page.click(".picker-foot .mini-btn.is-primary")
                 page.wait_for_timeout(1400)
             except Exception as exc:
                 problems.append(f"{action} 主按钮点不动：{exc}")

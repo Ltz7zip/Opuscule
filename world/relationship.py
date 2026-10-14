@@ -11,7 +11,7 @@
 * ``GET  trees``                  已有的关系树（继续编辑入口）
 * ``POST trees``                  按模版建一棵树（可顺手把示例人物一起放进去）
 * ``GET  trees/<doc_id>``         编辑区完整状态（当前变体 + 人物 + 关系 + 可用关系）
-* ``PUT  trees/<doc_id>/relations`` 整份替换可用关系清单（图2 左侧那一列）
+* ``PUT  trees/<doc_id>/relations`` 整份替换可用关系清单（编辑区左侧那一列）
 
 人物与关系的增删改沿用 ``world.views`` 里那套 ``tree-nodes`` / ``tree-edges``
 接口——同一个数据模型，没必要为这页再抄一遍。
@@ -25,7 +25,7 @@ from django.views.decorators.http import require_http_methods, require_safe
 
 from . import permissions
 from . import views as world_views
-from .models import DOC_TREE, Document, TreeEdge, TreeNode, TreeVariant
+from .models import DOC_TREE
 from .relations import (
     GRID,
     RELATION_KIND_VALUES,
@@ -36,6 +36,8 @@ from .relations import (
     template_payload,
     template_relations,
 )
+from documents.models import Document
+from graph.models import TreeEdge, TreeNode, TreeVariant
 
 #: 这些名字是"还没起过名"的意思，选完模版可以顺手替掉
 DEFAULT_TREE_NAMES = {"", "未命名", "新建关系树", "关系树"}
@@ -61,11 +63,12 @@ def relationship_page(request):
         if document is not None and document.document_type != DOC_TREE:
             document = None
     theme = world.theme_config if isinstance(world.theme_config, dict) else {}
-    # 明暗三档：paper = 发布站点的纸面（嵌进去要跟宿主同色），
-    # light / dark 可以强制覆盖，缺省跟世界主题走
+    # 明暗两档（终端设计语言外壳只有一套暗色，嵌入时必须跟宿主同色）：
+    # light = 世界主题显式设成浅色；其余（含发布站点传来的 theme=paper）一律走暗色。
     theme_mode = request.GET.get("theme", "")
     if theme_mode not in ("paper", "light", "dark"):
         theme_mode = "light" if theme.get("mode") == "light" else "dark"
+    is_light = theme_mode == "light"
     embed = request.GET.get("embed", "") not in ("", "0", "false", "no")
     readonly = embed if "readonly" not in request.GET else (
         request.GET.get("readonly", "") not in ("0", "false", "no"))
@@ -75,8 +78,9 @@ def relationship_page(request):
     return render(request, "relationship.html", {
         "doc_id": doc_id,
         "doc_missing": bool(doc_id) and document is None,
-        "theme_mode": "light" if theme_mode in ("paper", "light") else "dark",
-        "paper": theme_mode == "paper",
+        "theme_mode": "light" if is_light else "dark",
+        # 嵌入态：宿主是暗色外壳，画布跟着暗
+        "paper": not is_light,
         "embed": embed,
         "readonly": readonly,
     })
@@ -85,7 +89,6 @@ def relationship_page(request):
 # --------------------------------------------------------------------------- #
 # 模版目录
 # --------------------------------------------------------------------------- #
-@csrf_exempt
 @require_safe
 def template_collection(request):
     """所有起步模版。左侧列表 + 右侧示意图都从这一份数据来。"""
@@ -120,6 +123,9 @@ def tree_collection(request):
 
     if request.method == "GET":
         documents = world.documents.filter(document_type=DOC_TREE, deleted_at__isnull=True)
+        # 只读成员翻关系树列表时，别把别人没发布的树名字漏出去
+        if not permissions.can_edit(request.user, world):
+            documents = documents.filter(is_published=True, hidden=False)
         return world_views.json_response({
             "trees": [_tree_summary(item) for item in documents.order_by("-updated_at", "-id")[:60]],
         })
@@ -255,7 +261,6 @@ def _variant_or_default(document: Document) -> TreeVariant:
     return variant
 
 
-@csrf_exempt
 @require_safe
 def tree_detail(request, doc_id):
     """编辑区要的全部东西：当前树 + 人物 + 关系 + 可用关系 + 网格。"""
@@ -311,7 +316,7 @@ def _clean_relations(raw) -> list:
 @csrf_exempt
 @require_http_methods(["GET", "PUT"])
 def tree_relations(request, doc_id):
-    """这棵树可用的关系清单（图2 左侧那一列）：读 / 整份替换。"""
+    """这棵树可用的关系清单（编辑区左侧那一列）：GET 读取 / PUT 整份替换。"""
     world = world_views.current_world()
     document = world_views.get_document(world, doc_id)
     if document is None:

@@ -1,9 +1,22 @@
 # -*- coding: utf-8 -*-
 """取值规则：属性值的清洗、公式求值、引用解析、区块与正文的互转。
 
-模型只负责存储，所有「什么样的输入算合法」的判断都收在这里——
-和上一轮 ``timeline/normalize.py`` 的分工保持一致，写入路径（接口 / admin / 导入脚本）
-拿到的规范化结果始终一样。
+模型（``world.models``）只负责把数据存起来，**「什么样的输入算合法」这一层判断全部收在这里**。
+好处是接口、admin、导入脚本这些写入路径都调用同一套函数，同一份输入永远得到同一份规范化结果，
+不会出现「从接口存进去的值和从导入脚本存进去的不一样」。
+
+模块大致分四块：
+
+* **基础清洗**（``as_text`` / ``as_number`` / ``as_int`` / ``as_alias_list``）：把任意输入收敛成
+  文本 / 数字 / 别名列表，超长按上限截断。
+* **公式**（``evaluate_formula``）：把 ``@[属性名] * @[属性名]`` 这种表达式求成一个数字。
+  自己用 ``ast`` 走一遍白名单求值，不碰 ``eval``，免得公式变成注入入口。
+* **属性值**（``coerce_property_value`` / ``resolve_card_values``）：按属性的值类型清洗单个值，
+  并把卡片的原始值解析成前端直接能用的形态（引用带目标摘要、公式算出数字）。
+* **区块与正文**（``normalize_blocks`` / ``blocks_to_text``）：把 contenteditable 送来的区块数组
+  规整成固定结构，同时派生一份纯文本投影，给搜索、字数与自动识别复用。
+
+正文里的 HTML 交给 ``world.sanitize`` 做白名单净化，本模块只负责结构。
 """
 
 from __future__ import annotations
@@ -12,7 +25,7 @@ import ast
 import operator
 import re
 
-from .sanitize import clean_html, html_to_text
+from .services.sanitize import clean_html, html_to_text
 
 from .models import (
     VT_DATE,
@@ -133,7 +146,13 @@ def _safe_eval(node, lookup):
 
 
 def evaluate_formula(expression: str, values_by_name: dict):
-    """求值 ``@[Price] * @[Rarity]`` 这类公式；缺值或非法时返回 None（前端显示空）。"""
+    """求值 ``@[Price] * @[Rarity]`` 这类公式；缺值或非法时返回 None（前端显示空）。
+
+    流程：先把每个 ``@[属性名]`` 替换成它当前的数字（名字要能在 ``values_by_name`` 里找到、
+    且能转成数字），再把替换后的算式交给 ``_safe_eval`` 逐节点求值。
+    任何一步不成立（名字缺失、不是数字、算式语法错、结果是 NaN / inf）都返回 None，
+    不抛异常——公式是给用户随手写的，算不出来就显示空，别让整张卡片渲染失败。
+    """
     if not expression or not expression.strip():
         return None
 
@@ -191,7 +210,8 @@ def coerce_property_value(prop, raw, world=None):
             return ""
         label = as_text(raw, 120)
         if prop.option_labels and label not in prop.option_labels:
-            # VVD 允许就地新建选项（调研文档 §4.3），这里同样接受并补进选项表
+            # 允许就地新建选项：不在已有选项里也收下，顺手补进选项表，
+            # 下次同名列就有候选（省得用户先去类型面板加一项再回来选）
             options = list(prop.options or [])
             options.append({"label": label, "color": ""})
             prop.options = options
@@ -310,7 +330,8 @@ def default_values_for(entity_type) -> dict:
 # 区块与正文
 # --------------------------------------------------------------------------- #
 BLOCK_TYPES = ("text", "heading", "quote", "divider", "callout", "media", "tool",
-               "table", "todo", "card", "image", "embed", "toggle")
+               "table", "todo", "card", "image", "embed", "toggle",
+               "code", "bulleted", "numbered", "bookmark", "collection")
 
 
 def normalize_blocks(value) -> list[dict]:
@@ -347,14 +368,16 @@ def normalize_blocks(value) -> list[dict]:
                 block[key] = raw.get(key)
         if raw.get("collapsed"):
             block["collapsed"] = True               # 折叠的块（toggle）
-        if btype in ("card", "image", "embed"):
+        if raw.get("checked"):
+            block["checked"] = True                 # 打勾的块（todo）
+        if btype in ("card", "image", "embed", "bookmark"):
             settings_ = block.get("settings") if isinstance(block.get("settings"), dict) else {}
             clean_settings = {}
             if btype == "card":
                 target = settings_.get("document") or raw.get("url")
                 if str(target or "").lstrip("-").isdigit():
                     clean_settings["document"] = int(target)
-            if btype in ("image", "embed"):
+            if btype in ("image", "embed", "bookmark"):
                 clean_settings["url"] = as_text(settings_.get("url") or raw.get("url"), 4000)
                 clean_settings["caption"] = as_text(settings_.get("caption"), 300)
             # 这三个类型的 settings 必须以清洗结果为准，别让脏数据透传
@@ -415,7 +438,7 @@ def blocks_to_text(blocks) -> str:
 
 def card_search_text(card) -> str:
     """卡片进搜索索引的文本：标题 + 别名 + 正文 + 属性值。"""
-    from .models import Document
+    from documents.models import Document
 
     document: Document = card.document
     chunks = [document.name]

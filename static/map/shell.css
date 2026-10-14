@@ -1,0 +1,368 @@
+/* ==========================================================================
+   map/shell.css —— 地图页顶栏的终端皮肤
+   --------------------------------------------------------------------------
+   地图页跑的是 Opuscule 的整套界面，所以这里**只做两件事**：
+
+     1. 给顶栏（templates/map/shell.html）上色。取值来自 map/tokens.css
+        （与 static/terminal.css 同源），那份文件是这套语言唯一的取值落点。
+     2. 藏掉 Opuscule 自己的外壳：竖向标签条、标签行、底部动作条、拖动条 —— 那些入口
+        已经搬进顶栏。这些元素**仍然留在 DOM 里**，顶栏按钮只是去点它们，行为完全一致。
+
+   注意「让位」那几条用的是 `body:has(> #tx-bar)`：embed 嵌入时没有顶栏，
+   面板就不该被顶下去，Opuscule 自己的展开箭头也得留着。
+   ========================================================================== */
+
+/* ——— 顶栏本体 ——————————————————————————————————————————————— */
+
+#tx-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--tx-h-bar);
+  padding: 0 12px;
+  background: var(--tx-canvas);
+  border-bottom: 1px solid var(--tx-hairline);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-ui);
+  color: var(--tx-body);
+  user-select: none;
+}
+
+/* ——— 左：文档名 + 计数（与工作区顶栏同一套） ———————————————————— */
+
+.tx-bar__doc {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tx-bar__name {
+  flex: none;
+  max-width: 34vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  text-decoration: none;
+}
+
+.tx-bar__name:hover {
+  color: var(--tx-green-hover);
+}
+
+.tx-bar__world,
+.tx-bar__stats {
+  flex: none;
+  white-space: nowrap;
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-dim);
+}
+
+.tx-bar__chip {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--tx-hairline-strong);
+  border-radius: var(--tx-r-xxs);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-mute);
+}
+
+/* ——— 中：视图分段控件 ————————————————————————————————— */
+
+.tx-seg {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas-sunken);
+}
+
+.tx-seg > button {
+  height: 22px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-mute);
+  font-family: inherit;
+  font-size: var(--tx-fs-ui);
+  cursor: pointer;
+}
+
+.tx-seg > button:hover {
+  color: var(--tx-ink);
+}
+
+.tx-seg > button[aria-pressed="true"] {
+  background: var(--tx-green-wash);
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
+/* ——— 右：世界地图 ▾ / 工作区 / ☰ ——————————————————————— */
+
+.tx-bar__right {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+}
+
+.tx-chev {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* 菜单：details 原生开合，脚本禁用也能用 */
+.tx-menu {
+  position: relative;
+  flex: none;
+}
+
+.tx-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tx-h-row);
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-mute);
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.tx-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tx-menu > summary:hover,
+.tx-menu[open] > summary {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+.tx-menu > summary svg.icon {
+  flex: none;
+  display: block;
+}
+
+.tx-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 95;
+  min-width: 180px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--tx-1);
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-modal);
+}
+
+.tx-menu__item,
+.tx-menu__group > button {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  width: 100%;
+  padding: var(--tx-1) var(--tx-2);
+  border: 0;
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tx-menu__item:hover,
+.tx-menu__group > button:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+.tx-menu__item.is-current {
+  color: var(--tx-green);
+}
+
+/* 菜单里的主 CTA（保存）：绿只给它一个 */
+.tx-menu__group > button.is-primary {
+  color: var(--tx-green);
+}
+
+.tx-menu__group > button.is-primary:hover {
+  color: var(--tx-green-hover);
+}
+
+.tx-menu__item.is-current::before {
+  content: "●";
+  font-size: 0.7em;
+}
+
+.tx-menu__group + .tx-menu__group {
+  margin-top: var(--tx-1);
+  padding-top: var(--tx-1);
+  border-top: 1px solid var(--tx-hairline);
+}
+
+.tx-menu__empty {
+  display: block;
+  padding: var(--tx-1) var(--tx-2);
+  color: var(--tx-dim);
+  font-size: var(--tx-fs-mono);
+}
+
+.tx-menu__group > button svg.icon,
+.tx-menu__item svg.icon {
+  flex: none;
+  display: block;
+  color: var(--tx-mute);
+}
+
+.tx-bar__btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tx-h-row);
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-mute);
+  font-family: inherit;
+  font-size: var(--tx-fs-ui);
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tx-bar__btn svg.icon {
+  flex: none;
+  display: block;
+}
+
+.tx-bar__label {
+  white-space: nowrap;
+}
+
+.tx-bar__btn:hover:not(:disabled) {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+.tx-bar__btn:focus-visible {
+  outline: none;
+  box-shadow: var(--tx-focus-ring);
+}
+
+/* 选中：绿只出现在「当前状态」和主 CTA 上 */
+.tx-bar__btn[aria-pressed="true"] {
+  background: var(--tx-green-wash);
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
+.tx-bar__btn--primary {
+  color: var(--tx-green);
+  border-color: var(--tx-green-line);
+}
+
+.tx-bar__btn--primary:hover:not(:disabled) {
+  background: var(--tx-green-wash);
+  color: var(--tx-green-hover);
+}
+
+.tx-bar__btn:disabled {
+  color: var(--tx-dim);
+  cursor: not-allowed;
+}
+
+.tx-bar__noscript {
+  position: fixed;
+  top: var(--tx-h-bar);
+  left: 0;
+  right: 0;
+  z-index: 90;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--tx-canvas-soft);
+  border-bottom: 1px solid var(--tx-hairline);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-mute);
+}
+
+/* 面板本体：由我们的外壳接管时才变成一条竖栏（具体尺寸在 panel.css 的 #options 段）。
+   两种落地方式都算接管：独立页有顶栏，嵌进工作区面板时没有顶栏、但面板骨架照样在
+   （见 templates/map/shell.html）。 */
+
+body:has(> #tx-bar) #optionsTrigger,
+body:has(> #tx-bar) #regenerate,
+:root[data-map-host="embed"] #optionsTrigger,
+:root[data-map-host="embed"] #regenerate {
+  display: none !important;
+}
+
+/* 标签行、底部动作条、拖动条 —— 独立页的入口在顶栏，嵌入时没有可切的东西；
+   元素留在 DOM 里当点击目标 */
+body:has(> #tx-bar) #options .tab,
+body:has(> #tx-bar) #options #sticked,
+body:has(> #tx-bar) #options .drag-trigger,
+:root[data-map-host="embed"] #options .tab,
+:root[data-map-host="embed"] #options #sticked,
+:root[data-map-host="embed"] #options .drag-trigger {
+  display: none !important;
+}
+
+/* 宽度不够时只留图标：文字收进 title，仍然能看能点，也不用横向滚动 */
+@media (max-width: 1180px) {
+  #tx-bar {
+    gap: 8px;
+  }
+  .tx-bar__label {
+    display: none;
+  }
+  .tx-bar__btn {
+    padding: 0 7px;
+  }
+  .tx-bar__stats {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .tx-bar__world {
+    display: none;
+  }
+  .tx-bar__name {
+    max-width: 26vw;
+  }
+}
+
+@media (max-width: 720px) {
+  .tx-bar__doc {
+    gap: var(--tx-1);
+  }
+  .tx-seg > button {
+    padding: 0 8px;
+  }
+}

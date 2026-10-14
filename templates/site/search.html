@@ -36,15 +36,16 @@
         </li>
       {% endfor %}
     </ul>
-    {% if pager.pages > 1 %}
-      <nav class="pager">
-        {% if pager.has_prev %}
-          <a class="pager-btn" href="?q={{ query|urlencode }}&page={{ pager.page|add:"-1" }}{% if active_filter.type_slug %}&type={{ active_filter.type_slug }}{% endif %}{% if active_filter.era_id %}&era={{ active_filter.era_id }}{% endif %}">上一页</a>
-        {% endif %}
-        <span class="pager-info">第 {{ pager.page }} / {{ pager.pages }} 页</span>
-        {% if pager.has_next %}
-          <a class="pager-btn" href="?q={{ query|urlencode }}&page={{ pager.page|add:"1" }}{% if active_filter.type_slug %}&type={{ active_filter.type_slug }}{% endif %}{% if active_filter.era_id %}&era={{ active_filter.era_id }}{% endif %}">下一页</a>
-        {% endif %}
+    {% if pager.total %}
+      <div class="list-foot">
+        <span class="list-count">已显示 {{ hits|length }} / {{ pager.total }} 条</span>
+        <a class="to-top" href="#">回到顶部 ↑</a>
+      </div>
+    {% endif %}
+    {% if can_load_more %}
+      <nav class="pager" id="more">
+        <a class="pager-btn is-primary"
+           href="?q={{ query|urlencode }}&show={{ next_show }}{% if active_filter.type_slug %}&type={{ active_filter.type_slug }}{% endif %}{% if active_filter.era_id %}&era={{ active_filter.era_id }}{% endif %}#more">加载更多（已显示 {{ shown }} / {{ pager.total }} 条）</a>
       </nav>
     {% endif %}
   {% else %}

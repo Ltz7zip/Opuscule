@@ -1,0 +1,126 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>重置密码 · {{ world_name }}</title>
+  <meta name="color-scheme" content="dark" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+
+  {# 与登录页同一套样式层：先让语义 token 铺好，重置页只再补一点它自己的排版 #}
+  <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'responsive.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+
+  {% comment %}
+    只写这一页自己的排版，取值全部走语义 token（--tx-*），这样换皮肤/换主题
+    它跟着变，不会像硬编码色那样掉队。
+  {% endcomment %}
+  <style>
+    .rp-body {
+      min-height: 100vh; margin: 0; display: grid; place-items: center;
+      background: var(--tx-canvas); color: var(--tx-body);
+      font-family: var(--font-sans, system-ui, sans-serif); padding: 24px;
+    }
+    .rp-card {
+      width: 100%; max-width: 420px; padding: 32px;
+      background: var(--tx-canvas-raised); border: 1px solid var(--tx-hairline);
+      border-radius: var(--tx-r-md); box-shadow: var(--tx-shadow-modal, 0 12px 40px rgba(0,0,0,.35));
+    }
+    .rp-brand {
+      font-family: var(--font-mono, ui-monospace, monospace); letter-spacing: .18em;
+      color: var(--tx-mute); font-size: 12px; text-transform: uppercase; margin: 0 0 4px;
+    }
+    .rp-title { margin: 0 0 6px; font-size: 22px; color: var(--tx-ink); }
+    .rp-lead { margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: var(--tx-mute); }
+    .rp-field { margin-bottom: 16px; }
+    .rp-label {
+      display: block; margin-bottom: 6px; font-size: 12px; letter-spacing: .08em;
+      text-transform: uppercase; font-family: var(--font-mono, ui-monospace, monospace);
+      color: var(--tx-mute);
+    }
+    .rp-input {
+      width: 100%; box-sizing: border-box; padding: 11px 12px; font-size: 15px;
+      color: var(--tx-ink); background: var(--tx-canvas-sunken);
+      border: 1px solid var(--tx-hairline-strong); border-radius: var(--tx-r-sm);
+    }
+    .rp-input:focus { outline: none; border-color: var(--tx-green); }
+    .rp-btn {
+      width: 100%; padding: 12px; margin-top: 8px; font-size: 15px; cursor: pointer;
+      color: var(--tx-on-green); background: var(--tx-green);
+      border: 1px solid var(--tx-green); border-radius: var(--tx-r-sm);
+    }
+    .rp-btn:hover { background: var(--tx-green-hover); }
+    .rp-error {
+      margin: 0 0 16px; padding: 10px 12px; font-size: 14px;
+      color: var(--tx-ink); background: var(--tx-canvas-sunken);
+      border: 1px solid var(--tx-hairline-strong); border-left: 3px solid #d9534f;
+      border-radius: var(--tx-r-sm);
+    }
+    .rp-ok { color: var(--tx-ink); font-size: 14px; line-height: 1.7; }
+    .rp-links { margin-top: 22px; font-size: 13px; }
+    .rp-links a { color: var(--tx-green); text-decoration: none; }
+    .rp-links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body class="rp-body">
+  <main class="rp-card">
+    <p class="rp-brand">OPUSCULE · {{ world_name }}</p>
+
+    {% if error %}
+    <p class="rp-error">{{ error }}</p>
+    {% endif %}
+
+    {% if step == 'request' %}
+      {% if sent %}
+        <h1 class="rp-title">重置链接已寄出</h1>
+        <p class="rp-ok">
+          如果「{{ identifier }}」对应的账号登记过邮箱，我们刚把一封带重置链接的邮件寄了过去。
+          请查收（含垃圾邮件箱），链接用过一次就失效。
+        </p>
+        <p class="rp-links"><a href="/login">返回登录 →</a></p>
+      {% else %}
+        <h1 class="rp-title">忘记密码</h1>
+        <p class="rp-lead">填上你的用户名或登记过的邮箱，我们把重置链接寄给你。</p>
+        <form method="post" action="/reset">
+          {% csrf_token %}
+          <div class="rp-field">
+            <label class="rp-label" for="id_identifier">用户名 或 邮箱</label>
+            <input class="rp-input" id="id_identifier" name="identifier" type="text"
+                   autocomplete="username" autofocus required value="{{ identifier|default:'' }}" />
+          </div>
+          <button class="rp-btn" type="submit">寄出重置链接</button>
+        </form>
+        <p class="rp-links"><a href="/login">想起密码了 · 去登录 →</a></p>
+      {% endif %}
+    {% elif step == 'confirm' %}
+      {% if done %}
+        <h1 class="rp-title">密码已更新</h1>
+        <p class="rp-ok">新密码已经生效，用它可以登录了。</p>
+        <p class="rp-links"><a href="/login">去登录 →</a></p>
+      {% else %}
+        <h1 class="rp-title">设置新密码</h1>
+        <p class="rp-lead">设一个强度足够的新密码，旧的立刻作废。</p>
+        <form method="post" action="">
+          {% csrf_token %}
+          <div class="rp-field">
+            <label class="rp-label" for="id_new_password">新密码</label>
+            <input class="rp-input" id="id_new_password" name="new_password" type="password"
+                   autocomplete="new-password" autofocus required />
+          </div>
+          <div class="rp-field">
+            <label class="rp-label" for="id_confirm_password">再输一次</label>
+            <input class="rp-input" id="id_confirm_password" name="confirm_password" type="password"
+                   autocomplete="new-password" required />
+          </div>
+          <button class="rp-btn" type="submit">保存新密码</button>
+        </form>
+        <p class="rp-links"><a href="/login">返回登录 →</a></p>
+      {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>

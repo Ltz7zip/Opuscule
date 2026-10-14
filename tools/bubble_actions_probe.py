@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import json
 import pathlib
 import sys
@@ -13,7 +14,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/ux_shots")
 SHOTS.mkdir(exist_ok=True)
 opener = make_opener()   # 带 cookie jar，登录态才留得住

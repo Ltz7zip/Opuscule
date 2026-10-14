@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """经典时间线编辑器 ⇄ world 时间线文档 的适配层。
 
-工作区里打开一条时间线时，直接把**已有的经典编辑器**整个嵌进来用（像素级复刻的那一版，
-交互比后来新写的那套完整得多），做法是：
+工作区里打开一条时间线时，直接把**已有的经典编辑器**整个嵌进来复用——它的拖拽、缩放、
+分屏等交互比工作区自带的简版时间线完整得多。做法是：
 
 1. 页面走 ``/w/timeline/<doc_id>``，模板在 ``script.js`` 之前注入一个 fetch 适配层，
    把编辑器写死的 ``/api/timeline``、``/api/items*``、``/api/view`` 指向下面这几个函数；
@@ -23,8 +23,9 @@
 
 from __future__ import annotations
 
-from .models import PRECISION_ORDER, Document, Era, TimelineEvent, World
+from .models import PRECISION_ORDER, World
 from .normalize import as_alias_list, as_int, as_text, blocks_to_text
+from documents.models import Document, Era, TimelineEvent
 
 ERA_ID_BASE = 1_000_000          # 纪元的 id 偏移，避免和事件 id 撞车
 MONTHS_PER_YEAR = 12

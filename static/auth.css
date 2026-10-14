@@ -1,0 +1,1400 @@
+/* ==========================================================================
+   auth.css  —  登录 / 注册 / setup 闸门页
+   --------------------------------------------------------------------------
+   加载顺序：minimal → responsive → apple → terminal → polish → experience → **auth.css**
+   本层排在最后，因为登录页要在共享的 minimal / apple / terminal / polish /
+   experience 都就位之后，再做一次只在 .auth-shell 作用域内的覆盖——它不碰全局。
+
+   设计语言：仓库根目录 DESIGN.md（暖近黑 #121110 + 电光绿 #3ddc97）。
+   纪律（三条不容商量）：
+     · 电光绿是唯一的彩色界面信号 —— 只给主 CTA / 焦点环 / 选中·活着 的状态。
+       本页只有四处吃绿：面板顶部的拉手条、聚焦输入条的环与下划扫线、
+       提交按钮、以及「有效 / 已授权」这类语义位。
+     · 层级靠 1px 发丝线与表面明度；全页只有闸门卡一道模态投影。
+     · 机器语言（眉标 / ID / 计数 / 日志 / 时钟 / 快捷键）一律等宽。
+   唯一允许的纹理是点阵（画在 canvas 上，见 auth.js）。
+
+   动画编排：
+     0. 开机序列        boot overlay 逐行打印 → 退场            ~700ms
+     1. 错峰入场        顶栏 / 左栏 / 面板 / 底栏依次淡入上浮      ~900ms
+     2. 面板扫描揭开    clip-path 自上而下 + 2px 绿色扫描线       620ms
+     3. 闸门呼吸        三层虚线环反向自转 + 扫描弧巡游           常驻
+     4. 输入反馈        聚焦下划扫线 / 逐键脉冲 / ▮ 方块镜像      180–260ms
+     5. 状态编排        校验（脉冲向心 + 进度条）/ 拒绝（硬切红闪 + 抖动）
+                        / 授权（环张开 + 世界线铺满 → 跳转）
+     6. 减少动效        全部让路（见文件末尾）
+
+   渐进增强：无 JS 时 `.auth-shell` 不挂 `is-live`，入场动画不生效，元素静态可见；
+   静态 SVG 世界线（#authLine）顶上，表单照常原生 POST。
+   ========================================================================== */
+
+/* body 在 terminal.css 里已经是 --tx-canvas 实底；这里只锁掉滚动，画面自己管布局 */
+body.auth-body {
+  background-color: var(--tx-canvas);
+  overflow: hidden;
+}
+
+.auth-shell {
+  /* —— 版式（视口锚定）—— */
+  --g-top-h: 42px;
+  --g-bottom-h: 36px;
+  --g-rail-w: clamp(226px, 19vw, 306px);
+  --g-panel-w: clamp(344px, 29vw, 424px);
+  --g-pad: clamp(16px, 1.5vw, 26px);
+
+  /* —— 表面 / 线 / 墨（全部从终端 token 派生）—— */
+  --g-bg: var(--tx-canvas);
+  --g-sunken: var(--tx-canvas-sunken);
+  --g-soft: var(--tx-canvas-soft);
+  --g-raised: var(--tx-canvas-raised);
+  --g-line: var(--tx-hairline);
+  --g-line-2: var(--tx-hairline-strong);
+  --g-line-soft: var(--tx-hairline-soft);
+  --g-ink: var(--tx-ink);
+  --g-body: var(--tx-body);
+  --g-mute: var(--tx-mute);
+  --g-dim: var(--tx-dim);
+  --g-ink-mono: var(--tx-ink-mono);
+
+  /* —— 状态强调（唯一会换色的信号）—— */
+  --g-accent: var(--tx-green);
+  --g-accent-hover: var(--tx-green-hover);
+  --g-accent-dim: var(--tx-green-dim);
+  --g-accent-wash: var(--tx-green-wash);
+  --g-accent-line: var(--tx-green-line);
+  --g-on-accent: var(--tx-on-green);
+
+  /* —— 动效 —— */
+  --g-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --g-ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  --g-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --g-t-fast: 150ms;
+  --g-t: 250ms;
+  --g-t-slow: 420ms;
+
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--g-rail-w) 1fr;
+  grid-template-rows: var(--g-top-h) 1fr var(--g-bottom-h);
+  grid-template-areas:
+    "top   top"
+    "rail  stage"
+    "bottom bottom";
+  color: var(--g-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  line-height: 1.5;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* 状态 → 强调色。注意：这里**刻意不给任何 transition** —— 拒绝是硬切（AC-05）。 */
+.auth-shell[data-state="denied"] {
+  --g-accent: var(--tx-danger);
+  --g-accent-hover: var(--tx-danger);
+  --g-accent-dim: color-mix(in srgb, var(--tx-danger) 62%, var(--g-bg));
+  --g-accent-wash: color-mix(in srgb, var(--tx-danger) 12%, transparent);
+  --g-accent-line: color-mix(in srgb, var(--tx-danger) 34%, transparent);
+  --g-on-accent: var(--g-bg);
+}
+.auth-shell[data-state="notice"] {
+  --g-accent: var(--tx-warning);
+  --g-accent-hover: var(--tx-warning);
+  --g-accent-dim: color-mix(in srgb, var(--tx-warning) 62%, var(--g-bg));
+  --g-accent-wash: color-mix(in srgb, var(--tx-warning) 12%, transparent);
+  --g-accent-line: color-mix(in srgb, var(--tx-warning) 34%, transparent);
+  --g-on-accent: var(--g-bg);
+}
+
+.auth-shell *,
+.auth-shell *::before,
+.auth-shell *::after { box-sizing: border-box; }
+
+.auth-shell button,
+.auth-shell input { font: inherit; }
+
+/* —— 渐进增强开关（不用 !important，靠源码顺序压过同特异性的规则）—— */
+.auth-js-only { display: none; }
+html.js .auth-js-only { display: block; }
+html.js .auth-nojs-only { display: none; }
+
+/* [hidden] 必须赢过本文件里的 display:flex/grid */
+.auth-shell [hidden] { display: none !important; }
+
+/* 视觉隐藏但对读屏 / 密码管理器可见 */
+.auth-sr {
+  position: absolute !important;
+  inline-size: 1px; block-size: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+
+/* ==========================================================================
+   0. 眉标母版：绿色小方块 + 全大写等宽字 + 发丝线延伸到右端
+   ========================================================================== */
+.auth-secttl {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--g-mute);
+}
+.auth-secttl::before {
+  content: "";
+  flex: 0 0 auto;
+  inline-size: 5px; block-size: 5px;
+  background: var(--g-accent);
+}
+.auth-secttl > span { flex: 0 0 auto; }
+.auth-secttl::after {
+  content: "";
+  flex: 1 1 auto;
+  block-size: 1px;
+  background: var(--g-line);
+}
+
+/* ==========================================================================
+   1. 骨架层
+   ========================================================================== */
+.auth-canvas {
+  grid-area: 1 / 1 / -1 / -1;
+  z-index: 0;
+  inline-size: 100%; block-size: 100%;
+  display: block;
+  pointer-events: none;
+  /* 绝不给过渡：拒绝态要求同帧硬切 */
+}
+.auth-line {
+  grid-area: 1 / 1 / -1 / -1;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 8% 6%;
+  pointer-events: none;
+}
+.auth-line svg { inline-size: min(100%, 820px); block-size: auto; }
+html.js .auth-line { display: none; }
+html.js .auth-shell.is-static .auth-line { display: grid; }
+.auth-shell.is-static .auth-canvas { display: none; }
+
+.auth-stage {
+  grid-area: stage;
+  position: relative;
+  z-index: 2;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+/* ==========================================================================
+   2. 开机序列（仅 JS 可见）
+   ========================================================================== */
+/* 开机序列永远铺满视口（即使外壳在小屏上变成可滚动的文档流） */
+.auth-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  place-items: center;
+  background: var(--g-bg);
+}
+html.js .auth-boot { display: grid; }
+.auth-boot.is-done {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 300ms var(--g-ease), visibility 300ms;
+}
+.auth-boot-in {
+  inline-size: min(420px, 84vw);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.auth-boot-mark {
+  font-family: var(--tx-mono);
+  font-size: 12px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--g-ink);
+}
+.auth-boot-mark i { font-style: normal; color: var(--g-accent); margin-inline-start: 6px; }
+.auth-boot-lines {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 5px;
+  min-block-size: 62px;
+  font-family: var(--tx-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--g-mute);
+}
+.auth-boot-lines li { animation: g-boot-line 200ms var(--g-ease) both; }
+.auth-boot-lines b { color: var(--g-accent); font-weight: 500; }
+@keyframes g-boot-line {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+.auth-boot-bar {
+  block-size: 2px;
+  background: var(--g-line);
+  overflow: hidden;
+}
+.auth-boot-bar > i {
+  display: block;
+  inline-size: 34%; block-size: 100%;
+  background: var(--g-accent);
+  animation: g-boot-bar 900ms var(--g-ease-io) infinite;
+}
+@keyframes g-boot-bar {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(300%); }
+}
+
+/* ==========================================================================
+   3. 顶栏
+   ========================================================================== */
+.auth-top {
+  grid-area: top;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-inline: var(--g-pad);
+  border-block-end: 1px solid var(--g-line);
+}
+.auth-top-brand {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--g-ink);
+}
+.auth-top-brand i { font-style: normal; color: var(--g-accent); margin-inline-start: 4px; }
+.auth-top-rule { inline-size: 1px; block-size: 14px; background: var(--g-line-2); }
+.auth-top-world {
+  font-family: var(--tx-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--g-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.auth-top-spacer { flex: 1 1 auto; }
+.auth-top-chip {
+  padding: 3px 10px 4px;
+  border: 1px solid var(--g-accent-line);
+  border-radius: var(--tx-r-pill);
+  background: var(--g-accent-wash);
+  color: var(--g-accent);
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.auth-top-clock {
+  display: flex; align-items: baseline; gap: 1px;
+  font-family: var(--tx-mono);
+  font-variant-numeric: tabular-nums;
+}
+.auth-top-clock b { font-size: 13px; font-weight: 500; color: var(--g-ink); }
+.auth-top-clock i {
+  font-style: normal; font-size: 10px; color: var(--g-dim);
+  animation: g-blink 2s steps(1) infinite;
+}
+@keyframes g-blink { 50% { opacity: 0.35; } }
+
+/* ==========================================================================
+   4. 左栏
+   ========================================================================== */
+.auth-rail {
+  grid-area: rail;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-block-size: 0;
+  padding: 26px var(--g-pad) 20px;
+  border-inline-end: 1px solid var(--g-line);
+}
+.auth-brand { display: flex; flex-direction: column; gap: 10px; }
+.auth-brand-mark {
+  margin: 0;
+  font-size: clamp(20px, 1.55vw, 25px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--g-ink);
+  overflow-wrap: anywhere;
+}
+.auth-brand-sub {
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+.auth-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.85;
+  color: var(--g-body);
+}
+
+.auth-logwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+.auth-log {
+  flex: 1 1 auto;
+  min-block-size: 108px;
+  margin: 0; padding: 0;
+  overflow: hidden;
+  list-style: none;
+  display: flex; flex-direction: column; gap: 5px;
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.auth-log li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--g-mute);
+  animation: g-log-in 170ms var(--g-ease) both;
+}
+.auth-log li::before {
+  content: "";
+  flex: 0 0 auto;
+  inline-size: 4px; block-size: 4px;
+  background: var(--g-accent);
+  transform: translateY(-2px);
+}
+.auth-log .auth-log-cmd { flex: 0 0 auto; color: var(--g-body); }
+.auth-log .auth-log-val {
+  margin-inline-start: auto;
+  text-align: end;
+  color: var(--g-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.auth-log li.is-error, .auth-log li.is-error::before { color: var(--tx-danger); }
+.auth-log li.is-error::before { background: var(--tx-danger); }
+.auth-log li.is-grant, .auth-log li.is-grant::before { color: var(--tx-green); }
+.auth-log li.is-grant::before { background: var(--tx-green); }
+@keyframes g-log-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.auth-foot { display: flex; flex-direction: column; gap: 10px; }
+.auth-keys {
+  display: none;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  font-family: var(--tx-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--g-dim);
+}
+html.js .auth-keys { display: flex; }
+.auth-keys b { color: var(--g-mute); font-weight: 500; }
+.auth-sealmark {
+  font-family: var(--tx-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--g-accent);
+}
+.auth-sealmark::before { content: "■ "; }
+.auth-shell[data-state="denied"] .auth-sealmark { color: var(--tx-danger); }
+.auth-elapsed {
+  font-family: var(--tx-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+.auth-elapsed b { color: var(--g-mute); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   5. 闸门（舞台中央的同心环）
+   ========================================================================== */
+.auth-core {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inset-inline-end: calc(var(--g-panel-w) + var(--g-pad));
+  display: grid;
+  place-items: center;
+}
+.auth-core-svg {
+  inline-size: clamp(210px, 24vw, 372px);
+  block-size: auto;
+  overflow: visible;
+}
+.g-ring, .g-scan { fill: none; }
+.g-ring { stroke: var(--g-accent); }
+.g-a { stroke-width: 0.9; stroke-dasharray: 2 8; opacity: 0.5; animation: g-spin 64s linear infinite; }
+.g-b { stroke-width: 1.1; stroke-dasharray: 26 16; opacity: 0.68; animation: g-spin-rev 34s linear infinite; }
+.g-c { stroke-width: 0.9; stroke-dasharray: 1 6; opacity: 0.42; animation: g-spin 21s linear infinite; }
+.g-ticks line { stroke: var(--g-line-2); stroke-width: 1; }
+.g-scan {
+  stroke: var(--g-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 34 545;
+  opacity: 0.9;
+  animation: g-spin 3.6s linear infinite;
+}
+.g-glyph circle { fill: none; stroke: var(--g-ink); stroke-width: 1.4; }
+.g-glyph path { fill: none; stroke: var(--g-accent); stroke-width: 1.4; }
+.g-glyph .g-dot { fill: var(--g-accent); stroke: none; }
+.g-glyph { animation: g-breathe 4.6s var(--g-ease-io) infinite; }
+
+@keyframes g-spin { to { transform: rotate(360deg); } }
+@keyframes g-spin-rev { to { transform: rotate(-360deg); } }
+@keyframes g-breathe {
+  0%, 100% { opacity: 0.82; }
+  50% { opacity: 1; }
+}
+/* 环心自转的支点：SVG 元素默认绕左上角转，必须钉到 130,130 */
+.g-a, .g-b, .g-c, .g-scan { transform-origin: 130px 130px; }
+.g-glyph { transform-origin: 130px 130px; }
+
+/* 校验中：环加速、扫描弧拉长；拒绝：整块硬切 + 抖动；授权：张开淡出 */
+.auth-shell[data-state="verifying"] .g-a { animation-duration: 22s; }
+.auth-shell[data-state="verifying"] .g-b { animation-duration: 9s; }
+.auth-shell[data-state="verifying"] .g-c { animation-duration: 6s; }
+.auth-shell[data-state="verifying"] .g-scan { stroke-dasharray: 96 483; animation-duration: 1.1s; }
+.auth-shell[data-state="verifying"] .auth-core-svg { animation: g-core-pulse 1.6s var(--g-ease-io) infinite; }
+.auth-shell[data-state="denied"] .auth-core-svg { animation: g-core-shake 520ms var(--g-ease-io) 1; }
+.auth-shell[data-state="notice"] .auth-core-svg { animation: g-core-shake 380ms var(--g-ease-io) 1; }
+.auth-shell[data-state="granted"] .auth-core-svg,
+.auth-shell[data-state="unfold"] .auth-core-svg { animation: g-core-open 720ms var(--g-ease) both; }
+
+@keyframes g-core-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.022); }
+}
+@keyframes g-core-shake {
+  0% { transform: translate(0, 0) rotate(0); }
+  12% { transform: translate(-4px, 2px) rotate(-0.5deg); }
+  28% { transform: translate(4px, -2px) rotate(0.5deg); }
+  44% { transform: translate(-3px, -1px) rotate(-0.35deg); }
+  62% { transform: translate(3px, 1px) rotate(0.35deg); }
+  80% { transform: translate(-1px, 0) rotate(-0.15deg); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+@keyframes g-core-open {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* 向心脉冲（校验中由 auth.js 播撒） */
+.g-sparks { position: absolute; inset: 0; pointer-events: none; }
+.g-spark {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: 3px; block-size: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  background: var(--g-accent);
+  animation: g-spark 900ms var(--g-ease-io) forwards;
+}
+@keyframes g-spark {
+  0% { transform: translate(var(--sx), var(--sy)) scale(1); opacity: 0; }
+  18% { opacity: 1; }
+  100% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+}
+
+/* ==========================================================================
+   6. 舞台标注（等宽指引）
+   ========================================================================== */
+.auth-anno {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--tx-mono);
+  pointer-events: none;
+}
+.auth-anno::before {
+  content: "";
+  position: absolute;
+  inline-size: 1px;
+  background: linear-gradient(180deg, transparent, var(--g-line-2));
+}
+.auth-anno-tag {
+  align-self: flex-start;
+  padding: 1px 5px 2px;
+  background: var(--g-ink);
+  color: var(--g-bg);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.auth-anno b {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--g-ink);
+}
+.auth-anno-sub {
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+.auth-anno-tl { inset-inline-start: var(--g-pad); inset-block-start: 26px; }
+.auth-anno-tl::before { inset-block-end: calc(100% + 8px); inset-inline-start: 2px; block-size: 48px; }
+.auth-anno-br {
+  inset-inline-end: calc(var(--g-panel-w) + var(--g-pad) + 8px);
+  inset-block-end: 34px;
+  align-items: flex-end;
+  text-align: end;
+}
+.auth-anno-br .auth-anno-tag { align-self: flex-end; }
+.auth-anno-br::before {
+  inset-block-start: calc(100% + 8px);
+  inset-inline-end: 2px;
+  block-size: 40px;
+  background: linear-gradient(0deg, transparent, var(--g-line-2));
+}
+
+/* ==========================================================================
+   7. 覆盖层：校验 / 封锁 / 授权 —— 统一落在环下方的「控制台」槽位
+   ========================================================================== */
+.auth-console-slot {
+  position: absolute;
+}
+.auth-verify, .auth-warn, .auth-grant {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-inline-end: calc(var(--g-panel-w) + var(--g-pad));
+  inset-block-end: 12%;
+  z-index: 6;
+  display: none;
+  place-items: center;
+  pointer-events: none;
+}
+.auth-shell[data-state="verifying"] .auth-verify { display: grid; }
+.auth-shell[data-state="denied"] .auth-warn,
+.auth-shell[data-state="notice"] .auth-warn { display: grid; }
+.auth-shell[data-state="granted"] .auth-grant,
+.auth-shell[data-state="unfold"] .auth-grant { display: grid; }
+
+.auth-verify-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.auth-verify-name {
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--g-mute);
+}
+.auth-verify-bar {
+  inline-size: 216px;
+  block-size: 2px;
+  background: var(--g-line-2);
+  overflow: hidden;
+}
+.auth-verify-bar > i {
+  display: block;
+  inline-size: 0;
+  block-size: 100%;
+  background: var(--g-accent);
+  transition: inline-size 220ms var(--g-ease);
+}
+.auth-verify-pct {
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--g-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.auth-warn-box {
+  inline-size: min(392px, 100%);
+  padding: 14px 16px 13px;
+  background: var(--g-sunken);
+  border: 1px solid var(--g-accent);
+  border-radius: var(--tx-r-sm);
+  box-shadow: var(--tx-shadow-modal);
+  pointer-events: auto;   /* 覆盖层本身不透点击，但错误文本要可选中 */
+  animation: g-warn-in 240ms var(--g-ease) both;
+}
+@keyframes g-warn-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.auth-shell[data-state="notice"] .auth-warn-box { box-shadow: var(--tx-shadow-modal); }
+.auth-warn-t {
+  display: flex; align-items: center; gap: 8px;
+  margin-block-end: 10px;
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--g-accent);
+}
+.auth-warn-lines {
+  display: flex; flex-direction: column; gap: 3px;
+  font-family: var(--tx-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--g-mute);
+}
+.auth-warn-lines b {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--g-ink);
+}
+.auth-warn-lines .auth-cn {
+  margin-block-start: 8px;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--g-line);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--g-accent);
+}
+
+.auth-grant-box {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 15px;
+  border: 1px solid var(--g-accent-line);
+  border-radius: var(--tx-r-sm);
+  background: var(--g-sunken);
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--g-accent);
+}
+.g-blink {
+  inline-size: 6px; block-size: 6px;
+  background: var(--g-accent);
+  animation: g-blink 600ms steps(1) infinite;
+}
+
+.auth-engine {
+  position: absolute;
+  inset-block-end: 14px;
+  inset-inline-start: var(--g-pad);
+  z-index: 4;
+  font-family: var(--tx-mono);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+
+/* ==========================================================================
+   8. 闸门卡（浮在舞台上，全页唯一的模态档投影）
+   ========================================================================== */
+.auth-panel {
+  position: absolute;
+  z-index: 5;
+  inset-block: 14px;
+  inset-inline-end: var(--g-pad);
+  inline-size: var(--g-panel-w);
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid var(--g-line-2);
+  border-radius: var(--tx-r-md);
+  background: var(--g-raised);
+  box-shadow: var(--tx-shadow-modal);
+  color: var(--g-body);
+}
+/* 顶部绿色拉手 + 揭开时的扫描线（扫描线由 .is-live 触发） */
+.auth-panel::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  inline-size: 58px; block-size: 2px;
+  margin-inline-start: -29px;
+  background: var(--g-accent);
+}
+.auth-panel::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  block-size: 2px;
+  background: linear-gradient(90deg, transparent, var(--g-accent), transparent);
+  opacity: 0;
+}
+.auth-shell.is-live .auth-panel { animation: g-panel-in 620ms var(--g-ease) both; }
+.auth-shell.is-live .auth-panel::after { animation: g-panel-scan 620ms var(--g-ease) both; }
+@keyframes g-panel-in {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes g-panel-scan {
+  0% { inset-block-start: 0; opacity: 1; }
+  85% { opacity: 1; }
+  100% { inset-block-start: 100%; opacity: 0; }
+}
+
+.auth-panel-head { display: flex; flex-direction: column; gap: 8px; }
+.auth-headmeta {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.auth-headmeta-line {
+  font-family: var(--tx-mono);
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+.auth-headmeta-badge {
+  padding: 2px 7px 3px;
+  max-inline-size: 58%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--g-line-2);
+  border-radius: var(--tx-r-xxs);
+  color: var(--g-body);
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* 档案区：单列纵向流，占满卡片剩余高度（页脚用 margin-block-start:auto 贴底） */
+.auth-id-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.auth-id-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.auth-op {
+  padding: 3px 8px 4px;
+  background: var(--g-ink);
+  color: var(--g-bg);
+  font-family: var(--tx-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.auth-chip {
+  padding: 2px 7px 3px;
+  border: 1px solid var(--g-line-2);
+  border-radius: var(--tx-r-xxs);
+  color: var(--g-mute);
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.auth-attempt {
+  margin-inline-start: auto;
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+.auth-attempt b { color: var(--g-body); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.auth-nameplate {
+  display: grid;
+  place-items: center;
+  min-block-size: 46px;
+  padding: 8px 12px 9px;
+  background: var(--g-sunken);
+  border: 1px solid var(--g-line);
+  border-radius: var(--tx-r-sm);
+}
+.auth-name {
+  font-size: clamp(18px, 1.5vw, 24px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  color: var(--g-ink);
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+.auth-name.is-pending {
+  font-family: var(--tx-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+
+.auth-infostrip {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 6px 8px;
+  background: var(--g-soft);
+  border: 1px solid var(--g-line);
+  border-radius: var(--tx-r-sm);
+}
+.auth-infostrip-logo {
+  grid-row: span 2;
+  display: grid; place-items: center;
+  inline-size: 24px; block-size: 24px;
+  background: var(--g-sunken);
+  border: 1px solid var(--g-line);
+  border-radius: var(--tx-r-xxs);
+  color: var(--g-accent);
+  font-size: 13px;
+}
+.auth-infostrip-txt {
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--g-mute);
+}
+.auth-infostrip-row {
+  display: flex; gap: 12px;
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--g-body);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 输入区 ---- */
+.auth-creds {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-block-size: 0;
+}
+.auth-field { display: flex; flex-direction: column; gap: 5px; }
+
+.auth-fl {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--tx-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--g-mute);
+}
+.auth-fl .auth-dash {
+  inline-size: 11px; block-size: 2px;
+  background: var(--g-line-2);
+  transform: translateY(-3px);
+  transition: background-color var(--g-t-fast) var(--g-ease);
+}
+.auth-field.is-live .auth-dash { background: var(--g-accent); }
+.auth-fl .auth-r {
+  margin-inline-start: auto;
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  color: var(--g-dim);
+}
+.auth-level { margin-inline-start: 8px; color: var(--g-dim); }
+.auth-shell[data-state="denied"] .auth-level,
+.auth-shell[data-state="notice"] .auth-level { color: var(--g-accent); }
+
+.auth-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: 36px;
+  padding-inline: 12px;
+  background: var(--g-sunken);
+  border: 1px solid var(--g-line);
+  border-radius: var(--tx-r-sm);
+  transition: border-color var(--g-t-fast) var(--g-ease),
+              box-shadow var(--g-t-fast) var(--g-ease);
+}
+.auth-bar.is-focus {
+  border-color: var(--g-accent);
+  box-shadow: 0 0 0 3px var(--g-accent-wash);
+}
+.auth-bar.is-ok { border-color: var(--g-accent-line); }
+.auth-bar.is-bad { border-color: color-mix(in srgb, var(--tx-danger) 60%, transparent); }
+
+/* 真实输入框：透明地铺满条身，视觉全靠镜像层 */
+.auth-input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  inline-size: 100%; block-size: 100%;
+  margin: 0;
+  padding: 0 12px;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  color: transparent !important;
+  caret-color: transparent;
+  font-family: var(--tx-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.auth-input:focus { outline: none; box-shadow: none; }
+.auth-input::placeholder { color: transparent; }
+.auth-input.is-secret { -webkit-text-security: disc; }
+
+.auth-mirror {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-family: var(--tx-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--g-ink);
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+}
+.auth-cursor {
+  display: inline-block;
+  inline-size: 2px; block-size: 15px;
+  margin-inline-start: 2px;
+  background: var(--g-accent);
+  vertical-align: -3px;
+  animation: g-caret 1000ms steps(1) infinite;
+}
+@keyframes g-caret { 50% { opacity: 0; } }
+
+/* ▮ 方块镜像：一位一个。口令很长时**在条内裁掉左侧、滚动到尾部**，
+   而不是把整条 flex 撑宽（那会把提交按钮顶出卡片）。
+   min-inline-size:0 让它允许被压缩；(i) 固定不缩，才有溢出可滚。 */
+.auth-blocks {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+.auth-blocks i {
+  flex: 0 0 auto;
+  inline-size: 7px; block-size: 13px;
+  background: var(--g-ink); opacity: 0.9;
+}
+.auth-blocks .auth-cursor {
+  flex: 0 0 auto;
+  inline-size: 2px; block-size: 15px;
+  margin-inline-start: 2px;
+  background: var(--g-accent);
+}
+
+.auth-val {
+  flex: 0 0 auto;
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+  white-space: nowrap;
+}
+.auth-val.is-check { color: var(--g-accent); }
+.auth-val.is-ok { color: var(--tx-green); }
+.auth-val.is-bad { color: var(--tx-danger); }
+
+/* 下划扫线：底是发丝线，聚焦 / 校验时从左侧扫出一条状态色 */
+.auth-under {
+  position: relative;
+  block-size: 1px;
+  background: var(--g-line);
+  overflow: hidden;
+}
+.auth-under::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--g-accent);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform var(--g-t) var(--g-ease), background-color var(--g-t-fast) var(--g-ease);
+}
+.auth-under.is-focus::after { transform: scaleX(1); }
+.auth-under.is-ok::after { transform: scaleX(1); background: var(--tx-green); }
+.auth-under.is-bad::after { transform: scaleX(1); background: var(--tx-danger); }
+
+.auth-hint {
+  margin: 0;
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--g-dim);
+}
+.auth-hint.is-ok { color: var(--tx-green); }
+.auth-hint.is-bad { color: var(--tx-danger); }
+
+/* 带动作按钮的输入条：右侧给按钮留出整列，输入框内边距同步让位 */
+.auth-bar.has-action { padding-inline: 12px 0; }
+.auth-bar.has-action .auth-input { padding-inline-end: 100px; }
+.auth-bar.has-action .auth-submit { position: relative; z-index: 3; }
+.auth-bar.has-action .auth-blocks,
+.auth-bar.has-action .auth-val { align-self: center; }
+
+.auth-submit {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  align-self: stretch;
+  padding: 0 16px;
+  background: var(--g-accent);
+  border: 0;
+  border-radius: 0 var(--tx-r-sm) var(--tx-r-sm) 0;
+  color: var(--g-on-accent);
+  font-family: var(--tx-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--g-t-fast) var(--g-ease), opacity var(--g-t-fast) var(--g-ease);
+}
+.auth-submit-label, .auth-submit-arrow { position: relative; z-index: 2; }
+.auth-submit-arrow { font-style: normal; transition: transform var(--g-t) var(--g-ease); }
+.auth-submit:hover:not(:disabled) { background: var(--g-accent-hover); }
+.auth-submit:hover:not(:disabled) .auth-submit-arrow { transform: translateX(3px); }
+.auth-submit:active:not(:disabled) { transform: scale(0.97); }
+.auth-submit:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--g-accent-wash), 0 0 0 3px var(--g-accent); }
+.auth-submit:disabled { cursor: default; }
+.auth-submit-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: color-mix(in srgb, var(--g-on-accent) 22%, transparent);
+}
+.auth-shell[data-state="verifying"] .auth-submit-fill {
+  animation: g-fill 1150ms var(--g-ease) forwards;
+}
+.auth-shell[data-state="granted"] .auth-submit-fill,
+.auth-shell[data-state="unfold"] .auth-submit-fill {
+  animation: g-fill 260ms var(--g-ease) forwards;
+  --fill-to: 1;
+}
+@keyframes g-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(var(--fill-to, 0.9)); }
+}
+
+.auth-statusline-msg {
+  margin: 0;
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--tx-danger);
+}
+.auth-statusline-msg::before { content: "■ "; }
+
+.auth-error {
+  margin: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--tx-danger);
+  border-inline-start-width: 3px;
+  border-radius: var(--tx-r-xxs);
+  background: color-mix(in srgb, var(--tx-danger) 12%, transparent);
+  font-size: 12px;
+  color: var(--g-body);
+}
+.auth-error::before { content: "! "; font-family: var(--tx-mono); color: var(--tx-danger); }
+
+.auth-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  font-family: var(--tx-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.auth-switch a {
+  color: var(--g-mute);
+  text-decoration: none;
+  border-block-end: 1px solid var(--g-line-2);
+  padding-block-end: 1px;
+  transition: color var(--g-t-fast) var(--g-ease), border-color var(--g-t-fast) var(--g-ease);
+}
+.auth-switch a:hover { color: var(--g-accent); border-block-end-color: var(--g-accent); }
+.auth-switch a:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--g-accent-wash); }
+
+.auth-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-start: auto;
+  padding-block-start: 10px;
+  border-block-start: 1px solid var(--g-line);
+}
+.auth-lamps { display: flex; gap: 12px; }
+.auth-lamp {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-family: var(--tx-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+.auth-lamp i {
+  inline-size: 10px; block-size: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--g-line-2);
+}
+.auth-lamp.is-on i { background: var(--g-accent); border-color: var(--g-accent); }
+.auth-ctrl { display: flex; gap: 12px; }
+.auth-ctrl-btn {
+  margin: 0; padding: 0;
+  background: none; border: 0;
+  color: var(--g-dim);
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--g-t-fast) var(--g-ease);
+}
+.auth-ctrl-btn::before { content: "■ "; }
+.auth-ctrl-btn:hover { color: var(--g-ink); }
+.auth-ctrl-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--g-accent-wash); }
+
+/* ==========================================================================
+   9. 底栏
+   ========================================================================== */
+.auth-bottom {
+  grid-area: bottom;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-inline: var(--g-pad);
+  border-block-start: 1px solid var(--g-line);
+}
+.auth-cap { display: flex; align-items: baseline; gap: 14px; min-inline-size: 0; }
+.auth-cap-zh {
+  font-size: 12px;
+  color: var(--g-body);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color 180ms var(--g-ease);
+}
+.auth-cap-en {
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.auth-shell[data-state="denied"] .auth-cap-zh,
+.auth-shell[data-state="denied"] .auth-cap-en { color: var(--tx-danger); }
+.auth-shell[data-state="notice"] .auth-cap-zh { color: var(--tx-warning); }
+.auth-shell[data-state="granted"] .auth-cap-zh,
+.auth-shell[data-state="unfold"] .auth-cap-zh,
+.auth-shell[data-state="granted"] .auth-cap-en,
+.auth-shell[data-state="unfold"] .auth-cap-en { color: var(--tx-green); }
+
+.auth-statusline {
+  margin-inline-start: auto;
+  font-family: var(--tx-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+  white-space: nowrap;
+}
+.auth-statusline a { color: var(--g-mute); text-decoration: none; }
+.auth-statusline a:hover { color: var(--g-accent); }
+
+/* ==========================================================================
+   10. 入场编排（只在 JS 挂上 is-live 后生效 —— 无 JS 时元素静态可见）
+   ========================================================================== */
+.auth-shell.is-live .auth-top,
+.auth-shell.is-live .auth-brand,
+.auth-shell.is-live .auth-note,
+.auth-shell.is-live .auth-logwrap,
+.auth-shell.is-live .auth-foot,
+.auth-shell.is-live .auth-bottom,
+.auth-shell.is-live .auth-field,
+.auth-shell.is-live .auth-switch,
+.auth-shell.is-live .auth-panel-foot,
+.auth-shell.is-live .auth-headmeta,
+.auth-shell.is-live .auth-attempt { animation: g-in-up 520ms var(--g-ease) both; }
+
+.auth-shell.is-live .auth-top { animation-name: g-in-down; }
+.auth-shell.is-live .auth-brand { animation-delay: 60ms; }
+.auth-shell.is-live .auth-note { animation-delay: 120ms; }
+.auth-shell.is-live .auth-logwrap { animation-delay: 180ms; }
+.auth-shell.is-live .auth-foot { animation-delay: 240ms; }
+.auth-shell.is-live .auth-bottom { animation-delay: 300ms; }
+/* 面板里的内容比面板本身晚一点，看起来像被扫描线「刷出来」 */
+.auth-shell.is-live .auth-headmeta { animation-delay: 240ms; }
+.auth-shell.is-live .auth-attempt { animation-delay: 260ms; }
+.auth-shell.is-live .auth-field { animation-delay: calc(300ms + var(--i, 0) * 60ms); }
+.auth-shell.is-live .auth-switch { animation-delay: 560ms; }
+.auth-shell.is-live .auth-panel-foot { animation-delay: 620ms; }
+
+@keyframes g-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes g-in-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 离场：世界线铺满（授权 → 跳转） */
+.auth-shell[data-state="unfold"] .auth-canvas,
+.auth-shell[data-state="unfold"] .auth-line,
+.auth-shell[data-state="unfold"] .auth-panel,
+.auth-shell[data-state="unfold"] .auth-top,
+.auth-shell[data-state="unfold"] .auth-rail,
+.auth-shell[data-state="unfold"] .auth-bottom { animation: g-unfold 760ms var(--g-ease) both; }
+@keyframes g-unfold {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ==========================================================================
+   11. 响应式
+   ========================================================================== */
+@media (max-width: 1180px) {
+  .auth-shell { --g-panel-w: clamp(330px, 34vw, 400px); --g-rail-w: clamp(208px, 18vw, 262px); }
+}
+
+/* 平板 / 手机：外壳回到文档流（可滚动），左栏收成一条横向带，闸门卡落到内容流里 */
+@media (max-width: 1023px) {
+  body.auth-body { overflow: auto; }
+  .auth-shell {
+    position: relative;
+    inset: auto;
+    block-size: auto;
+    min-block-size: 100dvh;
+    overflow: visible;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(200px, 30vh) 1fr auto;
+    grid-template-areas:
+      "top"
+      "rail"
+      "stage"
+      "panel"
+      "bottom";
+  }
+  .auth-rail {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    padding: 12px var(--g-pad);
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--g-line);
+  }
+  .auth-brand { flex: 1 1 auto; min-inline-size: 0; }
+  .auth-brand .auth-secttl { display: none; }
+  .auth-brand-mark { font-size: 16px; }
+  .auth-brand-sub { display: none; }
+  .auth-note { display: none; }
+  .auth-logwrap { display: none; }
+  /* 横向左栏里这些状态文字会把品牌标题挤到只剩几十像素；状态已由顶栏芯片表达 */
+  .auth-foot { display: none; }
+  .auth-core { inset-inline-end: 0; }
+  /* 闸门要收进「舞台」这条带子里：它按视口宽算尺寸，窄屏时若不收，环会钻到卡片底下 */
+  .auth-core-svg { inline-size: min(42vw, 176px); }
+  .auth-anno { display: none; }
+  /* 外壳在小屏上高度是 auto（可滚动文档流），画布若继续留在网格里吃 height:100%，
+     会和 1fr 行互相反馈、把页面无限撑高。钉成视口尺寸的固定背景层即可。 */
+  .auth-canvas {
+    position: fixed;
+    inset: 0;
+    inline-size: 100vw;
+    block-size: 100dvh;
+  }
+  /* 校验 / 封锁 / 授权面板在小屏改为**视口居中**的覆盖层，不再挤在矮舞台里 */
+  .auth-verify, .auth-warn, .auth-grant {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    place-items: center;
+  }
+  .auth-panel {
+    position: relative;   /* 仍在文档流里，但保留 ::before/::after 的定位基准 */
+    inset: auto;
+    inline-size: min(560px, calc(100% - 2 * var(--g-pad)));
+    margin-inline: auto;
+    margin-block: 0 var(--g-pad);
+    block-size: auto;
+  }
+  .auth-bottom {
+    position: sticky;
+    inset-block-end: 0;
+    background: var(--g-bg);
+  }
+}
+
+/* 手机：进一步压缩 */
+@media (max-width: 767px) {
+  .auth-shell { grid-template-rows: auto auto minmax(160px, 28vh) 1fr auto; }
+  .auth-core-svg { inline-size: min(50vw, 156px); }
+  .auth-top { gap: 8px; }
+  .auth-top-world { display: none; }
+  .auth-top-rule { display: none; }
+  .auth-panel {
+    inline-size: min(560px, calc(100% - 24px));
+    padding: 14px;
+    gap: 11px;
+    margin-block-end: 12px;
+  }
+  .auth-name { font-size: 16px; }
+  .auth-top-chip { font-size: 8.5px; padding-inline: 8px; }
+  .auth-bottom { gap: 12px; padding-inline: 12px; }
+  .auth-cap { flex-direction: column; gap: 1px; align-items: flex-start; min-inline-size: 0; }
+  .auth-cap-en { font-size: 7.5px; letter-spacing: 0.12em; }
+  .auth-statusline { display: none; }
+  .auth-engine { display: none; }
+}
+
+/* ==========================================================================
+   12. 无障碍：减少动效
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .auth-shell *, .auth-shell *::before, .auth-shell *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .auth-boot { display: none !important; }
+  .auth-log li { animation: none; }
+  .auth-panel, .auth-panel::after { clip-path: none; }
+  .g-spark { display: none; }
+}

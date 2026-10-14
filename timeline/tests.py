@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""接口契约测试：把 Flask 版原有的行为固化成断言，以后改代码不会悄悄改坏接口。
+"""接口契约测试：把接口应有的行为固化成断言，以后改代码不会悄悄改坏接口。
 
     python manage.py test
 
-注意：建测试库时会跑数据迁移，所以测试库里已经有 data.json 的内容；
+注意：建测试库时会跑数据迁移，所以测试库里可能已有迁移导入的示例数据；
 每个用例的 setUp 会清空数据，保证互不影响。
 """
 
@@ -41,10 +41,11 @@ class TimelineApiTests(TestCase):
         self.assertContains(resp, "/static/style.css")
         self.assertContains(resp, "/static/script.js")
 
-    def test_unknown_page_falls_back_to_index_with_404(self):
+    def test_unknown_page_renders_signal_lost_404(self):
+        # 404 不再把用户丢回一个空壳页面，而是给一页"信号丢失"
         resp = self.client.get("/nope")
         self.assertEqual(resp.status_code, 404)
-        self.assertContains(resp, "世界观共建", status_code=404)
+        self.assertContains(resp, "信号丢失", status_code=404)
 
     # ------------------------------------------------------------ 读全量 --
     def test_timeline_returns_view_and_items(self):
@@ -63,7 +64,7 @@ class TimelineApiTests(TestCase):
         self.assertEqual(item["theme"], "blue")
 
     def test_event_payload_has_no_theme_key(self):
-        """事件不带 theme 键，和 Flask 版一致。"""
+        """事件不带 theme 键。"""
         self.post_json("/api/items", {"kind": "event", "title": "事件", "start": 5})
         item = self.client.get("/api/timeline").json()["items"][0]
         self.assertNotIn("theme", item)
@@ -223,7 +224,7 @@ class TimelineApiTests(TestCase):
 
 
 class LegacyImportTests(TestCase):
-    """旧 data.json 的解析兼容性。"""
+    """旧格式 JSON 文件的解析兼容性。"""
 
     def test_array_only_file(self):
         items, view = parse_legacy([{"id": 1, "title": "旧格式"}])
@@ -249,7 +250,7 @@ class LegacyImportTests(TestCase):
         self.assertEqual(reverse("timeline:item-detail", args=[7]), "/api/items/7")
 
     def test_command_refuses_missing_file_instead_of_writing_sample_data(self):
-        """data.json 已删除：命令行读不到文件就该报错，不能往已有库里塞示例数据。"""
+        """命令行读不到文件就该报错，不能往已有库里塞示例数据。"""
         before = TimelineItem.objects.count()
         with self.assertRaises(CommandError):
             call_command("import_legacy_json", "根本不存在的文件.json", stdout=StringIO())

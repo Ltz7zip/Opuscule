@@ -1,7 +1,7 @@
 /* ==========================================================================
    响应式 · 动效 · 空状态 · 无障碍  ——  加载顺序在 minimal.css 之后
    --------------------------------------------------------------------------
-   三件事：
+   这一层管三件跨页面的事：
    1) 断点：≥1440 宽松 / 1200–1440 紧凑 / 1024–1200 图标化 / 900–1024 侧栏浮层
             / <900 单栏 / <640 抽屉式面板（手机竖屏也好看）
    2) 动效：统一时长与曲线；尊重系统「减少动效」
@@ -97,7 +97,7 @@
   text-align: center;
 }
 
-/* 旧样式把它当纯装饰层设了 pointer-events:none，现在里面有按钮，必须收回来 */
+/* 这一层里放着按钮，必须接收指针事件，所以把继承来的 pointer-events:none 收回来 */
 .workspace.is-empty .empty-hint { pointer-events: auto; }
 /* 没有标签页时面板不占位，空状态才点得到、也才居中 */
 .workspace.is-empty .panels { display: none; }
@@ -283,6 +283,7 @@ button[data-danger="1"]:hover {
   .row { padding: 10px 12px; }
   .format-bar button { min-width: 36px; height: 34px; }
   .tab { padding: 8px 12px; }
+  .col-resize { display: none; }   /* 触屏上不给人拖列宽 */
 }
 
 /* --------------------------------------------- <640：手机竖屏的抽屉式布局 */
@@ -516,6 +517,9 @@ button[data-danger="1"]:hover {
 .table-grid th .hint { display: block; font-size: 10.5px; }
 .table-grid td .mini-input, .table-grid td .mini-select { width: 100%; min-width: 90px; }
 .table-row-actions { display: flex; gap: 6px; }
+.table-grid tr.table-group-head th { background: var(--mn-surface-muted); }
+.table-grid th.is-grouped { box-shadow: inset 0 -2px 0 currentColor; }
+.table-rollup-label { text-transform: uppercase; }
 
 .board { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; padding-bottom: 8px; }
 .board-col {
@@ -655,7 +659,7 @@ button[data-danger="1"]:hover {
 @media (max-width: 639px) {
   .bottom-nav {
     position: fixed; z-index: 62; left: 0; right: 0; bottom: 0;
-    display: grid; grid-template-columns: repeat(5, 1fr);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
     background: color-mix(in srgb, var(--mn-surface) 94%, transparent);
     backdrop-filter: blur(12px);
@@ -681,8 +685,8 @@ button[data-danger="1"]:hover {
 
 
 /* ============================================================ 键盘可达性 */
-/* 块工具条以前是 hover 才 display:flex，键盘用户根本 Tab 不进去。
-   改成"一直在布局里、只是视觉上淡出"，hover / 聚焦时显形。 */
+/* 块工具条若只在 hover 时才 display:flex，键盘用户根本 Tab 不进去。
+   所以改成"一直在布局里、只是视觉上淡出"，hover / 聚焦时显形。 */
 .block-tools { display: flex !important; opacity: 0; pointer-events: none; transition: opacity var(--mn-dur-fast) var(--mn-ease); }
 .block:hover .block-tools,
 .block:focus-within .block-tools { opacity: 1; pointer-events: auto; }
@@ -710,7 +714,11 @@ body.is-embed .tree-frame-body, body.is-embed .map-canvas, body.is-embed .graph-
    防止某个面板重画时把按钮又画回来。 */
 html[data-can-edit="0"] .insert-bar,
 html[data-can-edit="0"] .block-menu-add,
-html[data-can-edit="0"] .tool-add-row { display: none !important; }
+html[data-can-edit="0"] .tool-add-row,
+/* 这两颗是卡片重画时才生成的（JS 那张表只在启动时扫一遍，够不到它们）：
+   「＋ 添加属性」开的是类型管理，「编辑别名」直接写库 —— 游客都不该看到。 */
+html[data-can-edit="0"] .prop-add,
+html[data-can-edit="0"] .alias-edit { display: none !important; }
 html[data-can-edit="0"] .block-tools { opacity: 0 !important; pointer-events: none !important; }
 html[data-can-edit="0"] .card-view .prop-row .prop-input { pointer-events: none; }
 

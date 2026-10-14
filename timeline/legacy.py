@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""把老的 data.json 搬进数据库（只读，不会改动原文件）。
+"""把一份旧格式的 JSON 文件导入数据库（只读，不会改动原文件）。
 
-``manage.py migrate`` 时由数据迁移自动跑一次；之后也可以随时手动重跑：
+文件结构是 ``{"view": {...}, "items": [...]}``。``manage.py migrate`` 时由数据
+迁移自动跑一次；之后也可以随时手动重跑：
 
-    python manage.py import_legacy_json            # 默认读项目根目录的 data.json
-    python manage.py import_legacy_json old.json   # 指定别的文件
+    python manage.py import_legacy_json            # 省略路径时读项目根目录的默认文件
+    python manage.py import_legacy_json 备份.json   # 指定别的文件
     python manage.py import_legacy_json --replace  # 先清空条目表再导入
 """
 
@@ -18,7 +19,7 @@ from .normalize import as_float, as_int, normalize
 
 LEGACY_FILE = "data.json"
 
-# 没有 data.json 时的示例数据，与 Flask 版 DEFAULT_DATA["items"] 完全一致
+# 文件缺失或损坏时使用的示例数据（全新安装会落地这份示例时间轴）
 DEFAULT_ITEMS = [
     {"id": 1, "kind": "event", "title": "新事件", "start": 1642, "end": 1642, "desc": "", "row": 0},
     {"id": 2, "kind": "event", "title": "新事件", "start": 1668, "end": 1668, "desc": "", "row": 1},
@@ -30,7 +31,7 @@ DEFAULT_ITEMS = [
 
 
 def read_legacy_file(path=None):
-    """读 data.json；文件不存在或损坏时返回 None（对应 Flask 的回落逻辑）。"""
+    """读入 JSON 文件；文件不存在或读坏时返回 None（调用方据此回落到示例数据）。"""
     path = Path(path) if path else Path(settings.BASE_DIR) / LEGACY_FILE
     if not path.exists():
         return None
@@ -42,10 +43,10 @@ def read_legacy_file(path=None):
 
 
 def parse_legacy(raw):
-    """把旧文件的内容拆成 (items, view)。
+    """把 JSON 的内容拆成 (items, view)。
 
-    兼容三种情况：早期只存了一个数组的版本、正常 dict、以及文件损坏/缺失
-    （此时给一份示例数据，和 Flask 版 ``_blank_data()`` 的行为一致）。
+    兼容三种情况：只存了一个数组、正常的 ``{"view", "items"}`` dict、以及
+    文件损坏/缺失（此时给一份示例数据兜底）。
     """
     view = dict(DEFAULT_VIEW)
     if not isinstance(raw, dict):
@@ -72,8 +73,8 @@ def parse_legacy(raw):
 def import_into_db(items, view, item_model, view_model):
     """把 (items, view) 写进数据库，返回写入的条目数。
 
-    带合法 id 的记录按 id 覆盖，没有 id 的当新记录插入。
-    旧文件里重复的 id 只取第一条（Flask 版按 id 查找时也是命中第一条）。
+    带合法 id 的记录按 id 覆盖（update_or_create），没有 id 的当新记录插入；
+    文件里重复的 id 只取第一条。
     """
     seen = set()
     written = 0
@@ -98,7 +99,7 @@ def import_legacy_file(path=None, replace=False, item_model=None, view_model=Non
 
     ``strict=True`` 时读不到文件就抛 OSError，不做「写入示例数据」的兜底——
     命令行用它，免得手滑把示例数据塞进已有数据库。数据迁移不加 strict，
-    这样全新安装会得到和 Flask 版一样的示例时间轴。
+    这样全新安装会落地一份示例时间轴。
     """
     from .models import TimelineItem, TimelineView  # 延迟导入，方便迁移里换成历史模型
 

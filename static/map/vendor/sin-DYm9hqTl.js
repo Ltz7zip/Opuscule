@@ -1,0 +1,1 @@
+var e=e=>+e,t=Math.PI,n=t/2;function r(e){return+e==1?1:1-Math.cos(e*n)}function i(e){return(1-Math.cos(t*e))/2}export{i as n,e as r,r as t};

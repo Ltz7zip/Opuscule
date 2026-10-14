@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import os
 import json
 import pathlib
 import sys
@@ -23,9 +24,11 @@ import urllib.request
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _auth import DEV_PASSWORD, DEV_USER, ensure_login, make_opener  # noqa: E402
+from _auth import (  # noqa: E402
+    DEV_PASSWORD, DEV_USER, ensure_login, ensure_login_page, make_opener,
+)
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/collab")
 SHOTS.mkdir(parents=True, exist_ok=True)
 
@@ -112,12 +115,11 @@ def main() -> int:
         guest_page.close()
 
         # ---------------------------------------------------- 2) 登录所有者
+        #    用 _auth.ensure_login_page()：它在服务端造一个会话再塞进浏览器 cookie。
+        #    别在这里手敲表单——urllib 登出来的 cookie 和浏览器上下文不共享，
+        #    敲完顶栏还是「登录」。
         owner_page = browser.new_page(viewport={"width": 1440, "height": 900})
-        owner_page.goto(f"{BASE}/login", wait_until="networkidle")
-        owner_page.fill("#username", DEV_USER)
-        owner_page.fill("#password", DEV_PASSWORD)
-        owner_page.click("button[type=submit]")
-        owner_page.wait_for_load_state("networkidle")
+        ensure_login_page(owner_page, username=DEV_USER, password=DEV_PASSWORD)
         owner_page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
         owner_page.wait_for_timeout(1200)
         viewer = owner_page.evaluate("() => document.querySelector('#userName').textContent")
@@ -146,11 +148,7 @@ def main() -> int:
             problems.append("第二个用户进不来")
 
         friend_page = browser.new_page(viewport={"width": 1440, "height": 900})
-        friend_page.goto(f"{BASE}/login", wait_until="networkidle")
-        friend_page.fill("#username", FRIEND_USER)
-        friend_page.fill("#password", FRIEND_PASSWORD)
-        friend_page.click("button[type=submit]")
-        friend_page.wait_for_load_state("networkidle")
+        ensure_login_page(friend_page, username=FRIEND_USER, password=FRIEND_PASSWORD)
         friend_page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
         friend_page.wait_for_timeout(1500)
 
@@ -187,7 +185,7 @@ def main() -> int:
         friend_page.wait_for_timeout(1600)
 
         # 为了让版本历史一定有两条，这里用接口各写一次（界面打字会有 90 秒合并）
-        stamp = str(int(time.time()))          # 每轮唯一，免得读到上一轮留下的文本
+        stamp = str(int(time.time()))          # 每轮唯一，免得读到上一次运行留下的文本
         for opener_, mark in ((owner, f"所有者这一版{stamp}"), (friend, f"朋友这一版{stamp}")):
             current = api(opener_, f"/api/world/cards/{card['id']}")[1]
             blocks_now = current["card"]["blocks"]

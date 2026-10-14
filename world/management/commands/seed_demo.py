@@ -2,7 +2,7 @@
 """灌一份演示数据：类型 / 属性 / 文件夹 / 卡片 / 日历 / 纪元 / 时间线事件。
 
 内容刻意贴着官网演示里的那个世界（Isarra Thornveil、Harrowdeep、The Balri Accords…），
-方便和调研文档里的截图逐项对照。
+方便一次性把各种文档类型、时间线与地图都造出来，对照着看。
 
     .venv/bin/python manage.py seed_demo            # 已有同名世界就跳过
     .venv/bin/python manage.py seed_demo --reset     # 先清空再灌
@@ -20,21 +20,14 @@ from world.models import (
     DOC_MAP,
     DOC_TIMELINE,
     DOC_TREE,
-    MapLayer,
-    MapMarker,
-    TreeEdge,
-    TreeNode,
-    TreeVariant,
-    Calendar,
-    Card,
-    Document,
     EntityType,
-    Era,
     PropertyDef,
-    TimelineEvent,
     World,
 )
 from world.normalize import blocks_to_text, normalize_blocks
+from documents.models import Calendar, Card, Document, Era, TimelineEvent
+from graph.models import TreeEdge, TreeNode, TreeVariant
+from maps.models import MapLayer, MapMarker
 
 WORLD_NAME = "The Grand Alchemy"
 
@@ -104,7 +97,7 @@ EVENTS = [
 
 
 class Command(BaseCommand):
-    help = "灌入一份 VVD 式演示数据（类型 / 属性 / 卡片 / 日历 / 纪元 / 时间线）"
+    help = "灌入一份演示数据（类型 / 属性 / 卡片 / 日历 / 纪元 / 时间线）"
 
     def add_arguments(self, parser):
         parser.add_argument("--reset", action="store_true", help="先删掉同名世界再灌")
@@ -119,7 +112,7 @@ class Command(BaseCommand):
 
         world = World.objects.create(
             name=WORLD_NAME,
-            description="一份用来对照调研文档的演示世界。",
+            description="一份用来演示各项功能的示例世界。",
             theme_config={
                 "mode": "dark",
                 "grain": 22,

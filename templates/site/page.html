@@ -9,7 +9,7 @@
 
     <header class="page-head">
       <div>
-        <h1>{{ document.name }}</h1>
+        <h1 class="doc-title">{{ document.name }}</h1>
         <p class="page-kind">
           {{ document.get_document_type_display }}{% if document.entity_type %} · {{ document.entity_type.name }}{% endif %}
           {% if document.era %} · {{ document.era.name }}{% endif %}

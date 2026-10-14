@@ -1,10 +1,15 @@
 /* ==========================================================================
    世界工作区  —  样式
    --------------------------------------------------------------------------
-   视觉语言对齐调研文档 §12 里从官方演示截帧量到的特征：
-   深色低对比、面板之间只留窄缝、标题用世界主题的衬线斜体、
-   胶囊式小按钮、⌘K 提示直接写在输入框里、浮层工具条紧凑。
-   主题相关的值（--primary / --heading-font / --body-font / --grain）由 JS 注入。
+   功能模块：工作区（/world）的结构与语义层。定义深色低对比的观感——
+   面板之间只留窄缝、标题用世界主题的衬线斜体、胶囊式小按钮、⌘K 提示直接
+   写在输入框里、浮层工具条紧凑。
+   加载顺序（依据 DESIGN.md §4 的契约，顺序不能改）：工作区依次加载
+   workspace → minimal → responsive → shell → apple → terminal → polish →
+   experience。本文件排在最前，负责定结构与语义 token（--bg / --panel /
+   --ink / --accent 等）；后面的 shell / apple / terminal 换肤层再据此覆盖。
+   关键实现：主题相关的值（--primary / --heading-font / --body-font / --grain）
+   由 JS 注入，所以这里只给默认兜底值与结构，换主题不必改 CSS。
    ========================================================================== */
 
 :root {
@@ -54,7 +59,7 @@ kbd {
   padding: 1px 4px;
 }
 
-/* 颗粒噪声：世界主题的 grain 值控制强度（对齐 §16.1 的 theme_config.grain） */
+/* 颗粒噪声：强度由世界主题的 grain 值（theme_config.grain）控制 */
 .grain {
   position: fixed;
   inset: 0;
@@ -201,6 +206,89 @@ kbd {
 .sb-new:hover { color: var(--ink); border-color: var(--line-strong); }
 .sb-new-ghost { flex: 0 0 auto; }
 
+/* ---------- 侧栏顶部的视图药丸（复用 #tbNav 里的 .tb-view 结构） ---------- */
+.sb-pills { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 9px 8px; }
+.sb-pills .tb-view { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; }
+/* 只有「当前项」显示文字，其余收成纯图标 */
+.sb-pills .tb-view > span { display: none; }
+.sb-pills .tb-view.is-active > span { display: inline; }
+
+/* 工作区切换器：放在侧栏顶部，不在顶栏 */
+.sb-world { padding: 9px 9px 0; }
+.sb-world .world-chip { width: 100%; }
+
+/* 底部新建区的形态（宽胶囊 + 两枚圆形 ghost）定义在 terminal.css —— 它才是最终生效的那一层。 */
+
+/* 文件夹行按「小节标题」显示（与侧栏小节标题同一形态） */
+.sb-tree .row.is-folder .r-name { color: var(--ink-dim); font-size: 12px; }
+.sb-tree .row.is-folder .r-icon { color: var(--ink-dim); }
+
+/* 长列表末尾的「⋯ 查看全部」 */
+.sb-more {
+  display: block; width: calc(100% - 18px); margin: 4px 9px 6px;
+  font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+  color: var(--ink-dim); background: transparent; border: 0;
+  border-radius: var(--radius-sm); padding: 5px 8px;
+}
+.sb-more:hover { color: var(--ink); background: var(--nb-alpha-200, rgba(255, 255, 255, 0.055)); }
+
+/* ---------- 「设置你的工作空间」进度卡 ---------- */
+.sb-setup {
+  display: grid; gap: 7px; width: calc(100% - 18px); margin: 0 9px 8px;
+  padding: 10px 12px; text-align: left; font: inherit; cursor: pointer;
+  background: var(--nb-alpha-100, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+}
+.sb-setup:hover { background: var(--nb-alpha-200, rgba(255, 255, 255, 0.055)); }
+.sb-setup .su-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sb-setup .su-line b { font-weight: 500; font-size: 12.5px; color: var(--ink); }
+.sb-setup .su-count { font-size: 11px; color: var(--ink-dim); }
+.sb-setup .su-bar {
+  height: 4px; border-radius: 999px; overflow: hidden;
+  background: var(--nb-alpha-100, rgba(255, 255, 255, 0.03));
+}
+.sb-setup .su-bar i {
+  display: block; height: 100%; border-radius: 999px;
+  background: var(--tx-green); transition: width 200ms ease;
+}
+.sb-setup .su-list { display: grid; gap: 3px; font-size: 11.5px; color: var(--ink-dim); }
+.sb-setup .su-list span { display: flex; align-items: center; gap: 5px; }
+.sb-setup .su-list span.is-done { color: var(--ink-soft); }
+.sb-setup .su-list span.is-done::before { content: "✓"; color: var(--tx-green); }
+
+/* ---------- 侧栏底部的「更多」浮层（工具收进圆形按钮弹出的浮层里） ---------- */
+.sb-dock { position: relative; margin-top: auto; }
+.sb-menu {
+  position: absolute; left: 9px; right: 9px; bottom: calc(100% + 6px);
+  display: grid; gap: 1px; padding: 6px; z-index: 30;
+  /* 底色与侧栏一致；靠一圈描边 + 投影从树里浮出来（那不是"分割线"） */
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+/* 作者样式的 display:grid 会盖掉浏览器默认的 [hidden]{display:none}——不显式
+   归零，浮层就一直摊在侧栏上，`hidden` 开关等于失效（"收不回去"的根因）。 */
+.sb-menu[hidden] { display: none; }
+.sb-act {
+  display: flex; align-items: center; gap: 8px;
+  font: inherit; font-size: 12px; text-align: left;
+  color: var(--ink-soft); background: transparent; border: 0;
+  border-radius: var(--radius-sm); padding: 5px 8px; cursor: pointer;
+}
+.sb-act:hover { color: var(--ink); background: var(--nb-alpha-200, rgba(255, 255, 255, 0.055)); }
+/* 圆形「更多」按钮（✎） */
+.sb-compose {
+  flex: 0 0 auto; width: var(--tx-h-row); height: var(--tx-h-row);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--tx-body); background: transparent;
+  border: 1px solid var(--tx-hairline); border-radius: var(--tx-r-pill);
+  cursor: pointer; padding: 0;
+}
+.sb-compose:hover { color: var(--tx-ink); background: var(--tx-canvas-raised); }
+.sb-compose .sb-compose-x { font-size: 12px; line-height: 1; }
+
 /* 工作区：并排面板 */
 .workspace { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
 .panels { flex: 1 1 auto; display: flex; min-width: 0; }
@@ -255,7 +343,7 @@ kbd {
 .panels.has-tabs + .empty-hint { display: none; }
 
 /* --------------------------------------------------------------- 卡片 */
-/* 正文铺满编辑区（不再有 940px 的居中窄栏），只有内边距兜住文字 */
+/* 正文铺满编辑区（不设居中窄栏），只有内边距兜住文字 */
 .card-view { padding: 22px 26px 90px; max-width: none; }
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .card-title {
@@ -292,6 +380,42 @@ kbd {
   color: var(--ink-dim); font-size: 11.5px; text-align: center;
 }
 .card-cover img { width: 100%; height: 100%; object-fit: cover; }
+
+/* 页面头部：封面是**整幅横幅**压在标题之上，
+   标题放大到页面标题尺度。只在卡片视图里生效，别处不受影响。 */
+.card-view .card-cover {
+  width: 100%; height: 200px;
+  border-radius: 12px;
+  margin: 0 0 22px;
+  background: var(--nb-alpha-100, rgba(255, 255, 255, 0.04));
+  font-size: 12.5px;
+}
+.card-view .card-title { font-size: 40px; line-height: 1.15; }
+/* 没有封面时不要留 200px 死空间——压成一条细提示：空封面几乎隐形，
+   指针靠上去才显形。 */
+.card-view .card-cover:has(.cover-empty) {
+  height: 44px; background: transparent;
+  border: 1px dashed var(--line); opacity: .45;
+}
+.card-view .card-cover:has(.cover-empty):hover { opacity: 1; }
+
+/* 标题左侧的页面图标 */
+.card-view .card-title-row { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.card-view .card-title-row > svg { flex: 0 0 auto; color: var(--ink-dim); }
+.card-view .card-title-row .card-title { margin: 0; }
+
+/* 顶栏面包屑（当前页面的图标 + 名字），紧挨工作区切换器 */
+.tb-crumb {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-width: 0; max-width: 320px;
+  margin-left: 4px; padding: 4px 10px;
+  border-radius: var(--nb-r-md, 6px);
+  background: var(--nb-alpha-100, rgba(255, 255, 255, 0.03));
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.tb-crumb .crumb-icon { display: inline-flex; flex: 0 0 auto; color: var(--ink-dim); }
+.tb-crumb .crumb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .props { display: grid; gap: 2px; margin: 6px 0 18px; max-width: 560px; }
 .prop-row { display: flex; align-items: center; gap: 10px; min-height: 26px; }
@@ -576,6 +700,26 @@ kbd {
 .form-row > label { flex: 0 0 84px; color: var(--ink-dim); font-size: 12px; }
 .hint { color: var(--ink-dim); font-size: 11.5px; }
 
+/* 侧栏「我的世界」菜单：世界列表 + 新建 */
+.world-list { display: grid; gap: 4px; margin: 4px 0 12px; }
+.world-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03); color: var(--ink-soft);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.world-item:hover { background: rgba(255, 255, 255, 0.06); color: var(--ink); }
+.world-item.is-current { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.05); color: var(--ink); cursor: default; }
+.world-item .wi-avatar {
+  flex: 0 0 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 7px; background: rgba(255, 255, 255, 0.08); color: var(--ink);
+  font-size: 12px; font-weight: 600;
+}
+.world-item .wi-meta { display: grid; gap: 1px; min-width: 0; }
+.world-item .wi-name { color: inherit; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-item .wi-sub { color: var(--ink-dim); font-size: 11px; }
+.world-item .wi-check { margin-left: auto; color: var(--accent); font-size: 13px; }
+
 .toast {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
   background: var(--panel-2); border: 1px solid var(--line-strong);
@@ -644,11 +788,12 @@ kbd {
 .mention-row:hover, .mention-row.is-active { background: rgba(255, 255, 255, 0.08); color: var(--ink); }
 .mr-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mr-kind { color: var(--ink-dim); font-size: 11px; }
+.mr-desc { flex: 0 1 auto; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 
 /* --------------------------------------------------------------- 关系树 */
-/* 面板里嵌的是独立页 /relationship（iframe），工作区不再自带一套简版渲染器。
-   所以这里只剩"外壳"的样式——画布、卡片、关系线都在 independent 那页里。 */
+/* 面板里嵌的是独立页 /relationship（iframe），工作区本身不含渲染逻辑。
+   所以这里只剩"外壳"的样式——画布、卡片、关系线都在那页里。 */
 .tree-wrap { display: flex; flex-direction: column; height: 100%; min-height: 420px; }
 .tree-bar, .map-bar {
   display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
@@ -670,7 +815,7 @@ kbd {
 .swatch-btn.is-active { outline: 2px solid #e0a83c; outline-offset: 1px; }
 
 /* ------------------------------------------------------------ 经典地图 */
-.map-wrap { display: flex; flex-direction: column; height: 100%; min-height: 460px; }
+.map-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .map-sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
 .map-stats { margin-left: auto; color: var(--ink-dim); font-size: 11.5px; }
 .map-canvas {
@@ -770,6 +915,79 @@ kbd {
 .fr-icon { width: 16px; color: var(--ink-dim); }
 .fr-name { flex: 1 1 auto; color: var(--ink); font-size: 13.5px; }
 .fr-kind { color: var(--ink-dim); font-size: 11.5px; }
+.folder-crumbs {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 1px;
+  margin-bottom: 10px; font-size: 12px;
+}
+.crumb-root { color: var(--ink-dim); padding: 0 2px; }
+.crumb-sep { color: var(--ink-dim); opacity: 0.55; }
+.crumb-seg {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; border-radius: var(--radius-sm);
+  color: var(--ink-dim); font: inherit; font-size: 12px;
+  padding: 3px 6px; cursor: pointer;
+}
+.crumb-seg:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: var(--ink); }
+.crumb-seg.is-current { color: var(--ink); font-weight: 500; cursor: default; }
+.folder-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.folder-search {
+  flex: 1 1 auto; min-width: 0;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--ink); font: inherit; font-size: 12.5px;
+  padding: 5px 9px; outline: 0;
+}
+.folder-search::placeholder { color: var(--ink-dim); }
+.folder-search:focus { border-color: var(--line-strong); }
+.folder-sort { display: flex; gap: 2px; flex: 0 0 auto; }
+.folder-sort .mini-btn { font-size: 11.5px; padding: 4px 8px; }
+.folder-none { color: var(--ink-dim); font-size: 13px; padding: 12px 10px; }
+
+/* 列表 / 网格切换 */
+.folder-view-toggle { display: flex; gap: 2px; flex: 0 0 auto; }
+
+/* 多选批量条：只在有选中时出现，用主色浅浅兜一层，提示"正在整批操作" */
+.folder-batch {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 7px 10px; margin-bottom: 12px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(224, 168, 60, 0.35);
+  border-radius: var(--radius-sm);
+}
+.fb-count { color: var(--ink); font-size: 12.5px; }
+.fb-move {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--ink); font: inherit; font-size: 12px;
+  padding: 4px 8px; outline: 0; cursor: pointer;
+}
+.fb-move:focus { border-color: var(--line-strong); }
+.fb-move option { background: var(--panel); color: var(--ink); }
+
+/* 行内复选框：跟文字同色系，不抢戏 */
+.fr-check {
+  flex: 0 0 auto; width: 14px; height: 14px; margin: 0;
+  accent-color: var(--accent); cursor: pointer;
+}
+.folder-row.is-selected { background: var(--accent-soft); border-color: rgba(224, 168, 60, 0.4); }
+
+/* 网格视图：一行铺满的卡片格子，复选框挪到右上角 */
+.folder-list.is-grid {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.folder-list.is-grid .folder-row {
+  flex-direction: column; align-items: center; justify-content: flex-start;
+  gap: 6px; padding: 14px 10px 12px; text-align: center;
+  position: relative; border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.folder-list.is-grid .fr-icon { width: auto; }
+.folder-list.is-grid .fr-name {
+  flex: 0 0 auto; max-width: 100%;
+  white-space: normal; word-break: break-word; line-height: 1.35;
+}
+.folder-list.is-grid .fr-check { position: absolute; top: 7px; right: 7px; }
 
 
 /* --------------------------------------------------- 富文本与斜杠菜单 */
@@ -798,3 +1016,14 @@ kbd {
 .block-text h1, .block-text h2, .block-text h3 {
   font-family: var(--heading-font); font-weight: 400; margin: 4px 0;
 }
+
+/* 地图面板：嵌 /map/2d 的 iframe（与关系树面板同一套办法，见 workspace.js） */
+.map-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0 0 var(--shell-radius, 0) var(--shell-radius, 0);
+  background: var(--tx-canvas-sunken, #0d0c0b);
+}
+.map-wrap > .map-frame { flex: 1 1 auto; min-height: 0; }

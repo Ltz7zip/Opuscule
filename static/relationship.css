@@ -1,7 +1,7 @@
 /* ==========================================================================
    关系树（/relationship）
    --------------------------------------------------------------------------
-   外观**完全走 Minimal 设计语言**（桌面 Minimalist 设计系统，token 在 minimal.css）：
+   外观**完全走 Minimal 设计语言**（token 定义在 minimal.css）：
    这套语言只有一档圆角、4px 栅格、几乎归零的阴影，靠 1px 边框与表面色阶分层，
    主色是灰阶（--mn-primary），彩色（--mn-accent #2563ef）只用在"这里能点 / 这里选中"
    这种真有含义的地方。
@@ -753,7 +753,33 @@
 .rt-edge:hover { stroke: var(--mn-accent); stroke-width: 2.5; }
 .rt-edge--strong { stroke: var(--rt-edge-strong); stroke-width: 2; }
 .rt-edge--dashed { stroke-dasharray: 6 5; }
-.rt-edge--draft { stroke: var(--mn-accent); stroke-width: 2; stroke-dasharray: 7 5; }
+/* 连线中的草稿线：**流动**虚线（跟着鼠标走的那条） */
+.rt-edge--draft {
+  stroke: var(--mn-accent); stroke-width: 2; stroke-dasharray: 7 5;
+  animation: rt-dash-flow 900ms linear infinite;
+}
+@keyframes rt-dash-flow { to { stroke-dashoffset: -24; } }
+
+/* 节点：被指到/被选中的卡片轻轻放大一点 */
+.rt-node .rt-card { transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease; }
+.rt-node:hover .rt-card,
+.rt-node.is-selected .rt-card,
+.rt-node.is-drop-target .rt-card { transform: scale(1.05); }
+
+/* 菜单：生长出来，缩回去（缩回由 JS 加 .is-closing 触发） */
+.rt-menu:not([hidden]) {
+  animation: rt-menu-grow 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top left;
+}
+.rt-menu.is-closing { animation: rt-menu-shrink 130ms ease-in both; transform-origin: top left; }
+@keyframes rt-menu-grow { from { opacity: 0; transform: scale(0.94) translateY(-4px); } }
+@keyframes rt-menu-shrink { to { opacity: 0; transform: scale(0.96) translateY(-3px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-edge--draft { animation: none; }
+  .rt-node .rt-card { transition: none; }
+  .rt-menu:not([hidden]), .rt-menu.is-closing { animation: none; }
+}
 
 .rt-edge-label {
   font-family: var(--mn-font-sans);

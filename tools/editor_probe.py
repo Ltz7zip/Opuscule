@@ -2,11 +2,12 @@
 """块嵌套/嵌入 + 模糊提及 + 快捷键自定义 + 无障碍播报 + 移动端的验证。"""
 from __future__ import annotations
 import json, pathlib, sys, urllib.request
+import os
 from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/ux_shots"); SHOTS.mkdir(exist_ok=True)
 opener = make_opener(); ensure_login(opener)
 

@@ -7,35 +7,46 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import re
+from datetime import timedelta
 
+from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone
 
-from . import publish
+from .services import publish
 
 from timeline.models import TimelineItem, TimelineView
 
 from .models import (
-    DocumentVersion,
-    InviteCode,
-    Membership,
-    Presence,
-    MapMarker,
     CAL_CUSTOM,
     DOC_CARD,
     DOC_FOLDER,
     DOC_TIMELINE,
     DOC_TREE,
+    EntityType,
+    InviteCode,
+    MAX_OWNED_WORLDS,
+    MemberEvent,
+    Membership,
+    ModerationEvent,
+    PropertyDef,
+    Report,
+    ROLE_EDITOR,
+    World,
+)
+from documents.models import (
     Calendar,
     Card,
     Document,
-    EntityType,
+    DocumentVersion,
     Era,
-    PropertyDef,
+    Presence,
     TimelineEvent,
-    World,
 )
+from maps.models import MapMarker
 from .normalize import (
     blocks_to_text,
     coerce_property_value,
@@ -50,6 +61,8 @@ class BaseWorldCase(TestCase):
     """公共夹具：一个世界 + 一个角色类型（含各种值类型的属性）。"""
 
     def setUp(self):
+        # 限流计数落在缓存里，跨测试共享会累积触顶；每个用例开始前清一次。
+        cache.clear()
         self.world = World.objects.create(name="测试世界", theme_config={"primaryColor": "#123456"})
         self.role = EntityType.objects.create(world=self.world, name="角色", position=1)
         self.p_name = PropertyDef.objects.create(entity_type=self.role, name="定位", value_type="text", position=1)
@@ -461,7 +474,7 @@ class ApiTests(BaseWorldCase):
         self.assertEqual(world.theme["headingFont"], "EB Garamond")
 
     def test_new_name_detection_is_conservative(self):
-        from world.autolink import detect_new_names
+        from world.services.autolink import detect_new_names
 
         text = "Kethvari 塔倒了。Kethvari 的信使还在路上，Calreth 也是。"
         names = detect_new_names(self.world, text)
@@ -496,7 +509,7 @@ class GraphTests(BaseWorldCase):
         self.event.linked_cards.add(self.hero)
 
     def test_graph_collects_three_kinds_of_links(self):
-        from world.graph import build_graph
+        from world.services.graph import build_graph
 
         data = build_graph(self.world)
         kinds = {link["kind"] for link in data["links"]}
@@ -510,7 +523,7 @@ class GraphTests(BaseWorldCase):
         self.assertEqual(hero_node["entity_type_name"], "角色")
 
     def test_hide_isolated_and_search(self):
-        from world.graph import build_graph
+        from world.services.graph import build_graph
 
         lonely, _ = self.make_card(name="没人连我")
         data = build_graph(self.world, hide_isolated=True)
@@ -523,7 +536,7 @@ class GraphTests(BaseWorldCase):
         self.assertNotIn(lonely.id, ids)
 
     def test_neighborhood_center(self):
-        from world.graph import build_graph
+        from world.services.graph import build_graph
 
         data = build_graph(self.world, center=self.hero.id, depth=1)
         ids = {n["id"] for n in data["nodes"]}
@@ -554,7 +567,7 @@ class PublishTests(BaseWorldCase):
         self.folder = Document.objects.create(world=self.world, document_type=DOC_FOLDER, name="人物")
 
     def publish(self, **kwargs):
-        from world.publish import publish
+        from world.services.publish import publish
 
         return publish(self.world, **kwargs)
 
@@ -620,7 +633,7 @@ class PublishTests(BaseWorldCase):
         self.world.save(update_fields=["published_slug"])
         self.assertEqual(self.client.get("/s/abc123/").status_code, 404)
 
-        from world.publish import unpublish
+        from world.services.publish import unpublish
 
         self.publish()
         home = self.client.get(f"/s/{self.world.published_slug}/")
@@ -644,6 +657,26 @@ class PublishTests(BaseWorldCase):
         unlocked = self.client.get(f"/s/{slug}/")
         self.assertContains(unlocked, "Isarra Thornveil")
 
+    def test_publish_password_is_stored_hashed(self):
+        """访问密码只以哈希落库：字段里看不到明文，校验走 check_password。"""
+        from django.contrib.auth.hashers import check_password
+
+        self.publish(audience="password", password="tower-42")
+        self.world.refresh_from_db()
+        self.assertNotEqual(self.world.publish_password, "tower-42")
+        self.assertNotIn("tower-42", self.world.publish_password)
+        self.assertTrue(check_password("tower-42", self.world.publish_password))
+        self.assertFalse(check_password("nope", self.world.publish_password))
+
+    def test_republish_without_password_keeps_the_old_one(self):
+        """不传 password 只是"不改密码"：原哈希原样留着，别被清掉或被二次哈希。"""
+        self.publish(audience="password", password="tower-42")
+        self.world.refresh_from_db()
+        stored = self.world.publish_password
+        self.publish(audience="password")
+        self.world.refresh_from_db()
+        self.assertEqual(self.world.publish_password, stored)
+
     def test_unlisted_site_is_noindex(self):
         self.publish(audience="unlisted")
         home = self.client.get(f"/s/{self.world.published_slug}/")
@@ -666,7 +699,7 @@ class PublishTests(BaseWorldCase):
         self.assertFalse(offline["publish"]["published"])
 
     def test_related_documents_lists_references_and_events(self):
-        from world.publish import related_documents
+        from world.services.publish import related_documents
 
         self.p_ref = PropertyDef.objects.create(entity_type=self.role, name="所属阵营", value_type="reference",
                                                 position=9)
@@ -684,6 +717,80 @@ class PublishTests(BaseWorldCase):
         self.assertIn("世界时间线", names)
         reasons = " ".join(item["reason"] for item in related)
         self.assertIn("引用", reasons)
+
+
+class ExploreTests(BaseWorldCase):
+    """公开世界展示页 /explore：只陈列公开发布的世界，游客从 /world 被送到这里。"""
+
+    def publish(self, **kwargs):
+        from world.services.publish import publish
+
+        return publish(self.world, **kwargs)
+
+    def test_explore_is_public_and_lists_published_world(self):
+        self.world.description = "一座塔的故事"
+        self.world.save(update_fields=["description"])
+        self.publish(audience="public")
+        self.world.refresh_from_db()
+
+        response = self.client.get("/explore")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "测试世界")
+        self.assertContains(response, "一座塔的故事")
+        self.assertContains(response, f"/s/{self.world.published_slug}/")
+
+    def test_explore_hides_unlisted_password_and_unpublished(self):
+        # 未发布：不进目录
+        self.assertNotContains(self.client.get("/explore"), "测试世界")
+
+        # unlisted 是「仅持链接可见」，摆进目录等于替发布者泄底
+        self.publish(audience="unlisted")
+        self.assertNotContains(self.client.get("/explore"), "测试世界")
+
+        # password 要密码，同理
+        self.publish(audience="password", password="tower-42")
+        self.assertNotContains(self.client.get("/explore"), "测试世界")
+
+        # 公开发布后才出现
+        self.publish(audience="public")
+        self.assertContains(self.client.get("/explore"), "测试世界")
+
+    def test_explore_empty_state(self):
+        response = self.client.get("/explore")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "还没有公开的世界")
+
+    def test_explore_sanitizes_theme_color(self):
+        """主题主色用户可控、会写进内联 style：不校验就等于开了 CSS 注入口。"""
+        self.world.theme_config = {"primaryColor": "#123456"}
+        self.world.save(update_fields=["theme_config"])
+        self.publish(audience="public")
+        self.assertContains(self.client.get("/explore"), "--site-primary: #123456")
+
+        self.world.theme_config = {"primaryColor": "red}.evil{color:red"}
+        self.world.save(update_fields=["theme_config"])
+        response = self.client.get("/explore")
+        self.assertNotContains(response, ".evil{")
+        self.assertContains(response, "--site-primary: #3ddc97")
+
+    def test_anonymous_workspace_redirects_to_explore(self):
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("someone", password="very-secret-1")
+        response = self.client.get("/world")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/explore")
+
+    def test_logged_in_workspace_still_renders(self):
+        from django.contrib.auth.models import User
+
+        user = User.objects.create_user("owner", password="very-secret-1")
+        self.client.force_login(user)
+        self.assertEqual(self.client.get("/world").status_code, 200)
+
+    def test_first_install_workspace_is_open(self):
+        # 一个用户都没有：首次安装例外，放行让人进来把世界建起来
+        self.assertEqual(self.client.get("/world").status_code, 200)
 
 
 class TreeTests(BaseWorldCase):
@@ -883,10 +990,12 @@ class RelationshipPageTests(BaseWorldCase):
         editable = self.client.get("/relationship?embed=1&readonly=0")
         self.assertContains(editable, 'data-readonly="0"')
 
-        # 纸面主题：嵌进发布站点时按那边的米白走
+        # 嵌入态（发布站点 / 工作区面板）都是暗色终端外壳：
+        # theme=paper 这个老参数保留着（老链接不失效），但终端设计语言里
+        # 没有浅色纸面，它落到暗色；真要浅色得显式传 theme=light。
         paper = self.client.get("/relationship?embed=1&theme=paper")
         self.assertContains(paper, "is-paper")
-        self.assertContains(paper, 'data-theme="light"')
+        self.assertContains(paper, 'data-theme="dark"')
 
         forced = self.client.get("/relationship?theme=light")
         self.assertContains(forced, 'data-theme="light"')
@@ -1093,6 +1202,36 @@ class MapTests(BaseWorldCase):
         self.assertEqual(self.state["layers"][0]["name"], "默认")
         self.assertIn("pin", [k["value"] for k in self.state["kinds"]])
 
+    def test_map_data_roundtrip(self):
+        """整包数据：先空、写回后原样取出（.map 文本原样保存，不解析、不改动）。"""
+        empty = self.client.get(f"/api/world/maps/{self.map_id}/data").json()
+        self.assertFalse(empty["saved"])
+        self.assertEqual(empty["data"], "")
+
+        text = "1.154.0|license|2026-10-11|seed|1000|600|9\r\n{}\r\n<svg id=\"map\"></svg>"
+        saved = self.client.put(f"/api/world/maps/{self.map_id}/data",
+                                data=json.dumps({"data": text}),
+                                content_type="application/json").json()
+        self.assertTrue(saved["success"])
+        self.assertEqual(saved["size"], len(text))
+
+        again = self.client.get(f"/api/world/maps/{self.map_id}/data").json()
+        self.assertTrue(again["saved"])
+        self.assertEqual(again["data"], text)
+
+    def test_map_data_needs_a_string_and_a_map_document(self):
+        bad = self.client.put(f"/api/world/maps/{self.map_id}/data",
+                              data=json.dumps({"data": 7}),
+                              content_type="application/json")
+        self.assertEqual(bad.status_code, 400)
+
+        unknown = self.client.get("/api/world/maps/999999/data")
+        self.assertEqual(unknown.status_code, 404)
+
+        card = self.post_json("/api/world/documents", {"type": "card", "name": "条目"}).json()
+        not_a_map = self.client.get(f"/api/world/maps/{card['id']}/data")
+        self.assertEqual(not_a_map.status_code, 400)
+
     def test_background_by_url_and_clear(self):
         body = self.client.post(f"/api/world/maps/{self.map_id}/background", data=json.dumps(
             {"url": "https://example.com/map.png", "bg_zoom": 1.5}),
@@ -1119,7 +1258,7 @@ class MapTests(BaseWorldCase):
         upload = SimpleUploadedFile("notes.txt", b"hello", content_type="text/plain")
         response = self.client.post(f"/api/world/maps/{self.map_id}/background", {"file": upload})
         self.assertEqual(response.status_code, 400)
-        self.assertIn("只支持", response.json()["error"])
+        self.assertIn("不支持", response.json()["error"])
 
     def test_pin_zone_label_lifecycle(self):
         pin = self.client.post(f"/api/world/maps/{self.map_id}/markers", data=json.dumps(
@@ -1152,6 +1291,26 @@ class MapTests(BaseWorldCase):
         marker = self.client.post(f"/api/world/maps/{self.map_id}/markers", data=json.dumps(
             {"kind": "pin", "name": "x", "color": "chartreuse"}), content_type="application/json").json()
         self.assertEqual(marker["color"], "gold")
+
+    def test_marker_size_default_and_clamp(self):
+        """大小（scale）能建能改，越界的值收在 0.2–4。"""
+        default = self.client.post(f"/api/world/maps/{self.map_id}/markers", data=json.dumps(
+            {"kind": "pin", "name": "x"}), content_type="application/json").json()
+        self.assertEqual(default["scale"], 1.0)
+
+        bigger = self.client.post(f"/api/world/maps/{self.map_id}/markers", data=json.dumps(
+            {"kind": "pin", "name": "大点", "scale": 2.5}), content_type="application/json").json()
+        self.assertEqual(bigger["scale"], 2.5)
+
+        clamped = self.client.put(f"/api/world/map-markers/{bigger['id']}", data=json.dumps(
+            {"scale": 99}), content_type="application/json").json()
+        self.assertEqual(clamped["scale"], 4.0)
+
+        # 认不出的值不能把已有的大小改坏（PUT 带 scale 但值非法 → 保持原值）
+        kept = self.client.put(f"/api/world/map-markers/{bigger['id']}", data=json.dumps(
+            {"description": "写得长一点", "scale": "很大"}), content_type="application/json").json()
+        self.assertEqual(kept["scale"], 4.0)
+        self.assertEqual(kept["description"], "写得长一点")
 
     def test_marker_links_a_card(self):
         document, _ = self.make_card(name="Harrowdeep")
@@ -1423,7 +1582,7 @@ class RichTextTests(BaseWorldCase):
     """区块富文本：白名单净化 + 纯文本派生。"""
 
     def test_clean_html_keeps_formatting_drops_danger(self):
-        from world.sanitize import clean_html, html_to_text
+        from world.services.sanitize import clean_html, html_to_text
 
         dirty = ('<p>正常 <b>加粗</b> <i>斜体</i></p>'
                  '<script>alert(1)</script>'
@@ -1554,7 +1713,7 @@ class ExchangeTests(BaseWorldCase):
 
     def test_export_covers_every_document_type(self):
         """每种文档都要能导出（树 / 地图 / 时间线曾经在这里炸过）。"""
-        from world.models import TreeEdge, TreeNode, TreeVariant
+        from graph.models import TreeEdge, TreeNode, TreeVariant
 
         tree = Document.objects.create(world=World.objects.first(), document_type="familyTree", name="家谱")
         variant = TreeVariant.objects.create(document=tree, name="Main")
@@ -1660,22 +1819,156 @@ class AuthAndPermissionTests(BaseWorldCase):
         world = World.objects.first()
         self.assertEqual(world.owner.username, "owner")
 
-    def test_second_user_needs_an_invite(self):
+    def test_password_similar_to_username_is_rejected(self):
+        """密码与用户名过于相似要被挡下——校验时必须带上待建用户，否则相似度校验会失效。"""
+        from django.contrib.auth.models import User
+
+        denied = self.post_json("/api/world/auth/register",
+                                {"username": "alexander", "password": "alexander1"})
+        self.assertEqual(denied.status_code, 400, denied.content[:200])
+        self.assertFalse(User.objects.filter(username="alexander").exists())
+
+    def test_register_without_invite_is_rejected(self):
+        """邀请制是强制的：已有账号后，没有邀请码就不能自助开号。"""
+        from django.contrib.auth.models import User
+
         self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        worlds_before = World.objects.count()
+
         denied = self.post_json("/api/world/auth/register",
                                 {"username": "friend", "password": "very-secret-2"})
+        self.assertEqual(denied.status_code, 400, denied.content[:200])
+        self.assertIn("邀请码", denied.json()["error"])
+        # 被拒 = 什么都没发生：不多一个世界，也不多一个账号
+        self.assertEqual(World.objects.count(), worlds_before)
+        self.assertFalse(User.objects.filter(username="friend").exists())
+
+    def test_invite_joins_the_inviters_world(self):
+        """带有效邀请码注册 = 加入邀请码指向的那个世界，角色由邀请码定。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        invite = self.post_json("/api/world/collaborators/invites", {"role": "editor"}).json()
+        joined = self.post_json("/api/world/auth/register",
+                                {"username": "friend", "password": "very-secret-2", "invite": invite["code"]})
+        self.assertEqual(joined.status_code, 200, joined.content[:200])
+        self.assertFalse(joined.json()["created_owner"])
+        self.assertEqual(joined.json()["viewer"]["role"], "editor")
+        self.assertEqual(World.objects.count(), 1)               # 没多出一个世界
+
+        # 一次性邀请码用过就废
+        again = self.post_json("/api/world/auth/register",
+                               {"username": "third", "password": "very-secret-3", "invite": invite["code"]})
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("用完", again.json()["error"])
+
+    def test_bad_invite_is_rejected(self):
+        """填了邀请码就必须有效——不能因为填错了反而给白开一个世界。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        denied = self.post_json("/api/world/auth/register",
+                                {"username": "friend", "password": "very-secret-2", "invite": "NOPE-123"})
         self.assertEqual(denied.status_code, 400)
         self.assertIn("邀请码", denied.json()["error"])
 
+    def test_user_can_create_and_switch_worlds(self):
+        """老用户随时能再建一个世界，并在自己的世界之间切换。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        mine = self.client.get("/api/world/worlds").json()
+        self.assertTrue(mine["can_create"])
+        self.assertEqual(len(mine["worlds"]), 1)
+
+        created = self.post_json("/api/world/worlds", {"name": "第二个世界"})
+        self.assertEqual(created.status_code, 201, created.content[:200])
+        new_id = created.json()["world"]["id"]
+        self.assertNotEqual(new_id, self.world.id)
+        # 新建后它就是当前世界
+        self.assertEqual(self.client.get("/api/world/state").json()["world"]["id"], new_id)
+
+        listed = self.client.get("/api/world/worlds").json()
+        self.assertEqual(len(listed["worlds"]), 2)
+        self.assertEqual(listed["current"], new_id)
+
+        # 切回第一个世界
+        switched = self.post_json(f"/api/world/worlds/{self.world.id}/switch", {})
+        self.assertEqual(switched.status_code, 200)
+        self.assertEqual(self.client.get("/api/world/state").json()["world"]["id"], self.world.id)
+
+    def test_world_creation_is_capped(self):
+        """自建世界上限（MAX_OWNED_WORLDS）：到顶后 can_create 转 False，再建被 403 挡下。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        # 首用户接管了夹具世界，已占 1 个额度；把剩下的额度用完
+        for i in range(MAX_OWNED_WORLDS - 1):
+            created = self.post_json("/api/world/worlds", {"name": f"世界{i}"})
+            self.assertEqual(created.status_code, 201, created.content[:200])
+
+        listed = self.client.get("/api/world/worlds").json()
+        self.assertEqual(listed["owned_count"], MAX_OWNED_WORLDS)
+        self.assertEqual(listed["max_worlds"], MAX_OWNED_WORLDS)
+        self.assertFalse(listed["can_create"])
+
+        denied = self.post_json("/api/world/worlds", {"name": "超额的世界"})
+        self.assertEqual(denied.status_code, 403, denied.content[:200])
+        self.assertIn("上限", denied.json()["error"])
+
+    def test_invited_worlds_do_not_count_against_the_cap(self):
+        """被邀请加入别人的世界不算"自建"，不占额度。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
         invite = self.post_json("/api/world/collaborators/invites", {"role": "editor"}).json()
-        allowed = self.post_json("/api/world/auth/register",
-                                 {"username": "friend", "password": "very-secret-2", "invite": invite["code"]})
-        self.assertEqual(allowed.status_code, 200, allowed.content[:200])
-        self.assertEqual(allowed.json()["viewer"]["role"], "editor")
-        again = self.post_json("/api/world/auth/register",
-                               {"username": "third", "password": "very-secret-3", "invite": invite["code"]})
-        self.assertEqual(again.status_code, 400)          # 一次性邀请码用过就废
-        self.assertIn("用完", again.json()["error"])
+        self.client.post("/api/world/auth/logout")
+        joined = self.post_json("/api/world/auth/register",
+                                {"username": "friend", "password": "very-secret-2", "invite": invite["code"]})
+        self.assertEqual(joined.status_code, 200, joined.content[:200])
+
+        listed = self.client.get("/api/world/worlds").json()
+        self.assertEqual(listed["owned_count"], 0)               # 一个都没自建
+        self.assertTrue(listed["can_create"])
+
+    def test_registration_splits_display_name_loosely(self):
+        """注册名按任意空白拆：单段中文名整名进 first_name（last_name 留空）。"""
+        from django.contrib.auth.models import User
+
+        response = self.post_json("/api/world/auth/register",
+                                  {"username": "owner", "password": "very-secret-1",
+                                   "display_name": "张三丰"})
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        user = User.objects.get(username="owner")
+        self.assertEqual(user.first_name, "张三丰")
+        self.assertEqual(user.last_name, "")
+        self.assertEqual(user.get_full_name().strip(), "张三丰")
+
+    def test_registration_splits_name_on_fullwidth_space(self):
+        """全角空格（U+3000）也算分隔符，不能被整段塞进 first_name。"""
+        from django.contrib.auth.models import User
+
+        response = self.post_json("/api/world/auth/register",
+                                  {"username": "owner", "password": "very-secret-1",
+                                   "display_name": "张\u3000三丰"})
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        user = User.objects.get(username="owner")
+        self.assertEqual(user.first_name, "张")
+        self.assertEqual(user.last_name, "三丰")
+
+    def test_registration_splits_western_name(self):
+        """西文两段名照旧按第一个空格拆。"""
+        from django.contrib.auth.models import User
+
+        response = self.post_json("/api/world/auth/register",
+                                  {"username": "owner", "password": "very-secret-1",
+                                   "display_name": "Ada Lovelace"})
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        user = User.objects.get(username="owner")
+        self.assertEqual(user.first_name, "Ada")
+        self.assertEqual(user.last_name, "Lovelace")
+
+    def test_cannot_switch_to_a_foreign_world(self):
+        """切不到不属于自己的世界。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        stranger = World.objects.create(name="别人的世界")
+        denied = self.post_json(f"/api/world/worlds/{stranger.id}/switch", {})
+        self.assertEqual(denied.status_code, 403)
+
+    def test_guests_cannot_create_worlds(self):
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.client.post("/api/world/auth/logout")
+        self.assertEqual(self.post_json("/api/world/worlds", {"name": "路过建的"}).status_code, 401)
 
     def test_writes_require_login_once_a_user_exists(self):
         self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
@@ -1686,9 +1979,39 @@ class AuthAndPermissionTests(BaseWorldCase):
         self.assertEqual(blocked.status_code, 401)
         self.assertIn("登录", blocked.json()["error"])
 
-        # 读还是公开的（发布站点要靠它）
+        # 读也拦着了：游客只能读"发布站点里嵌的那一篇已发布文档"，其余一律 401
+        self.assertEqual(self.client.get("/api/world/state").status_code, 401)
+        self.assertEqual(self.client.get(f"/api/world/cards/{card.id}").status_code, 401)
+
+    def test_reads_require_membership_once_a_user_exists(self):
+        """读要登录且在世界里有身份；只给"已发布文档的只读嵌入"对游客开一条缝。"""
+        # 还没有任何账号：首次安装例外，先让人进得来
         self.assertEqual(self.client.get("/api/world/state").status_code, 200)
-        self.assertEqual(self.client.get(f"/api/world/cards/{card.id}").status_code, 200)
+
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        published, _row = self.make_card(name="公开的卡")
+        draft, _row = self.make_card(name="草稿")
+        # Document.is_published 默认就是 True（"包含在站点里"），把草稿显式排除掉，
+        # 才能验出"未发布的那篇拿 id 也穷举不出来"
+        draft.is_published = False
+        draft.save(update_fields=["is_published"])
+        published.is_published = True
+        published.save(update_fields=["is_published"])
+        self.world.is_published = True
+        self.world.save(update_fields=["is_published"])
+
+        # 成员（所有者）读得到整棵树
+        self.assertEqual(self.client.get("/api/world/state").status_code, 200)
+
+        self.client.post("/api/world/auth/logout")
+        # 游客：整棵树的读被挡，未发布的那篇拿 id 也穷举不出来
+        self.assertEqual(self.client.get("/api/world/state").status_code, 401)
+        self.assertEqual(self.client.get(f"/api/world/cards/{draft.id}").status_code, 401)
+        # 但带 ?embed=<已发布文档> 能读到那一篇，且树被裁成只剩它
+        embedded = self.client.get(f"/api/world/state?embed={published.id}")
+        self.assertEqual(embedded.status_code, 200)
+        self.assertEqual([row["id"] for row in embedded.json()["documents"]], [published.id])
+        self.assertEqual(self.client.get(f"/api/world/documents/{published.id}").status_code, 200)
 
     def test_viewer_cannot_write_but_can_read(self):
         self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
@@ -1730,6 +2053,986 @@ class AuthAndPermissionTests(BaseWorldCase):
         online = self.client.get("/api/world/presence").json()
         self.assertEqual(online["count"], 1)
         self.assertEqual(online["online"][0]["handle"], "owner")
+
+
+class StaffScopeTests(BaseWorldCase):
+    """S7：is_staff 不再穿透——只有超级管理员能进"别人的世界"。"""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+
+        # 给测试世界安一个真实主人：这样 staff 就是"外人"（非成员、非所有者）
+        self.owner = get_user_model().objects.create_user("owner", password="very-secret-1")
+        self.world.owner = self.owner
+        self.world.save(update_fields=["owner"])
+
+    def _staff(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_user("staffer", password="very-secret-2", is_staff=True)
+
+    def _superuser(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_superuser("root", password="very-secret-3")
+
+    def test_staff_cannot_reach_foreign_worlds(self):
+        from . import permissions
+
+        staff = self._staff()
+        self.assertFalse(permissions.can_access(staff, self.world))
+        self.assertFalse(permissions.can_read(staff, self.world))
+        self.assertFalse(permissions.can_edit(staff, self.world))
+        self.assertFalse(permissions.can_admin(staff, self.world))
+        self.assertEqual(permissions.role_of(staff, self.world), "viewer")
+        self.assertNotIn(self.world, list(permissions.worlds_for(staff)))
+
+    def test_superuser_still_reaches_foreign_worlds(self):
+        from . import permissions
+
+        root = self._superuser()
+        self.assertTrue(permissions.can_access(root, self.world))
+        self.assertTrue(permissions.can_read(root, self.world))
+        self.assertTrue(permissions.can_edit(root, self.world))
+        self.assertTrue(permissions.can_admin(root, self.world))
+        self.assertEqual(permissions.role_of(root, self.world), "owner")
+        self.assertIn(self.world, list(permissions.worlds_for(root)))
+
+    def test_staff_request_is_denied_at_the_door(self):
+        """端到端：staff 登录后读工作区接口，照样 403（它不是成员）。"""
+        self.client.force_login(self._staff())
+        self.assertEqual(self.client.get("/api/world/state").status_code, 403)
+
+
+class AdminHardeningTests(BaseWorldCase):
+    """G1 + O2b：/admin/ 既要超级管理员，又要过第二步（TOTP）。"""
+
+    def _staff(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_user("staffer", password="very-secret-2", is_staff=True)
+
+    def _superuser(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_superuser("root", password="very-secret-3")
+
+    def _enroll(self, user, name="test"):
+        """给用户建一个已确认的 TOTP 设备，返回它（模拟 otp_enroll 的结果）。"""
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+
+        return TOTPDevice.objects.create(user=user, name=name, confirmed=True)
+
+    def _mark_verified(self, device):
+        """把「这台设备已通过第二步」写进 session——OTPMiddleware 靠它认人。"""
+        from django_otp import DEVICE_ID_SESSION_KEY
+
+        # 必须持有同一个 session 实例：client.session 每次访问都新建对象，
+        # 拆成两句会把 key 写到 A、把没 key 的 B 存进库。
+        session = self.client.session
+        session[DEVICE_ID_SESSION_KEY] = device.persistent_id
+        session.save()
+
+    def test_default_site_is_our_hardened_one(self):
+        from django.contrib import admin as django_admin
+
+        # admin.site 是 LazyObject；访问 __class__ 会触发它加载 default_site
+        self.assertEqual(django_admin.site.__class__.__name__, "OpusculeAdminSite")
+
+    def test_site_keeps_admin_namespace(self):
+        """OTPAdminSite 默认 name='otpadmin' 会拆掉 admin: 命名空间，必须钉回 admin。"""
+        from django.contrib import admin as django_admin
+        from django.urls import reverse
+
+        self.assertEqual(django_admin.site.name, "admin")
+        self.assertEqual(reverse("admin:index"), "/admin/")
+
+    def test_otp_middleware_is_installed_after_auth(self):
+        """OTPMiddleware 必须紧跟 AuthenticationMiddleware——顺序反了 is_verified 就没了。"""
+        from django.conf import settings
+
+        mw = settings.MIDDLEWARE
+        auth_idx = mw.index("django.contrib.auth.middleware.AuthenticationMiddleware")
+        self.assertEqual(mw[auth_idx + 1], "django_otp.middleware.OTPMiddleware")
+
+    def test_anonymous_is_sent_to_login(self):
+        response = self.client.get("/admin/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+
+    def test_staff_is_denied(self):
+        """staff 登录后进后台照样被弹回登录页——后台的门不该认 staff。"""
+        self.client.force_login(self._staff())
+        response = self.client.get("/admin/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+
+    def test_superuser_without_otp_cannot_enter(self):
+        """只过了口令这一关（force_login）还进不去——第二步没过。"""
+        self.client.force_login(self._superuser())
+        response = self.client.get("/admin/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+
+    def test_verified_superuser_can_enter(self):
+        """口令 + TOTP 都过了才放行。"""
+        user = self._superuser()
+        device = self._enroll(user)
+        self.client.force_login(user)
+        self._mark_verified(device)
+        self.assertEqual(self.client.get("/admin/").status_code, 200)
+
+    def test_login_form_requires_totp_token(self):
+        """光有口令没有验证码，后台登录不成立——会话里不会记下设备。"""
+        from django_otp import DEVICE_ID_SESSION_KEY
+
+        self._enroll(self._superuser())
+        response = self.client.post(
+            "/admin/login/",
+            {"username": "root", "password": "very-secret-3", "otp_token": ""},
+        )
+        self.assertEqual(response.status_code, 200)  # 留在登录页
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertNotIn(DEVICE_ID_SESSION_KEY, self.client.session)
+
+    def test_login_with_valid_totp_token_enters_admin(self):
+        """口令 + 认证器里的正确验证码 → 登录成功、后台可进。"""
+        from django_otp import DEVICE_ID_SESSION_KEY
+        from django_otp.oath import totp
+
+        user = self._superuser()
+        device = self._enroll(user)
+        token = totp(
+            device.bin_key, device.step, device.t0, device.digits, device.drift
+        )
+        response = self.client.post(
+            "/admin/login/",
+            {
+                "username": "root",
+                "password": "very-secret-3",
+                "otp_device": device.persistent_id,
+                "otp_token": token,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(DEVICE_ID_SESSION_KEY, self.client.session)
+        self.assertEqual(self.client.get("/admin/").status_code, 200)
+
+
+class AdminPathTests(BaseWorldCase):
+    """O2a：后台路径可配（OPUSCULE_ADMIN_PATH）——改完扫描器按 /admin/ 找不到门。"""
+
+    def _reload_urlconf(self):
+        """urlpatterns 在 import 时构建，改了 ADMIN_URL_PATH 必须重载才生效。"""
+        import importlib
+
+        from django.urls import clear_url_caches
+
+        from worldbuilding_timeline import urls as root_urls
+
+        importlib.reload(root_urls)
+        clear_url_caches()
+
+    def test_default_path_is_admin(self):
+        from django.conf import settings
+
+        self.assertEqual(settings.ADMIN_URL_PATH, "admin")
+
+    def test_custom_path_replaces_admin(self):
+        from django.contrib.auth import get_user_model
+        from django.test import override_settings
+        from django_otp import DEVICE_ID_SESSION_KEY
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+
+        root = get_user_model().objects.create_superuser("root", password="very-secret-3")
+        device = TOTPDevice.objects.create(user=root, name="test", confirmed=True)
+        try:
+            with override_settings(ADMIN_URL_PATH="ops-7f3a9c"):
+                self._reload_urlconf()
+                self.client.force_login(root)
+                # 过第二步（O2b 引入 2FA 后，光过口令进不去后台）
+                session = self.client.session
+                session[DEVICE_ID_SESSION_KEY] = device.persistent_id
+                session.save()
+                # 新路径能进后台
+                self.assertEqual(self.client.get("/ops-7f3a9c/").status_code, 200)
+                # 默认的 /admin/ 没了
+                self.assertEqual(self.client.get("/admin/").status_code, 404)
+        finally:
+            self._reload_urlconf()
+
+
+class OtpEnrollCommandTests(TestCase):
+    """O2b：命令行录入 2FA 设备——解开「要进后台才能建设备」的死结。"""
+
+    def _superuser(self, username="root"):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_superuser(username, password="very-secret-3")
+
+    def test_creates_confirmed_totp_device_and_prints_secret(self):
+        from base64 import b32encode
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+
+        user = self._superuser()
+        out = StringIO()
+        call_command("otp_enroll", "root", stdout=out)
+
+        device = TOTPDevice.objects.get(user=user)
+        self.assertTrue(device.confirmed)
+        text = out.getvalue()
+        self.assertIn("otpauth://totp/", text)   # 认证器能扫的串
+        self.assertIn(device.config_url, text)
+        self.assertIn(b32encode(device.bin_key).decode(), text)  # 手动录入用的密钥
+
+    def test_reuses_existing_device_unless_reset(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+
+        user = self._superuser()
+        call_command("otp_enroll", "root", stdout=StringIO())
+        first = TOTPDevice.objects.get(user=user)
+
+        call_command("otp_enroll", "root", stdout=StringIO())     # 再跑：复用同一设备
+        self.assertEqual(TOTPDevice.objects.filter(user=user).count(), 1)
+        self.assertEqual(TOTPDevice.objects.get(user=user).pk, first.pk)
+
+        call_command("otp_enroll", "root", "--reset", stdout=StringIO())  # --reset：换新密钥
+        self.assertEqual(TOTPDevice.objects.filter(user=user).count(), 1)
+        self.assertNotEqual(TOTPDevice.objects.get(user=user).pk, first.pk)
+
+    def test_backup_codes_are_created_and_usable(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django_otp.plugins.otp_static.models import StaticDevice
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+
+        user = self._superuser()
+        TOTPDevice.objects.create(user=user, name="authenticator", confirmed=True)
+        out = StringIO()
+        call_command("otp_enroll", "root", "--backup-codes", "3", stdout=out)
+
+        static = StaticDevice.objects.get(user=user)
+        tokens = list(static.token_set.values_list("token", flat=True))
+        self.assertEqual(len(tokens), 3)
+        # 打印出的每个备用码都能当场验过（并且只能用一次）
+        for token in tokens:
+            self.assertIn(token, out.getvalue())
+            self.assertTrue(static.verify_token(token))
+
+    def test_unknown_user_raises(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("otp_enroll", "nobody", stdout=StringIO())
+
+
+class RobotsTxtTests(BaseWorldCase):
+    """O1：/robots.txt 约束正规搜索引擎，禁工作区 / 接口 / 后台，放行公开只读站点。"""
+
+    def test_robots_is_plain_text(self):
+        response = self.client.get("/robots.txt")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response["Content-Type"].startswith("text/plain"))
+        self.assertIn("public, max-age=3600", response["Cache-Control"])
+
+    def test_robots_disallows_private_areas(self):
+        body = self.client.get("/robots.txt").content.decode("utf-8")
+        for rule in ("Disallow: /api/", "Disallow: /world", "Disallow: /media/",
+                     "Disallow: /login", "Disallow: /admin/"):
+            self.assertIn(rule, body)
+
+    def test_robots_allows_public_readonly_sites(self):
+        body = self.client.get("/robots.txt").content.decode("utf-8")
+        self.assertIn("User-agent: *", body)
+        self.assertIn("Allow: /s/", body)
+        self.assertIn("Allow: /explore", body)
+
+    def test_robots_follows_configured_admin_path(self):
+        """后台路径改了，robots 禁的也应是新路径，别再暴露默认 /admin/。"""
+        from django.test import override_settings
+
+        with override_settings(ADMIN_URL_PATH="ops-7f3a9c"):
+            body = self.client.get("/robots.txt").content.decode("utf-8")
+        self.assertIn("Disallow: /ops-7f3a9c/", body)
+        self.assertNotIn("Disallow: /admin/", body)
+
+
+class MaintenanceWhitelistTests(BaseWorldCase):
+    """O2a：维护白名单跟着可配后台路径走，改了路径运维还进得去。"""
+
+    def test_whitelist_uses_configured_admin_path(self):
+        from django.conf import settings
+        from django.test import override_settings
+
+        from world import maintenance
+
+        self.assertIn(f"/{settings.ADMIN_URL_PATH}/", maintenance.allowed_prefixes())
+        with override_settings(ADMIN_URL_PATH="ops-7f3a9c"):
+            self.assertIn("/ops-7f3a9c/", maintenance.allowed_prefixes())
+
+
+class HealthzTests(TestCase):
+    """O3：/healthz 健康检查——进程 + 数据库连通性，给监控探针用。"""
+
+    def test_healthz_returns_ok(self):
+        response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_healthz_rejects_post(self):
+        """只读探针：非安全方法一律 405。"""
+        self.assertEqual(self.client.post("/healthz").status_code, 405)
+
+    def test_healthz_reports_db_down(self):
+        from unittest import mock
+
+        with mock.patch("django.db.connection") as conn:
+            conn.cursor.side_effect = RuntimeError("db down")
+            response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["database"], "down")
+
+
+class LoggingConfigTests(TestCase):
+    """O3：日志配置存在，且默认只挂控制台处理器（journald 收走并自带轮转）。"""
+
+    def test_logging_has_console_handler(self):
+        from django.conf import settings
+
+        self.assertIn("console", settings.LOGGING["handlers"])
+        self.assertIn("console", settings.LOGGING["loggers"]["django"]["handlers"])
+
+    def test_file_handler_only_when_configured(self):
+        """没设 OPUSCULE_LOG_FILE 时不该有 file 处理器（否则启动就会因空文件名报错）。"""
+        from django.conf import settings
+
+        has_file = "file" in settings.LOGGING["handlers"]
+        self.assertEqual(has_file, bool((settings._LOG_FILE or "").strip()))
+
+
+class ModerationAuditTests(BaseWorldCase):
+    """G1：平台治理审计基座（模型 + 写入助手）。"""
+
+    def _root(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_superuser("root", password="very-secret-3")
+
+    def test_helper_records_a_ban_on_a_world(self):
+        from world import views
+
+        views._log_moderation_event(self._root(), "ban", world=self.world, detail="封禁 7 天")
+        payload = ModerationEvent.objects.get().to_payload()
+        self.assertEqual(payload["action"], "ban")
+        self.assertEqual(payload["action_label"], "封禁")
+        self.assertEqual(payload["actor"], "root")
+        self.assertEqual(payload["world"], "测试世界")
+        self.assertEqual(payload["detail"], "封禁 7 天")
+
+    def test_helper_records_an_appointed_target(self):
+        from django.contrib.auth import get_user_model
+
+        from world import views
+
+        mod = get_user_model().objects.create_user("mod", password="very-secret-4", first_name="小管")
+        views._log_moderation_event(self._root(), "appoint", target=mod)
+        event = ModerationEvent.objects.get()
+        self.assertEqual(event.action, "appoint")
+        self.assertEqual(event.target_name, "小管")
+        self.assertEqual(event.to_payload()["target"], "小管")
+
+    def test_helper_never_breaks_the_caller(self):
+        """审计写失败不能拖垮主流程：内部吞异常只落日志。"""
+        from unittest import mock
+
+        from world import views
+
+        with mock.patch.object(ModerationEvent.objects, "create", side_effect=RuntimeError("boom")):
+            views._log_moderation_event(self._root(), "unban", world=self.world)  # 不该抛
+
+
+class PlatformIdentityTests(BaseWorldCase):
+    """G2：四层平台身份（站长 / 管理员 / 工作人员 / 普通用户）分层与判定。"""
+
+    def _user(self, name, **kwargs):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_user(name, password="very-secret-1", **kwargs)
+
+    def test_platform_role_of_layers_by_priority(self):
+        from world import permissions
+
+        root = self._user("root", is_superuser=True)
+        mod = self._user("mod")
+        permissions.set_moderator(mod, True)
+        staff = self._user("staff", is_staff=True)
+        plain = self._user("plain")
+
+        self.assertEqual(permissions.platform_role_of(root), permissions.PLATFORM_SUPERUSER)
+        self.assertEqual(permissions.platform_role_of(mod), permissions.PLATFORM_MODERATOR)
+        self.assertEqual(permissions.platform_role_of(staff), permissions.PLATFORM_STAFF)
+        self.assertEqual(permissions.platform_role_of(plain), permissions.PLATFORM_USER)
+        self.assertEqual(permissions.platform_role_of(None), "")
+
+    def test_is_moderator_is_strictly_the_group(self):
+        """站长不算 moderators 组里的身份——严格看组，不看权力。"""
+        from world import permissions
+
+        root = self._user("root", is_superuser=True)
+        mod = self._user("mod")
+        permissions.set_moderator(mod, True)
+
+        self.assertFalse(permissions.is_moderator(root))
+        self.assertTrue(permissions.is_moderator(mod))
+
+    def test_can_moderate_covers_superuser_and_moderator_only(self):
+        from world import permissions
+
+        root = self._user("root", is_superuser=True)
+        mod = self._user("mod")
+        permissions.set_moderator(mod, True)
+        staff = self._user("staff", is_staff=True)
+        plain = self._user("plain")
+
+        self.assertTrue(permissions.can_moderate(root))
+        self.assertTrue(permissions.can_moderate(mod))
+        self.assertFalse(permissions.can_moderate(staff))
+        self.assertFalse(permissions.can_moderate(plain))
+        self.assertFalse(permissions.can_moderate(None))
+
+    def test_set_moderator_is_idempotent(self):
+        from world import permissions
+
+        mod = self._user("mod")
+        self.assertTrue(permissions.set_moderator(mod, True))    # 真的加进去了
+        self.assertFalse(permissions.set_moderator(mod, True))   # 本来就是，没变化
+        self.assertTrue(permissions.set_moderator(mod, False))   # 真的移出去了
+        self.assertFalse(permissions.set_moderator(mod, False))  # 本来就不在
+
+    def test_viewer_payload_exposes_platform_identity(self):
+        from world import permissions
+
+        mod = self._user("mod")
+        permissions.set_moderator(mod, True)
+        payload = permissions.viewer_payload(mod, self.world)
+        self.assertEqual(payload["platform_role"], permissions.PLATFORM_MODERATOR)
+        self.assertEqual(payload["platform_role_label"], "管理员")
+        self.assertTrue(payload["is_moderator"])
+        self.assertTrue(payload["can_moderate"])
+
+
+class ModeratorAppointmentTests(BaseWorldCase):
+    """G2：任命 / 撤销管理员接口——仅站长可用，且必须留痕。"""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+
+        self.root = get_user_model().objects.create_superuser("root", password="very-secret-3")
+        self.mod = get_user_model().objects.create_user("mod", password="very-secret-4")
+
+    def test_only_superuser_can_list(self):
+        self.client.force_login(self.mod)
+        self.assertEqual(self.client.get("/api/world/moderators").status_code, 403)
+
+    def test_moderator_cannot_manage_moderators(self):
+        """管理员能治理站点，但不能任命别的管理员——那是站长的活。"""
+        from world import permissions
+
+        permissions.set_moderator(self.mod, True)
+        Membership.objects.create(world=self.world, user=self.mod, role=ROLE_EDITOR)
+
+        self.client.force_login(self.mod)
+        self.assertEqual(self.client.get("/api/world/moderators").status_code, 403)
+        self.assertEqual(
+            self.post_json("/api/world/moderators", {"user_id": self.mod.id}).status_code, 403
+        )
+
+    def test_superuser_lists_moderators(self):
+        from world import permissions
+
+        permissions.set_moderator(self.mod, True)
+        self.client.force_login(self.root)
+        response = self.client.get("/api/world/moderators")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        handles = [row["handle"] for row in body["moderators"]]
+        self.assertIn("mod", handles)
+        self.assertEqual(body["viewer"]["platform_role"], permissions.PLATFORM_SUPERUSER)
+
+    def test_appoint_and_dismiss_roundtrip_with_audit(self):
+        from world import permissions
+
+        self.client.force_login(self.root)
+
+        appointed = self.post_json("/api/world/moderators", {"user_id": self.mod.id})
+        self.assertEqual(appointed.status_code, 200)
+        self.assertTrue(permissions.is_moderator(self.mod))
+
+        dismissed = self.client.delete(f"/api/world/moderators/{self.mod.id}")
+        self.assertEqual(dismissed.status_code, 200)
+        self.assertFalse(permissions.is_moderator(self.mod))
+
+        actions = list(ModerationEvent.objects.order_by("id").values_list("action", flat=True))
+        self.assertEqual(actions, ["appoint", "dismiss"])
+
+    def test_appoint_is_idempotent_and_logs_once(self):
+        self.client.force_login(self.root)
+        self.post_json("/api/world/moderators", {"user_id": self.mod.id})
+        self.post_json("/api/world/moderators", {"user_id": self.mod.id})
+        self.assertEqual(ModerationEvent.objects.filter(action="appoint").count(), 1)
+
+    def test_cannot_appoint_a_superuser(self):
+        self.client.force_login(self.root)
+        response = self.post_json("/api/world/moderators", {"user_id": self.root.id})
+        self.assertEqual(response.status_code, 400)
+
+    def test_appoint_unknown_user_is_404(self):
+        self.client.force_login(self.root)
+        response = self.post_json("/api/world/moderators", {"user_id": 999999})
+        self.assertEqual(response.status_code, 404)
+
+
+class AuthRateLimitTests(BaseWorldCase):
+    """登录 / 注册限流：同一个来源试太频繁就 429，别再让它继续猜。"""
+
+    def test_json_login_is_throttled_per_username(self):
+        """同一用户名连撞失败密码，超过阈值后回 429，并带 Retry-After。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.client.post("/api/world/auth/logout")
+
+        from world import views
+
+        last = None
+        for _ in range(views.LOGIN_USER_LIMIT + 1):
+            last = self.post_json("/api/world/auth/login", {"username": "owner", "password": "wrong-pass"})
+        self.assertEqual(last.status_code, 429)
+        self.assertIn("Retry-After", last.headers)
+        self.assertGreaterEqual(int(last.headers["Retry-After"]), 1)
+
+    def test_login_success_resets_the_username_counter(self):
+        """登录成功清掉该用户名的计数，之后正常登录不会被自己之前的失败攒死。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.client.post("/api/world/auth/logout")
+
+        from world import views
+
+        # 先攒几发失败（还没到阈值）
+        for _ in range(views.LOGIN_USER_LIMIT - 1):
+            self.post_json("/api/world/auth/login", {"username": "owner", "password": "wrong-pass"})
+        ok = self.post_json("/api/world/auth/login", {"username": "owner", "password": "very-secret-1"})
+        self.assertEqual(ok.status_code, 200)
+
+        # 成功后再来一发失败：用户名计数已清零，不该被 429 挡下
+        after = self.post_json("/api/world/auth/login", {"username": "owner", "password": "wrong-pass"})
+        self.assertEqual(after.status_code, 400)
+
+    def test_login_page_is_throttled(self):
+        """表单登录页同样限流：超阈值后是 429 页面，而不是继续放它试。"""
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.client.post("/api/world/auth/logout")
+
+        from world import views
+
+        last = None
+        for _ in range(views.LOGIN_USER_LIMIT + 1):
+            last = self.client.post("/login", {"username": "owner", "password": "wrong-pass"})
+        self.assertEqual(last.status_code, 429)
+
+    def test_register_is_throttled_per_ip(self):
+        """同一来源不停注册新号，超过阈值后回 429。"""
+        from world import views
+
+        last = None
+        for index in range(views.REGISTER_IP_LIMIT + 1):
+            last = self.post_json("/api/world/auth/register",
+                                  {"username": f"user{index}", "password": "very-secret-1"})
+        self.assertEqual(last.status_code, 429)
+        self.assertIn("Retry-After", last.headers)
+
+    def test_register_page_is_throttled(self):
+        """注册页（表单）也吃同一份 IP 计数。"""
+        from django.test import Client
+
+        from world import views
+
+        last = None
+        for index in range(views.REGISTER_IP_LIMIT + 1):
+            # 每次换一个匿名客户端：注册成功会把人登进去，而下一次注册得是未登录状态
+            last = Client().post("/register", {
+                "username": f"user{index}", "password": "very-secret-1",
+            })
+        self.assertEqual(last.status_code, 429)
+
+
+    def test_forged_forwarded_for_cannot_dodge_the_limit(self):
+        """伪造 X-Forwarded-For 的前缀不能绕过限流：只认我们这层代理追加的最后一段。"""
+        from world import views
+
+        def post(index):
+            # nginx 会把自己看到的真实对端追加在末尾；攻击者只能往前面塞假 IP
+            return self.client.post(
+                "/api/world/auth/register",
+                data=json.dumps({"username": f"user{index}", "password": "very-secret-1"}),
+                content_type="application/json",
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{index}, 127.0.0.1",
+            )
+
+        last = None
+        for index in range(views.REGISTER_IP_LIMIT + 1):
+            last = post(index)
+        self.assertEqual(last.status_code, 429)
+
+
+class PasswordChangeTests(BaseWorldCase):
+    """A3 方案①：登录态改密——旧密码 + 新密码，不依赖邮件。"""
+
+    def setUp(self):
+        super().setUp()
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+
+    def _user(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.get(username="owner")
+
+    def test_change_password_with_correct_current(self):
+        resp = self.post_json("/api/world/auth/password",
+                              {"current_password": "very-secret-1", "new_password": "brand-new-secret-9"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(self._user().check_password("brand-new-secret-9"))
+        # 改完自己不被踢下线：会话鉴权哈希跟着换了
+        self.assertEqual(self.client.get("/api/world/state").status_code, 200)
+
+    def test_wrong_current_password_is_rejected(self):
+        resp = self.post_json("/api/world/auth/password",
+                              {"current_password": "nope", "new_password": "brand-new-secret-9"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(self._user().check_password("very-secret-1"))   # 原密码还在
+
+    def test_same_password_is_rejected(self):
+        resp = self.post_json("/api/world/auth/password",
+                              {"current_password": "very-secret-1", "new_password": "very-secret-1"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_weak_new_password_is_rejected(self):
+        resp = self.post_json("/api/world/auth/password",
+                              {"current_password": "very-secret-1", "new_password": "123"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(self._user().check_password("very-secret-1"))
+
+    def test_requires_login(self):
+        self.client.post("/api/world/auth/logout")
+        resp = self.post_json("/api/world/auth/password",
+                              {"current_password": "very-secret-1", "new_password": "brand-new-secret-9"})
+        self.assertEqual(resp.status_code, 401)
+
+
+class AccountEmailTests(BaseWorldCase):
+    """A3 方案②：登记 / 修改邮箱（改非空要验当前密码）。"""
+
+    def setUp(self):
+        super().setUp()
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+
+    def _user(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.get(username="owner")
+
+    def test_register_can_carry_email(self):
+        self.client.post("/api/world/auth/logout")
+        resp = self.post_json("/api/world/auth/register",
+                              {"username": "owner2", "password": "very-secret-1", "email": "o2@example.com"})
+        # 首个账号已存在，无邀请码 -> 被拒；这里只验证邮箱字段被解析（错误信息不是"邮箱格式不对"）
+        self.assertEqual(resp.status_code, 400)
+        self.assertNotIn("邮箱", resp.json().get("error", ""))
+
+    def test_set_email_requires_current_password(self):
+        resp = self.post_json("/api/world/auth/email",
+                              {"email": "owner@example.com", "current_password": "nope"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(self._user().email, "")
+
+    def test_set_email_with_password(self):
+        resp = self.post_json("/api/world/auth/email",
+                              {"email": "owner@example.com", "current_password": "very-secret-1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["email"], "owner@example.com")
+        self.assertEqual(self._user().email, "owner@example.com")
+
+    def test_clear_email_needs_no_password(self):
+        self.post_json("/api/world/auth/email",
+                       {"email": "owner@example.com", "current_password": "very-secret-1"})
+        resp = self.post_json("/api/world/auth/email", {"email": "", "current_password": ""})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._user().email, "")
+
+    def test_bad_email_format_is_rejected(self):
+        resp = self.post_json("/api/world/auth/email",
+                              {"email": "not-an-email", "current_password": "very-secret-1"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_viewer_payload_carries_email(self):
+        self.post_json("/api/world/auth/email",
+                       {"email": "owner@example.com", "current_password": "very-secret-1"})
+        resp = self.client.get("/api/world/auth/me")
+        self.assertEqual(resp.json()["viewer"]["email"], "owner@example.com")
+
+
+class PasswordResetTests(BaseWorldCase):
+    """A3 方案②：忘记密码——请求重置链接 + 用重置信设置新密码。"""
+
+    def setUp(self):
+        super().setUp()
+        self.post_json("/api/world/auth/register",
+                       {"username": "owner", "password": "very-secret-1", "email": "owner@example.com"})
+        self.client.post("/api/world/auth/logout")
+
+    def _user(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.get(username="owner")
+
+    def _token_for(self, user):
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+
+        return urlsafe_base64_encode(force_bytes(user.pk)), default_token_generator.make_token(user)
+
+    def test_request_page_renders(self):
+        resp = self.client.get("/reset")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_request_does_not_leak_account_existence(self):
+        """无论账号在不在，都回同一句"已寄出"，不给枚举留侧信道。"""
+        known = self.client.post("/reset", {"identifier": "owner"})
+        unknown = self.client.post("/reset", {"identifier": "does-not-exist"})
+        self.assertEqual(known.status_code, 200)
+        self.assertEqual(unknown.status_code, 200)
+        self.assertContains(known, "重置链接已寄出")
+        self.assertContains(unknown, "重置链接已寄出")
+
+    def test_confirm_with_valid_token_changes_password(self):
+        user = self._user()
+        uid, token = self._token_for(user)
+        page = self.client.get(f"/reset/{uid}/{token}")
+        self.assertEqual(page.status_code, 200)
+        resp = self.client.post(f"/reset/{uid}/{token}",
+                                {"new_password": "fresh-secret-9", "confirm_password": "fresh-secret-9"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "密码已更新")
+        self.assertTrue(self._user().check_password("fresh-secret-9"))
+
+    def test_confirm_with_bad_token_is_rejected(self):
+        uid, _token = self._token_for(self._user())
+        resp = self.client.get(f"/reset/{uid}/obviously-not-a-token")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_confirm_mismatched_passwords_is_rejected(self):
+        uid, token = self._token_for(self._user())
+        resp = self.client.post(f"/reset/{uid}/{token}",
+                                {"new_password": "fresh-secret-9", "confirm_password": "other-secret-9"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(self._user().check_password("very-secret-1"))
+
+    def test_confirm_requires_login_state_redirect(self):
+        """已登录的人访问重置页直接回工作区，不去走找回流程。"""
+        self.post_json("/api/world/auth/login", {"username": "owner", "password": "very-secret-1"})
+        resp = self.client.get("/reset")
+        self.assertEqual(resp.status_code, 302)
+
+
+class AccountExportTests(BaseWorldCase):
+    """A4：销号前的"带走一份"——导出自己的账号数据（要登录）。"""
+
+    def setUp(self):
+        super().setUp()
+        self.post_json("/api/world/auth/register",
+                       {"username": "owner", "password": "very-secret-1", "email": "owner@example.com"})
+        self.document, _card = self.make_card(name="会改的卡")
+        DocumentVersion.objects.create(
+            document=self.document, index=1, author=self._user(),
+            author_name="owner", payload={"blocks": []}, summary="初稿",
+        )
+
+    def _user(self):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.get(username="owner")
+
+    def test_requires_login(self):
+        self.client.post("/api/world/auth/logout")
+        resp = self.client.get("/api/world/account/export")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_exports_own_account_as_a_download(self):
+        resp = self.client.get("/api/world/account/export")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("attachment", resp["Content-Disposition"])
+        self.assertIn("opuscule-account-owner.json", resp["Content-Disposition"])
+        data = json.loads(resp.content.decode("utf-8"))
+        self.assertEqual(data["account"]["username"], "owner")
+        self.assertEqual(data["account"]["email"], "owner@example.com")
+        self.assertEqual([w["name"] for w in data["worlds"]], ["测试世界"])
+        self.assertTrue(data["worlds"][0]["is_owner"])
+        self.assertEqual(data["authored_documents"][0]["document"], "会改的卡")
+        self.assertEqual(data["authored_documents"][0]["versions"], 1)
+
+
+class AccountDeletionTests(BaseWorldCase):
+    """A4：销号——验密码 + 勾确认；有别人的世界不能删，独属自己的随账号一起没。"""
+
+    def setUp(self):
+        super().setUp()
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.world = World.objects.first()          # 注册时接管的就是夹具那个世界
+
+    def _user(self, username="owner"):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.get(username=username)
+
+    def _user_exists(self, username="owner"):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.filter(username=username).exists()
+
+    def test_requires_login(self):
+        self.client.post("/api/world/auth/logout")
+        resp = self.post_json("/api/world/account/delete",
+                              {"current_password": "very-secret-1", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_wrong_password_is_rejected(self):
+        resp = self.post_json("/api/world/account/delete",
+                              {"current_password": "nope", "confirm": True})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(self._user_exists())
+
+    def test_confirm_flag_is_required(self):
+        resp = self.post_json("/api/world/account/delete", {"current_password": "very-secret-1"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(self._user_exists())
+
+    def test_solo_account_and_its_worlds_are_removed(self):
+        from django.contrib.auth import get_user_model
+
+        resp = self.post_json("/api/world/account/delete",
+                              {"current_password": "very-secret-1", "confirm": True})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(get_user_model().objects.filter(username="owner").exists())
+        self.assertFalse(World.objects.filter(pk=self.world.id).exists())
+        self.assertFalse(Membership.objects.filter(world_id=self.world.id).exists())
+
+    def test_blocked_when_an_owned_world_has_other_members(self):
+        from django.contrib.auth.models import User
+
+        other = User.objects.create_user("partner", password="very-secret-2")
+        Membership.objects.create(world=self.world, user=other, role="editor")
+        resp = self.post_json("/api/world/account/delete",
+                              {"current_password": "very-secret-1", "confirm": True})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(self._user_exists())                       # 账号还在
+        self.assertTrue(World.objects.filter(pk=self.world.id).exists())  # 世界还在
+
+    def test_membership_in_someone_elses_world_is_just_cleared(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import User
+
+        other = User.objects.create_user("partner", password="very-secret-2")
+        other_world = World.objects.create(name="别人的世界", owner=other)
+        Membership.objects.create(world=other_world, user=self._user(), role="editor")
+
+        resp = self.post_json("/api/world/account/delete",
+                              {"current_password": "very-secret-1", "confirm": True})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(get_user_model().objects.filter(username="owner").exists())
+        self.assertTrue(World.objects.filter(pk=other_world.id).exists())   # 别人的世界留着
+        self.assertTrue(World.objects.filter(pk=other_world.id, owner=other).exists())
+        self.assertFalse(Membership.objects.filter(world=other_world).exists())  # 我的身份清掉了
+
+
+class MemberAuditTests(BaseWorldCase):
+    """A5：成员变更留痕——加入 / 改角色 / 移出 / 发码 / 作废各记一笔，移除后仍可追溯。"""
+
+    def setUp(self):
+        super().setUp()
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.world = World.objects.first()          # 注册时接管的就是夹具那个世界
+        self.other = self._make_user("partner")     # 再拉一个可编辑进来，方便改角色 / 移出
+        self.membership = Membership.objects.create(world=self.world, user=self.other, role="editor")
+
+    def _make_user(self, username):
+        from django.contrib.auth.models import User
+
+        return User.objects.create_user(username, password="very-secret-2")
+
+    def _events(self, action=None):
+        queryset = MemberEvent.objects.filter(world=self.world)
+        return queryset.filter(action=action) if action else queryset
+
+    def test_join_is_recorded(self):
+        event = self._events("join").first()
+        self.assertIsNotNone(event, "注册加入应留一笔")
+        self.assertEqual(event.target_name, "owner")
+        self.assertIn("所有者", event.detail)
+
+    def test_role_change_is_recorded(self):
+        resp = self.client.put(f"/api/world/collaborators/{self.membership.id}",
+                               data=json.dumps({"role": "viewer"}),
+                               content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        event = self._events("role").first()
+        self.assertEqual(event.target_name, "partner")
+        self.assertIn("可编辑", event.detail)      # 旧角色
+        self.assertIn("只读", event.detail)        # 新角色
+
+    def test_setting_the_same_role_leaves_no_event(self):
+        self.client.put(f"/api/world/collaborators/{self.membership.id}",
+                        data=json.dumps({"role": "editor"}),
+                        content_type="application/json")
+        self.assertFalse(self._events("role").exists())
+
+    def test_removing_a_member_is_recorded_and_survives(self):
+        resp = self.client.delete(f"/api/world/collaborators/{self.membership.id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Membership.objects.filter(pk=self.membership.id).exists())
+        event = self._events("remove").first()      # 成员没了，审计还在
+        self.assertEqual(event.target_name, "partner")
+        self.assertIn("可编辑", event.detail)
+
+    def test_invite_and_revoke_are_recorded(self):
+        created = self.post_json("/api/world/collaborators/invites", {"role": "viewer"})
+        self.assertEqual(created.status_code, 200)
+        invite_id = created.json()["id"]
+        self.assertTrue(self._events("invite").exists())
+
+        removed = self.client.delete(f"/api/world/collaborators/invites/{invite_id}")
+        self.assertEqual(removed.status_code, 200)
+        self.assertTrue(self._events("revoke").exists())
+
+    def test_activity_feed_surfaces_member_changes(self):
+        self.client.put(f"/api/world/collaborators/{self.membership.id}",
+                        data=json.dumps({"role": "viewer"}),
+                        content_type="application/json")
+        rows = self.client.get("/api/world/activity").json()["activity"]
+        kinds = {row["kind"] for row in rows}
+        self.assertIn("member", kinds)              # 改角色冒到动态流里
+        self.assertIn("invite", kinds)              # 既有的"谁加入了"没被挤掉
+        self.assertTrue(all("what" in row and "when" in row for row in rows))
 
 
 class VersionHistoryTests(BaseWorldCase):
@@ -1990,6 +3293,139 @@ class DocumentDataTests(BaseWorldCase):
         self.assertEqual(removed["media"], [])
 
 
+class UploadValidationTests(BaseWorldCase):
+    """A8：上传按内容类型白名单放行——挡住经 ``/media/`` 直链触发的存储型 XSS。"""
+
+    def setUp(self):
+        super().setUp()
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        # 别往仓库的 media/ 里丢测试文件，用完即弃
+        self._tmp_media = tempfile.mkdtemp(prefix="opuscule-upload-")
+        self.addCleanup(shutil.rmtree, self._tmp_media, ignore_errors=True)
+        override = override_settings(MEDIA_ROOT=self._tmp_media)
+        override.enable()
+        self.addCleanup(override.disable)
+        self.board = Document.objects.create(world=self.world, document_type="board", name="看板")
+
+    def _upload(self, name, content_type, data=b"x"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return self.client.post(
+            f"/api/world/documents/{self.board.id}/media",
+            {"file": SimpleUploadedFile(name, data, content_type=content_type)},
+        )
+
+    def test_accepts_bitmap_image_and_audio(self):
+        self.assertEqual(self._upload("shot.png", "image/png").status_code, 200)
+        self.assertEqual(self._upload("voice.webm", "audio/webm").status_code, 200)
+
+    def test_rejects_svg_and_html(self):
+        """SVG / HTML 能内联脚本，经 /media/ 直链打开即本站源下的 XSS——必须挡掉。"""
+        svg = self._upload("evil.svg", "image/svg+xml")
+        self.assertEqual(svg.status_code, 400)
+        self.assertIn("不支持", svg.json()["error"])
+        self.assertEqual(self._upload("evil.html", "text/html").status_code, 400)
+
+    def test_falls_back_to_extension_for_generic_type(self):
+        """客户端报通用的 octet-stream 时按扩展名认类型，别把正常图片误伤。"""
+        self.assertEqual(self._upload("portrait.png", "application/octet-stream").status_code, 200)
+
+    def test_rejects_oversize_upload(self):
+        """超限即拒：把阈值调小来验，免得真往内存里塞 25 MB。"""
+        from unittest import mock
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from world.views import common as views_common
+
+        upload = SimpleUploadedFile(
+            "big.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, content_type="image/png")
+        with mock.patch.object(views_common, "MAX_UPLOAD_BYTES", 16):
+            response = self.client.post(
+                f"/api/world/documents/{self.board.id}/media", {"file": upload})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("25 MB", response.json()["error"])
+
+
+class MediaAuthTests(BaseWorldCase):
+    """上传文件（``/media/…``）要鉴权：知道路径也不能直链下载未公开的图 / 语音。"""
+
+    def setUp(self):
+        super().setUp()
+        import shutil
+        import tempfile
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+
+        # 别往仓库的 media/ 里丢测试文件，用完即弃
+        self._tmp_media = tempfile.mkdtemp(prefix="opuscule-media-")
+        self.addCleanup(shutil.rmtree, self._tmp_media, ignore_errors=True)
+        override = override_settings(MEDIA_ROOT=self._tmp_media)
+        override.enable()
+        self.addCleanup(override.disable)
+
+        # 有账号之后，"游客"才不再享首次安装例外——这才验得出未公开媒体的那道门
+        self.post_json("/api/world/auth/register", {"username": "owner", "password": "very-secret-1"})
+        self.document, _card = self.make_card(name="有图的卡")
+        upload = SimpleUploadedFile("shot.png", b"\x89PNG\r\n\x1a\nfake-image", content_type="image/png")
+        self.entry = self.client.post(
+            f"/api/world/documents/{self.document.id}/media",
+            {"file": upload, "kind": "image", "title": "地图截图"},
+        ).json()["entry"]
+        self.url = self.entry["url"]
+        self.assertIn("/media/docs/", self.url)
+        self.client.post("/api/world/auth/logout")
+
+    def test_media_path_carries_the_owning_document(self):
+        """路径里带着文档 id，鉴权就是靠它认「这文件属于谁」。"""
+        self.assertTrue(self.url.startswith(f"/media/docs/{self.document.id}/"))
+
+    def test_anonymous_cannot_fetch_unpublished_media(self):
+        """世界没发布：知道路径也拿不到，回 401（提示要登录）。"""
+        blocked = self.client.get(self.url)
+        self.assertEqual(blocked.status_code, 401)
+        self.assertTrue(blocked.json()["need_login"])
+
+    def test_member_can_fetch_unpublished_media(self):
+        """能读这个世界的人（成员）照样取得走。"""
+        self.post_json("/api/world/auth/login", {"username": "owner", "password": "very-secret-1"})
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_non_member_gets_403(self):
+        """登录了但不是这个世界的成员：403，而不是放行。
+
+        邀请制下没有邀请码就注册不进来，所以"已登录但不属于这个世界"的人
+        直接建库造出（模拟受邀进了别的世界 / 账号被移出成员名单的情形）。
+        """
+        from django.contrib.auth import get_user_model
+
+        stranger = get_user_model().objects.create_user("stranger", password="very-secret-2")
+        self.client.force_login(stranger)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_unknown_owner_is_not_served(self):
+        """路径所指的文档不存在（比如已删）：游客一样拿不到，别想蒙混。"""
+        self.assertEqual(self.client.get("/media/docs/999999/whatever.png").status_code, 401)
+
+    def test_published_document_media_is_public(self):
+        """世界 + 文档都发布出去后，未登录也能取——只读站点里嵌的图要显示得出来。"""
+        self.world.is_published = True
+        self.world.save(update_fields=["is_published"])
+        self.document.is_published = True
+        self.document.save(update_fields=["is_published"])
+
+        opened = self.client.get(self.url)
+        self.assertEqual(opened.status_code, 200)
+        self.assertEqual(b"".join(opened.streaming_content), b"\x89PNG\r\n\x1a\nfake-image")
+        # 上传文件一律按声明类型渲染，别让浏览器嗅探（A8）
+        self.assertEqual(opened["X-Content-Type-Options"], "nosniff")
+
+
 class FuzzyMentionTests(BaseWorldCase):
     """typo-tolerant 提及与复数 / 所有格自动链接。"""
 
@@ -1998,7 +3434,7 @@ class FuzzyMentionTests(BaseWorldCase):
         self.document, _card = self.make_card(name="Harrowdeep", aliases=["The Deep Gate"])
 
     def test_plural_and_possessive_are_linked(self):
-        from world import autolink
+        from world.services import autolink
 
         text = "Harrowdeeps 的城门，以及 Harrowdeep's 阴影。"
         matches = autolink.find_mentions(self.world, text)
@@ -2007,7 +3443,7 @@ class FuzzyMentionTests(BaseWorldCase):
         self.assertEqual(matches[1]["matched"], "Harrowdeep's")
 
     def test_fuzzy_candidates_catch_a_typo(self):
-        from world import autolink
+        from world.services import autolink
 
         found = autolink.fuzzy_candidates(self.world, "他们在 Harrowdeap 落脚")
         self.assertTrue(found)
@@ -2015,7 +3451,7 @@ class FuzzyMentionTests(BaseWorldCase):
         self.assertEqual(found[0]["matched"], "Harrowdeap")
 
     def test_short_names_are_not_fuzzy_matched(self):
-        from world import autolink
+        from world.services import autolink
 
         self.make_card(name="Abcd")
         self.assertEqual(autolink.fuzzy_candidates(self.world, "Abcx 是什么"), [])
@@ -2029,6 +3465,54 @@ class FuzzyMentionTests(BaseWorldCase):
         # 不带 fuzzy 参数时不该出现
         plain = self.client.get("/api/world/search?q=Harrowdeap").json()
         self.assertNotIn("Harrowdeep", [item["name"] for item in plain["results"]])
+
+
+class NameCompletionTests(BaseWorldCase):
+    """打字补全（精确名字档）：归一化 / 前缀优先 / 类型与描述 / 排除自身。"""
+
+    def complete(self, query, **params):
+        return self.client.get("/api/world/complete", {"q": query, **params}).json()["results"]
+
+    def test_prefix_and_casefold_and_fullwidth(self):
+        self.make_card(name="Harrowdeep")
+        self.assertEqual([r["name"] for r in self.complete("harrow")], ["Harrowdeep"])
+        # 全角 + 大小写都要归一化后再匹配
+        self.assertEqual([r["name"] for r in self.complete("ＨＡＲＲＯＷ")], ["Harrowdeep"])
+
+    def test_prefix_ranks_before_contains(self):
+        self.make_card(name="Marina")        # 包含命中
+        self.make_card(name="Ari")           # 前缀命中
+        names = [r["name"] for r in self.complete("ari")]
+        self.assertEqual(names, ["Ari", "Marina"])
+
+    def test_alias_matches_and_reports_matched(self):
+        document, _card = self.make_card(name="Harrowdeep", aliases=["Deep Gate"])
+        results = self.complete("gate")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["document_id"], document.id)
+        self.assertEqual(results[0]["name"], "Harrowdeep")   # 主名
+        self.assertEqual(results[0]["matched"], "Deep Gate")  # 命中的是别名
+
+    def test_result_carries_type_and_description(self):
+        document, _card = self.make_card(name="Isarra", blocks=[{"type": "text", "text": "调停人，来自北境。"}])
+        result = self.complete("Isa")[0]
+        self.assertEqual(result["type"], DOC_CARD)
+        self.assertEqual(result["entity_type"], "角色")
+        self.assertIn("调停人", result["description"])
+
+    def test_exclude_skips_the_document_itself(self):
+        document, _card = self.make_card(name="Isarra")
+        self.assertEqual([r["document_id"] for r in self.complete("Isa")], [document.id])
+        self.assertEqual(self.complete("Isa", exclude=document.id), [])
+
+    def test_empty_query_and_blank_names(self):
+        self.make_card(name="Isarra")
+        self.assertEqual(self.complete(""), [])
+
+    def test_limit_is_respected(self):
+        for i in range(5):
+            self.make_card(name=f"Garen{i}")
+        self.assertEqual(len(self.complete("garen", limit=3)), 3)
 
 
 class EmbedBlockTests(BaseWorldCase):
@@ -2182,7 +3666,7 @@ class SiteEraAndPreviewTests(BaseWorldCase):
         TimelineEvent.objects.create(document=timeline, title="城门落成", era=self.era,
                                      precision="year", year=12)
         TimelineEvent.objects.create(document=timeline, title="无关的事", precision="year", year=90)
-        from . import publish
+        from .services import publish
         publish.publish(self.world, audience="public")
         self.slug = self.world.published_slug
 
@@ -2208,15 +3692,17 @@ class SiteEraAndPreviewTests(BaseWorldCase):
         self.assertIn("<mark>", body)
         self.assertIn("城门", body)
 
-    def test_search_paginates_twenty_per_page(self):
+    def test_search_shows_twenty_at_a_time(self):
+        """每一批 20 条；翻页用「加载更多」实现。"""
         for index in range(25):
             self.make_card(name=f"批量{index:02d}共同词")
-        from . import publish
+        from .services import publish
         publish.publish(self.world, audience="public")
         first = self.client.get(f"/s/{self.slug}/search?q=共同词").content.decode()
-        self.assertIn("第 1 / 2 页", first)
-        second = self.client.get(f"/s/{self.slug}/search?q=共同词&page=2").content.decode()
-        self.assertIn("第 2 / 2 页", second)
+        self.assertEqual(first.count('class="hit"'), 20)
+        self.assertIn("已显示 20 / 25 条", first)
+        more = self.client.get(f"/s/{self.slug}/search?q=共同词&show=40").content.decode()
+        self.assertEqual(more.count('class="hit"'), 25)
 
     def test_publish_preview_reports_changes(self):
         preview = self.client.get("/api/world/publish/preview").json()
@@ -2239,7 +3725,7 @@ class PublishLogAndRankingTests(BaseWorldCase):
         self.world = World.objects.first()
 
     def test_publish_writes_a_log_with_the_diff(self):
-        from . import publish
+        from .services import publish
         self.make_card(name="第一份")
         publish.publish(self.world, audience="public", author=None)
         log = self.world.publish_logs.first()
@@ -2253,7 +3739,7 @@ class PublishLogAndRankingTests(BaseWorldCase):
         self.assertEqual(self.world.publish_logs.first().added, [])
 
     def test_publish_log_endpoint_lists_newest_first(self):
-        from . import publish
+        from .services import publish
         publish.publish(self.world, audience="public")
         publish.publish(self.world, audience="public")
         logs = self.client.get("/api/world/publish/log").json()["logs"]
@@ -2261,7 +3747,7 @@ class PublishLogAndRankingTests(BaseWorldCase):
         self.assertGreater(logs[0]["version"], logs[1]["version"])
 
     def test_publish_preview_agrees_with_the_log(self):
-        from . import publish
+        from .services import publish
         self.make_card(name="待上线的一份")
         preview = self.client.get("/api/world/publish/preview").json()
         publish.publish(self.world, audience="public")
@@ -2269,7 +3755,7 @@ class PublishLogAndRankingTests(BaseWorldCase):
         self.assertEqual(preview["summary"]["added"], len(log.added))
 
     def test_search_ranks_name_matches_first(self):
-        from . import publish
+        from .services import publish
         name_hit, _ = self.make_card(name="青铜门")
         body_hit, _ = self.make_card(name="别的地方",
                                      blocks=normalize_blocks([{"type": "text", "text": "这里提到青铜门"}]))
@@ -2281,7 +3767,7 @@ class PublishLogAndRankingTests(BaseWorldCase):
         self.assertGreater(hits[0]["score"], hits[1]["score"])
 
     def test_similar_names_when_nothing_found(self):
-        from . import publish
+        from .services import publish
         self.make_card(name="Harrowdeep")
         publish.publish(self.world, audience="public")
         self.assertEqual(publish.search_documents(self.world, "Harrowdeap"), [])
@@ -2297,20 +3783,28 @@ class GraphVisibilityTests(BaseWorldCase):
         self.world = World.objects.first()
 
     def test_guest_graph_hides_unpublished_nodes(self):
-        from . import publish
+        from django.test import Client
+
+        from .services import publish
+
         shown, _ = self.make_card(name="已发布的")
         hidden, _ = self.make_card(name="没发布的")
         hidden.is_published = False
         hidden.save(update_fields=["is_published"])
         publish.publish(self.world, audience="public")
+        # 先有个主人：一个用户都没有时 permissions.can_edit() 对谁都返回 True
+        # （首次安装要先让人把世界建起来），那样测出来的不是访客视角。
+        self.client.post("/api/world/auth/register",
+                         data=json.dumps({"username": "图谱主人", "password": "secret-pass-1"}),
+                         content_type="application/json")
 
-        guest = self.client.get("/api/world/graph").json()
-        names = [node["name"] for node in guest["nodes"]]
+        guest_view = Client().get("/api/world/graph").json()      # 另开一个匿名客户端
+        names = [node["name"] for node in guest_view["nodes"]]
         self.assertIn("已发布的", names)
         self.assertNotIn("没发布的", names)
 
     def test_editor_graph_shows_everything(self):
-        from . import publish
+        from .services import publish
         owner, _ = self.make_card(name="所有者自己看")
         publish.publish(self.world, audience="public")
         self.client.post("/api/world/auth/register",
@@ -2319,9 +3813,960 @@ class GraphVisibilityTests(BaseWorldCase):
         graph = self.client.get("/api/world/graph").json()
         self.assertIn("所有者自己看", [node["name"] for node in graph["nodes"]])
 
+    def test_graph_includes_every_document_by_default(self):
+        """图谱是"世界的地图"：默认把这个世界所有文档都画出来，孤立节点也算。"""
+        from .models import DOC_FOLDER, DOC_MAP, DOC_TIMELINE
+
+        self.make_card(name="有连线的卡片")
+        Document.objects.create(world=self.world, document_type=DOC_CARD, name="谁也不认识的卡片")
+        Document.objects.create(world=self.world, document_type=DOC_TIMELINE, name="世界时间线")
+        Document.objects.create(world=self.world, document_type=DOC_MAP, name="世界地图")
+        Document.objects.create(world=self.world, document_type=DOC_FOLDER, name="文件夹")
+
+        payload = self.client.get("/api/world/graph").json()
+        names = {node["name"] for node in payload["nodes"]}
+        self.assertIn("谁也不认识的卡片", names)      # 孤立节点也要在
+        self.assertIn("世界时间线", names)            # 时间线也是文档
+        self.assertIn("世界地图", names)
+        self.assertNotIn("文件夹", names)             # 文件夹是容器，不进图谱
+        self.assertEqual(payload["stats"]["documents"], payload["stats"]["total_documents"])
+
+    def test_graph_limit_is_opt_in(self):
+        """不带 limit 时不该被截断。
+
+        回归：``clamp_int(get("limit"), 1, 400)`` 的兜底值是 1，
+        前端不带 limit 就会把整张世界图画成**一个**节点。
+        """
+        for index in range(5):
+            self.make_card(name=f"卡片 {index}")
+        payload = self.client.get("/api/world/graph").json()
+        self.assertEqual(len(payload["nodes"]), 5)
+        self.assertEqual(len(self.client.get("/api/world/graph?limit=2").json()["nodes"]), 2)
+
+    def test_hide_isolated_is_still_available(self):
+        self.make_card(name="只有自己")
+        everything = self.client.get("/api/world/graph").json()["nodes"]
+        hidden = self.client.get("/api/world/graph?hide_isolated=1").json()["nodes"]
+        self.assertEqual(len(everything), 1)
+        self.assertEqual(hidden, [])
+
+    def test_service_worker_is_served_from_root(self):
+        """SW 必须从根路径发（作用域），并且不许被缓存。"""
+        response = self.client.get("/sw.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("javascript", response["Content-Type"])
+        self.assertEqual(response["Service-Worker-Allowed"], "/")
+        self.assertIn("no-cache", response["Cache-Control"])
+        self.assertIn("opus-static", response.content.decode())
+
+    def test_service_worker_flag_follows_settings(self):
+        from django.test import override_settings
+
+        with override_settings(SW_ENABLED=False):
+            body = self.client.get("/world").content.decode()
+            self.assertIn('data-sw="0"', body)
+            forced = self.client.get("/world?sw=1").content.decode()
+            self.assertIn('data-sw="1"', forced)
+        with override_settings(SW_ENABLED=True):
+            body = self.client.get("/world").content.decode()
+            self.assertIn('data-sw="1"', body)
+            off = self.client.get("/world?nosw=1").content.decode()
+            self.assertIn('data-sw="0"', off)
+
+    def test_site_search_uses_load_more(self):
+        """站点列表用「加载更多」（每次多 20 条），按钮上方写清已显示 x / y。"""
+        from .services import publish
+
+        for index in range(25):
+            self.make_card(name=f"灰烬纪年编年史 {index}")
+        publish.publish(self.world, audience="public")
+        self.world.refresh_from_db()
+        base = f"/s/{self.world.published_slug}/search"
+
+        first = self.client.get(base, {"q": "灰烬纪年编年史"})
+        self.assertEqual(first.status_code, 200)
+        body = first.content.decode()
+        self.assertIn("已显示 20 / 25 条", body)
+        self.assertIn("加载更多（已显示 20 / 25 条）", body)
+        self.assertIn("show=40", body)
+
+        second = self.client.get(base, {"q": "灰烬纪年编年史", "show": 40})
+        body2 = second.content.decode()
+        self.assertIn("已显示 25 / 25 条", body2)
+        self.assertNotIn("加载更多", body2)          # 全给完了就别再显示按钮
+
+    def test_site_search_show_is_clamped(self):
+        from .services import publish
+
+        publish.publish(self.world, audience="public")
+        self.world.refresh_from_db()
+        response = self.client.get(f"/s/{self.world.published_slug}/search",
+                                   {"q": "a", "show": "9999"})
+        self.assertEqual(response.status_code, 200)   # 超大 show 不许炸
+
+    def test_feed_lists_published_documents(self):
+        """订阅：RSS 里要有已发布的文档，且未发布的不能出现。"""
+        from .services import publish
+
+        self.make_card(name="上了站点的")
+        hidden, _ = self.make_card(name="没发布的")
+        hidden.is_published = False
+        hidden.save(update_fields=["is_published"])
+        publish.publish(self.world, audience="public")
+        self.world.refresh_from_db()
+
+        response = self.client.get(f"/s/{self.world.published_slug}/feed.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/rss+xml", response["Content-Type"])
+        body = response.content.decode()
+        self.assertIn("上了站点的", body)
+        self.assertNotIn("没发布的", body)
+
+    def test_feed_is_404_for_unpublished_site(self):
+        response = self.client.get("/s/does-not-exist/feed.xml")
+        self.assertEqual(response.status_code, 404)
+
+    def test_state_reports_session_expiry_and_renew_extends_it(self):
+        """会话超时：首屏带到期时间，续期接口把它往后推。"""
+        self.client.post("/api/world/auth/register",
+                         data=json.dumps({"username": "会话主人", "password": "secret-pass-1"}),
+                         content_type="application/json")
+        state = self.client.get("/api/world/state").json()
+        self.assertIn("session_expires_at", state)
+        self.assertTrue(state["session_expires_at"])
+        before = state["session_expires_at"]
+
+        renewed = self.client.post("/api/world/auth/renew")
+        self.assertEqual(renewed.status_code, 200)
+        after = renewed.json()["session_expires_at"]
+        self.assertGreaterEqual(after, before)
+
+    def test_renew_without_session_is_401(self):
+        response = self.client.post("/api/world/auth/renew")
+        self.assertEqual(response.status_code, 401)
+
+    def test_fresh_world_gets_starter_types(self):
+        """新世界自带角色 / 地点 / 事件——空状态文案承诺过的东西得真有。"""
+        from .models import EntityType
+        from .views import STARTER_TYPES, bootstrap_types
+
+        world = World.objects.create(name="刚开张", slug="fresh-one")
+        bootstrap_types(world)
+        self.assertEqual([t.name for t in world.types.all()],
+                         [name for name, _icon, _color in STARTER_TYPES])
+        # 再来一次不该重复建
+        bootstrap_types(world)
+        self.assertEqual(EntityType.objects.filter(world=world).count(), len(STARTER_TYPES))
+
+    def test_bootstrap_skips_a_world_that_already_has_types(self):
+        from .models import EntityType
+        from .views import bootstrap_types
+
+        EntityType.objects.create(world=self.world, name="已有类型", position=1)
+        before = sorted(self.world.types.values_list("name", flat=True))
+        bootstrap_types(self.world)
+        after = sorted(self.world.types.values_list("name", flat=True))
+        self.assertEqual(before, after)            # 一个都没多加
+
     def test_era_page_links_back_to_grid_filter(self):
         era = Era.objects.create(world=self.world, name="筛选纪元")
-        from . import publish
+        from .services import publish
         publish.publish(self.world, audience="public")
         body = self.client.get(f"/s/{self.world.published_slug}/era/{era.id}").content.decode()
         self.assertIn(f"?era={era.id}", body)
+
+
+class ExperienceLayerTests(BaseWorldCase):
+    """全链路体验层的服务端部分：分享卡片 / 动态流 / 状态页 / 离开上报。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+
+    def publish(self):
+        from .services import publish
+        publish.publish(self.world, audience="public")
+        return self.world.published_slug
+
+    # ------------------------------------------------------------ 分享卡片
+    def test_og_card_is_svg_with_world_name_and_theme_colour(self):
+        slug = self.publish()
+        response = self.client.get(f"/s/{slug}/og.svg")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("image/svg+xml", response["Content-Type"])
+        body = response.content.decode()
+        self.assertIn("测试世界", body)
+        self.assertIn("#123456", body)                 # 主题色进了卡片
+        self.assertIn("1200", body)
+
+    def test_og_card_rejects_a_bogus_theme_colour(self):
+        # 主题值是用户可编辑的：不是 #rrggbb 就退回默认色，别变成注入点
+        self.world.theme_config = {"primaryColor": '"/><script>alert(1)</script>'}
+        self.world.save(update_fields=["theme_config"])
+        slug = self.publish()
+        body = self.client.get(f"/s/{slug}/og.svg").content.decode()
+        self.assertNotIn("script", body)
+        self.assertIn("#3ddc97", body)
+
+    def test_og_card_hidden_for_unpublished_world(self):
+        self.assertEqual(self.client.get("/s/nope42/og.svg").status_code, 404)
+
+    def test_site_base_advertises_the_card(self):
+        slug = self.publish()
+        body = self.client.get(f"/s/{slug}/").content.decode()
+        self.assertIn("og:image", body)
+        self.assertIn(f"/s/{slug}/og.svg", body)
+        self.assertIn("speculationrules", body)        # 到达前预渲染
+
+    # ------------------------------------------------------- 已移除的文档
+    def test_removed_document_says_so_and_suggests_neighbours(self):
+        from .services import publish
+        keeper, _ = self.make_card(name="青铜门")
+        gone, _ = self.make_card(name="被撤下的那一页")
+        publish.publish(self.world, audience="public")
+        gone.is_published = False
+        gone.save(update_fields=["is_published"])
+
+        response = self.client.get(f"/s/{self.world.published_slug}/{gone.slug}/")
+        self.assertEqual(response.status_code, 404)
+        self.assertContains(response, "不在站点上", status_code=404)
+        self.assertContains(response, "被撤下的那一页", status_code=404)
+
+    def test_unknown_slug_gets_signal_lost(self):
+        self.publish()
+        response = self.client.get(f"/s/{self.world.published_slug}/never-existed/")
+        self.assertEqual(response.status_code, 404)
+        self.assertContains(response, "信号丢失", status_code=404)
+
+    # ------------------------------------------------------------ 维护页
+    def test_maintenance_page_is_a_terminal_sequence(self):
+        response = self.client.get("/maintenance")
+        self.assertEqual(response.status_code, 503)
+        self.assertContains(response, "系统维护中", status_code=503)
+        self.assertContains(response, "预计恢复时间", status_code=503)
+
+    def test_maintenance_middleware_only_bites_when_switched_on(self):
+        from unittest import mock
+        from world.maintenance import MaintenanceMiddleware
+
+        request = self.client.get("/world").wsgi_request
+        passthrough = MaintenanceMiddleware(lambda req: "正常")
+        self.assertEqual(passthrough(request), "正常")
+
+        with mock.patch.dict("os.environ", {"OPUSCULE_MAINTENANCE": "1"}):
+            blocked = MaintenanceMiddleware(lambda req: "正常")(request)
+            self.assertEqual(blocked.status_code, 503)
+            self.assertIn("系统维护中", blocked.content.decode())
+            self.assertEqual(blocked["Retry-After"], "900")
+            # 静态资源与维护页自己必须放行，否则维护页连样式都加载不出来
+            static_request = self.client.get("/static/terminal.css").wsgi_request
+            self.assertEqual(MaintenanceMiddleware(lambda req: "放行")(static_request), "放行")
+
+    # --------------------------------------------------------- 通知中心
+    def test_activity_feed_mixes_publish_and_membership(self):
+        from .services import publish
+        from .models import InviteCode
+        self.make_card(name="写点什么")
+        publish.publish(self.world, audience="public", author=None)
+        InviteCode.objects.create(code="SPARE123", world=self.world)
+        self.client.post("/api/world/auth/register",
+                         data=json.dumps({"username": "新来的", "password": "secret-pass-1"}),
+                         content_type="application/json")
+        rows = self.client.get("/api/world/activity").json()["activity"]
+        kinds = {row["kind"] for row in rows}
+        self.assertIn("publish", kinds)
+        self.assertIn("invite", kinds)
+        self.assertTrue(all("what" in row and "when" in row for row in rows))
+
+    def test_activity_feed_collapses_repeated_edits(self):
+        document, _ = self.make_card(name="反复改的那份")
+        for index in range(4):
+            self.client.put(f"/api/world/cards/{document.id}",
+                            data=json.dumps({"blocks": [{"type": "text", "text": f"第 {index} 版"}]}),
+                            content_type="application/json")
+        rows = [row for row in self.client.get("/api/world/activity").json()["activity"]
+                if row.get("doc") == document.id]
+        self.assertEqual(len(rows), 1, "同一份文档只该在动态里出现一次")
+
+    # ------------------------------------------------------------ 离开上报
+    def test_leaving_beacon_removes_presence(self):
+        from documents.models import Presence
+        from django.contrib.auth import get_user_model
+        from world.services import publish
+        publish.publish(self.world, audience="public")
+        self.client.post("/api/world/auth/register",
+                         data=json.dumps({"username": "走的人", "password": "secret-pass-1"}),
+                         content_type="application/json")
+        user = get_user_model().objects.get(username="走的人")
+        Presence.touch(self.world, user)
+        self.assertEqual(Presence.objects.filter(world=self.world).count(), 1)
+
+        response = self.client.post("/api/world/presence",
+                                    data=json.dumps({"leaving": True}),
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Presence.objects.filter(world=self.world).count(), 0)
+
+
+# --------------------------------------------------------------------------- #
+# 静态资源的版本号（`?v=`）—— 这一条是"明明改了代码却没反应"的元凶
+class StaticVersionTests(TestCase):
+    """`_stamp()` 决定模板里 `?v=` 的值，也就决定浏览器会不会重新拉 JS/CSS。
+
+    踩过的坑：原来用 `functools.lru_cache(maxsize=1)` 缓存，寿命是整个进程 ——
+    开发服务器一开就是几小时，`static/*.js` 改过好几轮，`?v=` 还停在服务器启动
+    那一刻的值。URL 没变、响应又只有 `Last-Modified`（Django 开发态不发
+    Cache-Control），浏览器就按启发式缓存一直用旧文件。表现是"改了什么都没用"。
+    实测那次服务器发的是 6.8 小时前的版本号。
+    """
+
+    def test_stamp_follows_file_mtime(self):
+        from django.conf import settings
+
+        from . import context
+
+        target = pathlib.Path(settings.STATICFILES_DIRS[0]) / "map" / "vendor" / "index.css"
+        self.assertTrue(target.exists(), "static/map/vendor 里应该有构建产物")
+
+        original = target.stat().st_mtime
+        context._stamp_cache[0] = 0.0                 # 跳过 2 秒 TTL
+        before = context._stamp()
+        try:
+            # 必须把 mtime 顶到**当前所有静态文件的最新值之上**：`_stamp()` 取的是
+            # 所有静态文件里最新的修改时间，而 index.css 是构建产物，时间戳常常比天天
+            # 在改的 workspace.js 旧好几天 —— 只在自己原值上加一天，依旧追不上全局最大
+            # 值，最大值不动、版本号当然也不变（那就是一条假失败）。所以以 `before`
+            # （刚算出来的全局最新值）为基准再往上顶。
+            bumped = int(before) + 86400
+            os.utime(target, (bumped, bumped))
+            context._stamp_cache[0] = 0.0
+            after = context._stamp()
+            self.assertNotEqual(before, after,
+                                "静态文件改了，版本号必须跟着变 —— 不然浏览器不会重新拉")
+        finally:
+            os.utime(target, (original, original))
+            context._stamp_cache[0] = 0.0
+
+    def test_stamp_is_short_cached_not_process_cached(self):
+        """缓存必须是"短 TTL"，不能是 lru_cache（那玩意儿活到进程结束）。"""
+        from . import context
+
+        self.assertFalse(hasattr(context._stamp, "cache_clear"),
+                         "_stamp 不能再被 lru_cache 包住")
+        self.assertLessEqual(context._STAMP_TTL, 10.0,
+                             "TTL 太长的话，改完文件要等很久 URL 才换")
+
+
+# 地图独立页（/map · /map/2d · /map/3d）
+# --------------------------------------------------------------------------- #
+class MapPageTests(TestCase):
+    """``/map`` 三档：跳转、两个子档、嵌入与只读、换文档、认错文档。
+
+    页面本身是前端渲染的（数据走 ``/api/world/maps/*``，那几条在上面
+    ``MapApiTests`` 里管），所以这里只钉"服务端给对了没有"：
+    路由指哪儿、模板里有没有那一档、只读与嵌入的判定、挑文档的规则。
+    """
+
+    def setUp(self):
+        self.world = World.objects.create(name="地图世界")
+        self.map_doc = Document.objects.create(
+            world=self.world, document_type="map", name="世界地图")
+        self.card = Document.objects.create(
+            world=self.world, document_type="card", name="一张卡")
+
+    def _ctx(self, response):
+        """把页面里那份页面上下文（``#map-ctx`` 的 JSON）解出来。"""
+        match = re.search(
+            r'<script id="map-ctx" type="application/json">(.*?)</script>',
+            response.content.decode(), re.S)
+        self.assertIsNotNone(match, "页面里应该有 #map-ctx")
+        return json.loads(match.group(1))
+
+    # ------------------------------------------------------------ 路由
+    def test_map_redirects_to_2d(self):
+        response = self.client.get("/map")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/map/2d")
+
+    def test_map_redirect_keeps_query(self):
+        response = self.client.get(f"/map?doc={self.map_doc.id}")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"/map/2d?doc={self.map_doc.id}")
+
+    def test_2d_page_renders_the_engine(self):
+        response = self.client.get(f"/map/2d?doc={self.map_doc.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._ctx(response)["view"], "2d")
+        # 引擎入口是构建产物，base 必须落在我们的静态挂载点
+        self.assertContains(response, "/static/map/vendor/index-")
+
+    def test_3d_page_renders(self):
+        response = self.client.get(f"/map/3d?doc={self.map_doc.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._ctx(response)["view"], "3d")
+
+    def test_unknown_view_falls_back_to_2d(self):
+        response = self.client.get(f"/map/太阳系?doc={self.map_doc.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._ctx(response)["view"], "2d")
+
+    # ------------------------------------------------------------ 挑文档
+    def test_picks_first_map_when_no_doc(self):
+        ctx = self._ctx(self.client.get("/map/2d"))
+        self.assertEqual(ctx["docId"], self.map_doc.id)
+        self.assertEqual(ctx["docName"], "世界地图")
+
+    def test_non_map_document_is_reported_missing(self):
+        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.card.id}"))
+        self.assertTrue(ctx["docMissing"])
+        # 原样留着请求的 id：前端要说"这一篇不在了"，而不是悄悄换一张
+        self.assertEqual(ctx["docId"], self.card.id)
+
+    def test_missing_document_is_reported_missing(self):
+        self.assertTrue(self._ctx(self.client.get("/map/2d?doc=999999"))["docMissing"])
+
+    # ------------------------------------------------------------ 嵌入 / 只读
+    def test_embed_is_readonly_by_default(self):
+        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1"))
+        self.assertTrue(ctx["embed"])
+        self.assertTrue(ctx["readonly"])
+
+    def test_embed_can_opt_into_editing(self):
+        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
+        self.assertTrue(ctx["embed"])
+        self.assertFalse(ctx["readonly"])
+
+    def test_visitor_cannot_edit(self):
+        """没登录 + 库里已经有别人：画布必须只读（``readonly=0`` 也不作数）。"""
+        from django.contrib.auth import get_user_model
+
+        get_user_model().objects.create_user("房主", password="secret-pass-1")
+        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
+        self.assertTrue(ctx["readonly"], "游客拿到的必须是只读画布")
+
+    def test_viewer_member_cannot_edit(self):
+        """登录了但这张世界里只是「只读成员」：同样只读。"""
+        from django.contrib.auth import get_user_model
+
+        from .models import ROLE_VIEWER
+
+        user = get_user_model().objects.create_user("看客", password="secret-pass-1")
+        Membership.objects.create(world=self.world, user=user, role=ROLE_VIEWER)
+        self.client.force_login(user)
+        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
+        self.assertTrue(ctx["readonly"])
+
+    # ------------------------------------------------------------ 主题
+    def test_paper_theme_falls_back_to_dark(self):
+        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&theme=paper"))
+        self.assertEqual(ctx["theme"], "dark")
+
+
+class GeoBridgeTests(BaseWorldCase):
+    """地图 ⇄ 编辑器 的桥：导入实体，给条目自动铺开下一级。"""
+
+    def setUp(self):
+        super().setUp()
+        created = self.client.post("/api/world/documents", data=json.dumps(
+            {"type": "map", "name": "世界地图"}), content_type="application/json").json()
+        self.map_id = created["id"]
+
+    def _payload(self):
+        """前端从 pack 抽出来的形状：nodes 是层级树，flat 是没有上级的那些。"""
+        return {
+            "nodes": [
+                {
+                    "kind": "国家", "name": "临江国", "x": 30.0, "y": 40.0,
+                    "attrs": {"全称": "临江国", "政体": "公国", "首都": "石头城", "人口": 12000, "面积": 800},
+                    "children": [
+                        {
+                            "kind": "省份", "name": "临江省", "x": 32.0, "y": 42.0,
+                            "attrs": {"所属国家": "临江国", "省会": "石头城", "面积": 320},
+                            "children": [
+                                {"kind": "城镇", "name": "石头城", "x": 32.5, "y": 42.5,
+                                 "attrs": {"人口": 3200, "类型": "River", "分组": "capital"}},
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "flat": [{"kind": "河流", "name": "临水", "x": 33.0, "y": 44.0, "attrs": {"长度": 220}}],
+        }
+
+    def _import(self, payload=None):
+        return self.client.post(f"/api/world/maps/{self.map_id}/import-entities",
+                                data=json.dumps(payload if payload is not None else self._payload()),
+                                content_type="application/json")
+
+    def test_import_creates_types_tree_cards_and_markers(self):
+        from documents.models import Document
+        from maps.models import MapMarker
+
+        result = self._import().json()
+        self.assertTrue(result["success"])
+        self.assertEqual(result["counts"], {"国家": 1, "省份": 1, "城镇": 1, "河流": 1})
+        self.assertEqual(result["markers"], 4)
+
+        types = {t.name: t for t in EntityType.objects.filter(world=self.world)}
+        for name in ("国家", "省份", "城镇", "地点", "河流", "山脉", "道路"):
+            self.assertIn(name, types)
+        self.assertGreaterEqual(types["国家"].properties.count(), 5)
+
+        root = Document.objects.get(pk=result["root"])
+        self.assertEqual(root.name, "地理")
+        country = Document.objects.get(world=self.world, name="临江国")
+        self.assertEqual(country.parent_id, root.id)
+        province = Document.objects.get(world=self.world, name="临江省")
+        self.assertEqual(province.parent_id, country.id)
+        town = Document.objects.get(world=self.world, name="石头城")
+        self.assertEqual(town.parent_id, province.id)
+
+        # 属性值落在卡片上（键是属性 id，与前端一致）
+        props = {p.name: str(p.id) for p in town.card.entity_type.properties.all()}
+        self.assertEqual(town.card.values.get(props["人口"]), 3200)
+        self.assertEqual(town.card.blocks[0]["title"], "概览")
+
+        # 图钉真的建了，并且指回卡片
+        marker = MapMarker.objects.get(card=town)
+        self.assertEqual(marker.document_id, self.map_id)
+        self.assertEqual(marker.x, 32.5)
+        self.assertEqual(marker.name, "石头城")
+
+        # 没有上级的河流进「河流」兜底文件夹
+        river = Document.objects.get(world=self.world, name="临水")
+        self.assertEqual(river.parent.name, "河流")
+
+    def test_import_is_idempotent(self):
+        from documents.models import Document
+
+        self._import()
+        before = Document.objects.filter(world=self.world, name="石头城").count()
+        again = self._import().json()
+        self.assertEqual(Document.objects.filter(world=self.world, name="石头城").count(), before)
+        self.assertEqual(again["created"], 0)
+        # 4 个条目全是就地更新 —— 报「处理了几个」和「新建了几张」是两回事
+        self.assertEqual(again["updated"], 4)
+        self.assertEqual(again["counts"], {"国家": 1, "省份": 1, "城镇": 1, "河流": 1})
+
+    def test_import_merges_same_name_siblings(self):
+        """地图上同省的两座同名城镇会并成一张卡（否则树里会出现两张一模一样的条目）。"""
+        from documents.models import Document
+
+        payload = self._payload()
+        province = payload["nodes"][0]["children"][0]
+        province["children"].append(dict(province["children"][0], x=36.0, y=47.0))
+        result = self._import(payload).json()
+        self.assertEqual(result["counts"]["城镇"], 2)
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(Document.objects.filter(world=self.world, name="石头城").count(), 1)
+
+    def test_import_rejects_a_non_map_or_empty_payload(self):
+        plain = self.client.post("/api/world/documents", data=json.dumps(
+            {"type": "card", "name": "一张卡"}), content_type="application/json").json()
+        not_a_map = self.client.post(f"/api/world/maps/{plain['id']}/import-entities",
+                                     data=json.dumps(self._payload()), content_type="application/json")
+        self.assertEqual(not_a_map.status_code, 400)
+        empty = self._import({})
+        self.assertEqual(empty.status_code, 400)
+
+    def test_distribute_uses_the_hand_filled_count_and_creates_markers(self):
+        from documents.models import Document
+        from maps.models import MapMarker
+
+        self._import()
+        province = Document.objects.get(world=self.world, name="临江省")
+        out = self.client.post(f"/api/world/documents/{province.id}/distribute",
+                               data=json.dumps({"count": 3}), content_type="application/json").json()
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["child_kind"], "城镇")
+        self.assertEqual(out["count"], 3)
+
+        children = Document.objects.filter(parent=province, name__startswith="临江省·")
+        self.assertEqual(children.count(), 3)
+        for child in children:
+            marker = MapMarker.objects.get(card=child)
+            self.assertAlmostEqual(marker.x, 32.0, delta=8)
+            self.assertAlmostEqual(marker.y, 42.0, delta=8)
+
+        # 同一条目再铺一次，位置与名字都不变（确定性）
+        first = sorted((c.name, MapMarker.objects.get(card=c).x) for c in children)
+        self.client.post(f"/api/world/documents/{province.id}/distribute",
+                         data=json.dumps({"count": 3}), content_type="application/json")
+        again = sorted((c.name, MapMarker.objects.get(card=c).x)
+                       for c in Document.objects.filter(parent=province, name__startswith="临江省·"))
+        self.assertEqual(first, again)
+
+    def test_distribute_auto_count_and_leaf_refusal(self):
+        from documents.models import Document
+
+        self._import()
+        country = Document.objects.get(world=self.world, name="临江国")  # 面积 800 → 800/400 = 2
+        auto = self.client.post(f"/api/world/documents/{country.id}/distribute",
+                                data=json.dumps({}), content_type="application/json").json()
+        self.assertTrue(auto["ok"])
+        self.assertEqual(auto["count"], 2)
+        self.assertEqual(auto["child_kind"], "省份")
+
+        # 城镇往下是「地点」；地点是末端，再往下就没得铺了
+        town = Document.objects.get(world=self.world, name="石头城")
+        places = self.client.post(f"/api/world/documents/{town.id}/distribute",
+                                  data=json.dumps({"count": 2}), content_type="application/json").json()
+        self.assertEqual(places["child_kind"], "地点")
+        place = Document.objects.get(pk=places["children"][0]["id"])
+        leaf = self.client.post(f"/api/world/documents/{place.id}/distribute",
+                                data=json.dumps({}), content_type="application/json")
+        self.assertEqual(leaf.status_code, 400)
+
+    def test_distribute_refuses_a_card_that_is_not_a_place(self):
+        document, _ = self.make_card("随便一张")
+        response = self.client.post(f"/api/world/documents/{document.id}/distribute",
+                                    data=json.dumps({}), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+
+class WorldBanTests(BaseWorldCase):
+    """G3：世界级封禁的惰性语义——到期即自动解封，不靠定时任务。"""
+
+    def test_not_banned_by_default(self):
+        self.assertFalse(self.world.is_banned)
+        self.assertIsNone(self.world.banned_until)
+
+    def test_banned_until_in_the_future_is_banned(self):
+        self.world.banned_until = timezone.now() + timedelta(days=3)
+        self.world.ban_reason = "内容违规"
+        self.assertTrue(self.world.is_banned)
+        self.assertEqual(self.world.ban_reason, "内容违规")
+
+    def test_ban_expires_lazily(self):
+        """封禁时刻一过，``is_banned`` 立刻回到 False——这就是"到期自动解封"。"""
+        self.world.banned_until = timezone.now() - timedelta(seconds=1)
+        self.assertFalse(self.world.is_banned)
+
+    def test_ban_summary_reports_state(self):
+        self.world.banned_until = timezone.now() + timedelta(days=5)
+        self.world.ban_reason = "垃圾信息"
+        summary = self.world.ban_summary()
+        self.assertTrue(summary["banned"])
+        self.assertEqual(summary["reason"], "垃圾信息")
+        self.assertTrue(summary["until"])
+
+
+class PublicWikiBanTests(BaseWorldCase):
+    """G3：被封禁的公开 wiki——首页 / feed / og 全部 404，解封或到期后恢复。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+        self.make_card(name="Harrowdeep", blocks=normalize_blocks(
+            [{"type": "text", "title": "概览", "text": "深处有一扇青铜门"}]))
+        publish.publish(self.world, audience="public")
+        self.slug = self.world.published_slug
+
+    def _ban_for(self, days: int):
+        self.world.banned_until = timezone.now() + timedelta(days=days)
+        self.world.ban_reason = "平台封禁"
+        self.world.save(update_fields=["banned_until", "ban_reason"])
+
+    def test_published_site_is_reachable_before_ban(self):
+        self.assertEqual(self.client.get(f"/s/{self.slug}/").status_code, 200)
+
+    def test_ban_closes_every_public_surface(self):
+        self._ban_for(3)
+        self.assertEqual(self.client.get(f"/s/{self.slug}/").status_code, 404)
+        self.assertEqual(self.client.get(f"/s/{self.slug}/feed.xml").status_code, 404)
+        self.assertEqual(self.client.get(f"/s/{self.slug}/og.svg").status_code, 404)
+        self.assertEqual(self.client.get(f"/s/{self.slug}/search?q=青铜门").status_code, 404)
+
+    def test_site_recovers_after_ban_expires(self):
+        """封禁到期：``is_banned`` 惰性判回，站点自动恢复，无需任何人操作。"""
+        self.world.banned_until = timezone.now() - timedelta(seconds=1)
+        self.world.save(update_fields=["banned_until"])
+        self.assertEqual(self.client.get(f"/s/{self.slug}/").status_code, 200)
+
+    def test_site_recovers_after_manual_unban(self):
+        self._ban_for(7)
+        self.assertEqual(self.client.get(f"/s/{self.slug}/").status_code, 404)
+        self.world.banned_until = None
+        self.world.ban_reason = ""
+        self.world.save(update_fields=["banned_until", "ban_reason"])
+        self.assertEqual(self.client.get(f"/s/{self.slug}/").status_code, 200)
+
+
+class ModerationConsoleTests(BaseWorldCase):
+    """G3：平台治理台——站长或管理员可封禁 / 解封，动作留痕。"""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+
+        self.root = get_user_model().objects.create_superuser("root", password="very-secret-3")
+        self.mod = get_user_model().objects.create_user("mod", password="very-secret-4")
+        self.plain = get_user_model().objects.create_user("plain", password="very-secret-5")
+
+    def test_plain_user_cannot_open_the_console(self):
+        self.client.force_login(self.plain)
+        self.assertEqual(self.client.get("/api/world/moderation").status_code, 403)
+
+    def test_moderator_can_open_the_console_without_being_a_member(self):
+        """管理员不是被治理世界的成员，但读接口已在中间件白名单里放行。"""
+        from world import permissions
+
+        permissions.set_moderator(self.mod, True)
+        publish.publish(self.world, audience="public")
+
+        self.client.force_login(self.mod)
+        response = self.client.get("/api/world/moderation")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["limits"], {"min_days": 3, "max_days": 7, "default_days": 7})
+        self.assertEqual(body["banned_count"], 0)
+
+    def test_cannot_ban_an_unpublished_world(self):
+        self.client.force_login(self.root)
+        response = self.post_json("/api/world/moderation/ban", {"world_id": self.world.id})
+        self.assertEqual(response.status_code, 400)
+
+    def test_ban_marks_the_world_and_writes_audit(self):
+        publish.publish(self.world, audience="public")
+        self.client.force_login(self.root)
+
+        response = self.post_json("/api/world/moderation/ban",
+                                  {"world_id": self.world.id, "days": 5, "reason": "侵权"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["world"]["is_banned"])
+
+        self.world.refresh_from_db()
+        self.assertTrue(self.world.is_banned)
+        self.assertEqual(self.world.ban_reason, "侵权")
+        event = ModerationEvent.objects.get()
+        self.assertEqual(event.action, "ban")
+        self.assertEqual(event.detail, "5 天 · 侵权")
+
+    def test_ban_days_are_clamped_to_the_three_to_seven_window(self):
+        publish.publish(self.world, audience="public")
+        self.client.force_login(self.root)
+
+        self.post_json("/api/world/moderation/ban", {"world_id": self.world.id, "days": 99})
+        self.assertEqual(ModerationEvent.objects.get().detail, "7 天")
+
+        ModerationEvent.objects.all().delete()
+        self.post_json("/api/world/moderation/ban", {"world_id": self.world.id, "days": 1})
+        self.assertEqual(ModerationEvent.objects.get().detail, "3 天")
+
+    def test_unban_clears_fields_and_writes_audit(self):
+        publish.publish(self.world, audience="public")
+        self.client.force_login(self.root)
+        self.post_json("/api/world/moderation/ban", {"world_id": self.world.id, "days": 7})
+
+        response = self.post_json("/api/world/moderation/unban", {"world_id": self.world.id})
+        self.assertEqual(response.status_code, 200)
+        self.world.refresh_from_db()
+        self.assertFalse(self.world.is_banned)
+        self.assertIsNone(self.world.banned_until)
+
+        actions = list(ModerationEvent.objects.order_by("id").values_list("action", flat=True))
+        self.assertEqual(actions, ["ban", "unban"])
+
+    def test_moderator_may_ban(self):
+        """封禁是平台级动作——管理员（不是成员）也能做。"""
+        from world import permissions
+
+        permissions.set_moderator(self.mod, True)
+        publish.publish(self.world, audience="public")
+
+        self.client.force_login(self.mod)
+        response = self.post_json("/api/world/moderation/ban", {"world_id": self.world.id})
+        self.assertEqual(response.status_code, 200)
+        self.world.refresh_from_db()
+        self.assertTrue(self.world.is_banned)
+
+    def test_plain_user_cannot_ban(self):
+        publish.publish(self.world, audience="public")
+        Membership.objects.create(world=self.world, user=self.plain, role=ROLE_EDITOR)
+
+        self.client.force_login(self.plain)
+        response = self.post_json("/api/world/moderation/ban", {"world_id": self.world.id})
+        self.assertEqual(response.status_code, 403)
+
+
+class ReportTests(BaseWorldCase):
+    """G3：读者举报——匿名提交，只有站长（非管理员）能看与处置。"""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+
+        self.world = World.objects.first()
+        self.make_card(name="Harrowdeep")
+        publish.publish(self.world, audience="public")
+        self.slug = self.world.published_slug
+        self.root = get_user_model().objects.create_superuser("root", password="very-secret-3")
+        self.mod = get_user_model().objects.create_user("mod", password="very-secret-4")
+        self.plain = get_user_model().objects.create_user("plain", password="very-secret-5")
+
+    def test_anonymous_can_file_a_report(self):
+        response = self.post_json(f"/s/{self.slug}/report",
+                                  {"reason": "spam", "detail": "这里全是广告", "doc": "harrowdeep"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+        report = Report.objects.get()
+        self.assertEqual(report.reason, "spam")
+        self.assertEqual(report.detail, "这里全是广告")
+        self.assertEqual(report.status, "open")
+        self.assertEqual(report.world_slug, self.slug)
+        self.assertIsNone(report.reporter)
+
+    def test_report_requires_a_detail(self):
+        response = self.post_json(f"/s/{self.slug}/report", {"reason": "spam"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Report.objects.count(), 0)
+
+    def test_unknown_reason_falls_back_to_content(self):
+        self.post_json(f"/s/{self.slug}/report", {"reason": "nonsense", "detail": "有情况"})
+        self.assertEqual(Report.objects.get().reason, "content")
+
+    def test_report_on_an_unpublished_slug_is_404(self):
+        response = self.post_json("/s/never-published/report", {"detail": "有情况"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_only_superuser_can_read_the_inbox(self):
+        Report.objects.create(world=self.world, world_name=self.world.name,
+                              world_slug=self.slug, detail="有情况")
+
+        self.client.force_login(self.mod)
+        self.assertEqual(self.client.get("/api/world/reports").status_code, 403)
+
+        self.client.force_login(self.plain)
+        self.assertEqual(self.client.get("/api/world/reports").status_code, 403)
+
+        self.client.force_login(self.root)
+        response = self.client.get("/api/world/reports")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body["reports"]), 1)
+        self.assertEqual(body["open_count"], 1)
+
+    def test_superuser_handles_a_report(self):
+        report = Report.objects.create(world=self.world, world_name=self.world.name,
+                                       world_slug=self.slug, detail="有情况")
+        self.client.force_login(self.root)
+
+        response = self.post_json(f"/api/world/reports/{report.id}",
+                                  {"status": "handled", "note": "已下架相关内容"})
+        self.assertEqual(response.status_code, 200)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, "handled")
+        self.assertEqual(report.note, "已下架相关内容")
+        self.assertEqual(report.handled_by, self.root)
+        self.assertIsNotNone(report.handled_at)
+
+    def test_handling_back_to_open_clears_the_trace(self):
+        report = Report.objects.create(world=self.world, world_name=self.world.name,
+                                       world_slug=self.slug, detail="有情况",
+                                       status="handled", handled_by=self.root,
+                                       handled_by_name="root", handled_at=timezone.now())
+        self.client.force_login(self.root)
+
+        self.post_json(f"/api/world/reports/{report.id}", {"status": "open"})
+        report.refresh_from_db()
+        self.assertEqual(report.status, "open")
+        self.assertIsNone(report.handled_by)
+        self.assertIsNone(report.handled_at)
+
+    def test_moderator_cannot_handle_a_report(self):
+        report = Report.objects.create(world=self.world, world_name=self.world.name,
+                                       world_slug=self.slug, detail="有情况")
+        from world import permissions
+
+        permissions.set_moderator(self.mod, True)
+        self.client.force_login(self.mod)
+        response = self.post_json(f"/api/world/reports/{report.id}", {"status": "handled"})
+        self.assertEqual(response.status_code, 403)
+
+
+# 程序版本（推进计划.md §8 · 阶段 3）
+# --------------------------------------------------------------------------- #
+class AppVersionTests(TestCase):
+    """版本号的唯一来源是 ``settings.APP_VERSION`` + ``APP_CHANNEL``（推进计划.md §8）。
+
+    页脚、``/meta`` 接口、CHANGELOG 都必须引用同一处，不能在别处再写死版本串。
+    出口条件：页脚（与 ``/meta``）可见 ``Opuscule 0.4.0 · Dev``（当前 settings 值）。
+    """
+
+    def test_app_info_derives_from_settings(self):
+        from django.conf import settings
+
+        from . import version
+
+        info = version.app_info()
+        self.assertEqual(info["name"], settings.APP_NAME)
+        self.assertEqual(info["version"], settings.APP_VERSION)
+        self.assertEqual(info["channel"], settings.APP_CHANNEL)
+        self.assertEqual(info["channel_label"], "Dev")
+        self.assertEqual(info["version_string"], f"{settings.APP_VERSION}-dev")
+        self.assertEqual(info["display"], f"{settings.APP_NAME} {settings.APP_VERSION} · Dev")
+
+    def test_version_string_per_channel(self):
+        from . import version
+
+        self.assertEqual(version.version_string("0.4.0", "dev"), "0.4.0-dev")
+        self.assertEqual(version.version_string("0.4.0", "alpha", "2"), "0.4.0-alpha.2")
+        self.assertEqual(version.version_string("0.4.0", "alpha"), "0.4.0-alpha.1")
+        self.assertEqual(version.version_string("0.4.0", "beta", "1"), "0.4.0-beta.1")
+        self.assertEqual(version.version_string("0.4.0", "release"), "0.4.0")
+        self.assertEqual(version.channel_label("release"), "Release")
+
+    def test_meta_endpoint_is_public(self):
+        response = self.client.get("/meta")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["version_string"], "0.4.0-dev")
+        self.assertEqual(payload["channel_label"], "Dev")
+        self.assertEqual(payload["display"], "Opuscule 0.4.0 · Dev")
+
+    def test_explore_footer_shows_version(self):
+        response = self.client.get("/explore")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Opuscule 0.4.0 · Dev")
+
+    def test_auth_footer_shows_version(self):
+        # 库里一个用户都没有时 /login 会跳去 /register（首次安装要先建号），
+        # 所以先建一个用户，让 /login 正常渲染登录页。
+        from django.contrib.auth.models import User
+
+        User.objects.create_user("founder", password="pw-Str0ng!23")
+        response = self.client.get("/login")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Powered by Opuscule 0.4.0 · Dev")
+
+    def test_build_number_is_optional(self):
+        # 没设 OPUSCULE_BUILD 时，展示串与完整串都不带 build（本地开发/测试不应被影响）。
+        from django.test import override_settings
+
+        from . import version
+
+        with override_settings(APP_BUILD=""):
+            info = version.app_info()
+            self.assertEqual(info["build"], "")
+            self.assertEqual(info["version_string"], "0.4.0-dev")
+            self.assertEqual(info["display"], "Opuscule 0.4.0 · Dev")
+
+    def test_build_number_attaches_metadata(self):
+        # 设了构建号：完整串按 semver 构建元数据 `+build.N`，展示串尾部追加 `· build N`。
+        from django.test import override_settings
+
+        from . import version
+
+        with override_settings(APP_BUILD="42", APP_VERSION="0.5.0"):
+            info = version.app_info()
+            self.assertEqual(info["build"], "42")
+            self.assertEqual(info["version_string"], "0.5.0-dev+build.42")
+            self.assertEqual(info["display"], "Opuscule 0.5.0 · Dev · build 42")
+
+    def test_version_string_appends_build(self):
+        from . import version
+
+        self.assertEqual(version.version_string("0.5.0", "release", "", "7"), "0.5.0+build.7")
+        self.assertEqual(version.version_string("0.5.0", "alpha", "2", "9"), "0.5.0-alpha.2+build.9")

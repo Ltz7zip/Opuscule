@@ -11,6 +11,11 @@ app_name = "world"
 urlpatterns = [
     path("state", views.state, name="state"),
     path("world", views.world_detail, name="world-detail"),
+    # 我的世界：列出 / 新建 / 切换
+    path("worlds", views.world_collection, name="world-collection"),
+    path("worlds/<int:world_id>/switch", views.world_switch, name="world-switch"),
+    # 最近发生的事（通知中心的数据源）
+    path("activity", views.activity, name="activity"),
 
     # 文档树
     path("documents", views.document_collection, name="document-collection"),
@@ -31,13 +36,30 @@ urlpatterns = [
 
     # 账号 / 成员 / 在线 / 版本
     path("auth/me", views.auth_me, name="auth-me"),
+    path("auth/renew", views.auth_renew, name="auth-renew"),
+    path("auth/invite", views.auth_invite_check, name="auth-invite-check"),
     path("auth/register", views.auth_register, name="auth-register"),
     path("auth/login", views.auth_login, name="auth-login"),
     path("auth/logout", views.auth_logout, name="auth-logout"),
+    # 改密（登录态，方案①）与登记邮箱（方案②）
+    path("auth/password", views.auth_password, name="auth-password"),
+    path("auth/email", views.auth_email, name="auth-email"),
+    # 销号 / 数据导出（A4）
+    path("account/export", views.account_export, name="account-export"),
+    path("account/delete", views.account_delete, name="account-delete"),
     path("collaborators", views.collaborators, name="collaborators"),
     path("collaborators/invites", views.invite_create, name="invite-create"),
     path("collaborators/invites/<int:invite_id>", views.invite_delete, name="invite-delete"),
     path("collaborators/<int:member_id>", views.member_detail, name="member-detail"),
+    path("moderators", views.moderator_collection, name="moderator-collection"),
+    path("moderators/<int:user_id>", views.moderator_detail, name="moderator-detail"),
+    # 平台治理：封禁 / 解封公开 wiki（站长或管理员）
+    path("moderation", views.moderation_console, name="moderation-console"),
+    path("moderation/ban", views.moderation_ban, name="moderation-ban"),
+    path("moderation/unban", views.moderation_unban, name="moderation-unban"),
+    # 举报箱（仅站长）
+    path("reports", views.report_collection, name="report-collection"),
+    path("reports/<int:report_id>", views.report_detail, name="report-detail"),
     path("presence", views.presence, name="presence"),
     path("documents/<int:doc_id>/versions", views.document_versions, name="document-versions"),
     path("documents/<int:doc_id>/versions/<int:index>", views.document_version_detail, name="document-version"),
@@ -97,11 +119,15 @@ urlpatterns = [
 
     # 经典地图
     path("maps/<int:doc_id>", views.map_state_view, name="map-state"),
+    path("maps/<int:doc_id>/data", views.map_data_view, name="map-data"),
     path("maps/<int:doc_id>/background", views.map_background, name="map-background"),
     path("maps/<int:doc_id>/layers", views.map_layer_collection, name="map-layers"),
     path("maps/<int:doc_id>/markers", views.map_marker_collection, name="map-markers"),
     path("map-layers/<int:layer_id>", views.map_layer_detail, name="map-layer-detail"),
     path("map-markers/<int:marker_id>", views.map_marker_detail, name="map-marker-detail"),
+    # 地图 ⇄ 编辑器的桥：导入实体、给条目自动铺开下一级
+    path("maps/<int:doc_id>/import-entities", views.map_import_entities, name="map-import-entities"),
+    path("documents/<int:doc_id>/distribute", views.document_distribute, name="document-distribute"),
 
     # 图谱
     path("graph", views.graph_view, name="graph"),
@@ -114,6 +140,7 @@ urlpatterns = [
 
     # 搜索与识别
     path("search", views.search, name="search"),
+    path("complete", views.complete, name="complete"),
     path("autolink", views.autolink_view, name="autolink"),
     path("backlinks/<int:doc_id>", views.backlinks, name="backlinks"),
 

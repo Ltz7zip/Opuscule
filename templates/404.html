@@ -1,0 +1,37 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>信号丢失 · 404</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射变量，必须最后加载；删掉即回滚 -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+</head>
+<body class="xp-standalone">
+  {% comment %}
+    站点/工作区之外的 404（DEBUG=0 时由 Django 交给它）。
+    设计语言跟只读站点一致：暗色 + 等宽 + 一道翠绿。glitch 只抖颜色，不动布局。
+  {% endcomment %}
+  <main class="xp-standalone-box">
+    <p class="miss-kicker">404 · 信号丢失</p>
+    <h1 class="glitch miss-code" data-text="404">404</h1>
+    <p class="xp-standalone-sub">
+      {{ request_path|default:"这个地址" }} 上没有东西。<br />
+      链接可能抄错了一个字，也可能这一页被挪走了。
+    </p>
+    <form class="miss-search" method="get" action="/s/{{ site_slug|default:'' }}/search" role="search">
+      <label class="sr-only" for="missQ">在已发布的站点里搜</label>
+      <input id="missQ" type="search" name="q" placeholder="搜一下这个世界里的名字…" autocomplete="off" />
+      <button class="te-btn" type="submit">搜索</button>
+    </form>
+    <div class="xp-empty-acts">
+      <a class="te-btn" href="/">回到工作区</a>
+      <a class="te-btn" href="/legacy">打开经典时间轴</a>
+    </div>
+    <p class="miss-hint">如果你确定这里应该有东西：在地址栏检查世界 slug（形如 <code>/s/3b9edd/</code>）。</p>
+  </main>
+</body>
+</html>

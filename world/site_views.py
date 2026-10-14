@@ -13,20 +13,121 @@
 
 from __future__ import annotations
 
-from django.http import Http404
+import functools
+import pathlib
+import re
+
+from django.conf import settings
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_safe
 
-from . import publish as publish_service
-from .models import AUDIENCE_PASSWORD, DOC_CARD, DOC_TIMELINE, DOC_TREE, World
-from .normalize import as_int
+from .services import publish as publish_service
+from .models import AUDIENCE_PASSWORD, DOC_CARD, DOC_TIMELINE, DOC_TREE, REPORT_REASONS, Report, World
+from .normalize import as_int, as_text
 
 
 def _get_world(slug: str) -> World:
     world = World.objects.filter(published_slug=slug).first()
     if world is None or not world.is_published:
         raise Http404("站点不存在或尚未发布")
+    if world.is_banned:
+        # 平台封禁：到期自动恢复（``is_banned`` 惰性判断）。这里一处拒绝，就覆盖了
+        # 首页 / 搜索 / 纪元 / 文档页 / feed / og.svg 全部公开面。
+        raise Http404("站点暂时不可用")
     return world
+
+
+# ----------------------------------------------------------------- 订阅（RSS）
+@require_safe
+def feed(request, slug: str):
+    """只读站点的 RSS：把已发布的文档按更新时间排出来。
+
+    "exit intent 订阅提示"如果没有一个真能订阅的东西，就只是句空话——
+    这里给它一个真的：读者把 feed 丢进阅读器就能追更。
+    """
+    world = _get_world(slug)
+    gated = _gate(request, world)
+    if gated:
+        return gated
+    base = request.build_absolute_uri(f"/s/{world.published_slug}/")
+    documents = sorted(publish_service.site_documents(world),
+                       key=lambda doc: doc.updated_at or doc.created_at, reverse=True)[:80]
+    items = []
+    for doc in documents:
+        link = f"{base}{doc.slug}/"
+        updated = doc.updated_at or doc.created_at
+        summary = (doc.preview or "").strip()
+        items.append(
+            "    <item>\n"
+            f"      <title>{_xml_escape(doc.name)}</title>\n"
+            f"      <link>{_xml_escape(link)}</link>\n"
+            f"      <guid isPermaLink=\"true\">{_xml_escape(link)}</guid>\n"
+            f"      <pubDate>{updated.strftime('%a, %d %b %Y %H:%M:%S +0000')}</pubDate>\n"
+            f"      <description>{_xml_escape(summary)}</description>\n"
+            "    </item>"
+        )
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0"><channel>\n'
+        f"  <title>{_xml_escape(world.name)}</title>\n"
+        f"  <link>{_xml_escape(base)}</link>\n"
+        f"  <description>{_xml_escape(world.description or world.name)}</description>\n"
+        f"  <lastBuildDate>{timezone.now().strftime('%a, %d %b %Y %H:%M:%S +0000')}</lastBuildDate>\n"
+        + "\n".join(items)
+        + "\n</channel></rss>\n"
+    )
+    response = HttpResponse(body, content_type="application/rss+xml; charset=utf-8")
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+# ----------------------------------------------------------------- OG 分享卡片
+@functools.lru_cache(maxsize=1)
+def _og_template() -> str:
+    """分享卡片的 SVG 模板（仓库里的静态件，进程内读一次就够）。"""
+    path = pathlib.Path(settings.BASE_DIR) / "static" / "brand" / "opuscule-og.svg"
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _xml_escape(text: str) -> str:
+    return (str(text or "")
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&apos;"))
+
+
+@require_safe
+def og_card(request, slug: str):
+    """只读站点的分享卡片（SVG，1200×630）。
+
+    设计稿在 ``static/brand/opuscule-og.svg``：暗色画布 + 网格 + 炼金术标记，
+    标题是世界名、副标题是一句话简介、标记取世界主色。
+
+    为什么是 SVG：这个项目不引图片库（requirements 里只有 Django），没有 Pillow
+    就描不出 PNG。Slack / Telegram 这类现代预览器认 SVG，Facebook 只认 PNG——
+    真要上 FB，得再挂一个渲染步骤。
+    """
+    world = _get_world(slug)
+    template = _og_template()
+    if not template:
+        raise Http404("卡片模板缺失")
+    theme = world.theme or {}
+    color = str(theme.get("primaryColor") or "#3ddc97")
+    if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", color):     # 别让主题值变成注入点
+        color = "#3ddc97"
+    subtitle = world.description or f"{world.published_slug} · 只读站点"
+    body = (template
+            .replace("__TITLE__", _xml_escape((world.name or "")[:26]))
+            .replace("__SUB__", _xml_escape(subtitle[:34]))
+            .replace("var(--era, #3ddc97)", color))
+    response = HttpResponse(body, content_type="image/svg+xml; charset=utf-8")
+    response["Cache-Control"] = "public, max-age=600"
+    return response
 
 
 def _gate(request, world: World):
@@ -42,9 +143,13 @@ def _gate(request, world: World):
 
 def _site_base(world: World, sections=None, request=None) -> dict:
     filters = publish_service.site_filters(world)
+    theme = world.theme
     return {
         "world": world,
-        "theme": world.theme,
+        "theme": theme,
+        # 只读站点的明暗跟随世界主题；没配就是终端语言的默认暗色。
+        # 模板把它写到 <html data-theme>，terminal.css 按它切表面台阶。
+        "theme_mode": "light" if theme.get("mode") == "light" else "dark",
         "audience_label": publish_service.AUDIENCE_LABELS.get(world.audience, ""),
         "sections": publish_service.site_sections(world) if sections is None else sections,
         "noindex": world.audience != "public",
@@ -117,12 +222,18 @@ def search(request, slug):
         )
         hits = [hit for hit in hits if hit["document"].id in allowed]
     similar = publish_service.suggest_similar(world, keyword) if (keyword and not hits) else []
-    paged = publish_service.paginate(hits, page=as_int(request.GET.get("page"), 1), per_page=20)
+    # 站点列表用「加载更多」而不是翻页——每次多给 20 条，
+    # 按钮上方写清"已显示 x / y 条"。
+    per_page = max(20, min(200, as_int(request.GET.get("show"), 20) or 20))
+    paged = publish_service.paginate(hits, page=1, per_page=per_page)
     context = _site_base(world, request=request)
     context.update({
         "query": keyword,
         "hits": paged["items"],
         "pager": paged,
+        "shown": len(paged["items"]),
+        "can_load_more": paged["total"] > len(paged["items"]),
+        "next_show": per_page + 20,
         "similar": similar,
         "active_filter": active,
         "total_documents": sum(len(section["documents"]) for section in context["sections"]),
@@ -155,7 +266,7 @@ def page(request, slug, doc_slug):
         return gated
     document = publish_service.document_by_slug(world, doc_slug)
     if document is None:
-        raise Http404("页面不存在或未发布")
+        return _missing_document(request, world, doc_slug)
 
     context = _site_base(world, request=request)
     context.update({
@@ -175,6 +286,25 @@ def page(request, slug, doc_slug):
     return render(request, "site/page.html", context)
 
 
+def _missing_document(request, world: World, doc_slug: str):
+    """站点上找不到这份文档（见 docs/09-发布与只读站点.md）。
+
+    分两种：**曾经有、现在没了**（slug 在库里还对得上号，只是没发布 / 被隐藏 /
+    进了回收站）——那就告诉读者这儿原来是什么、附近还有什么开着；否则就是
+    纯粹的"信号丢失"，给一个 glitch 的 404 和搜索框。
+    """
+    ghost = world.documents.filter(slug=doc_slug).first()
+    if ghost is None and doc_slug.isdigit():
+        ghost = world.documents.filter(pk=as_int(doc_slug, 0)).first()
+    context = _site_base(world, request=request)
+    context.update({
+        "removed": ghost is not None,
+        "ghost_name": ghost.name if ghost is not None else "",
+        "related": publish_service.related_documents(ghost)[:6] if ghost is not None else [],
+    })
+    return render(request, "site/missing.html", context, status=404)
+
+
 @require_http_methods(["POST"])
 def unlock(request, slug):
     world = _get_world(slug)
@@ -186,3 +316,49 @@ def unlock(request, slug):
         "audience_label": publish_service.AUDIENCE_LABELS.get(world.audience, ""),
         "error": True,
     }, status=403)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def report(request, slug):
+    """读者在只读站点上举报某个公开 wiki（批次 C）。
+
+    匿名可提交——这是「读者发现有问题」的入口，不该先逼人登录。落库后只有站长
+    （``is_privileged``）能在治理台看到与处置（见 ``views.report_collection``）。
+    站点是公开的，所以这里 ``@csrf_exempt``，与项目里其他 JSON 写接口一致。
+    """
+    world = _get_world(slug)                       # 未发布 / 被封禁一律 404
+    payload = request.POST if request.POST else _json_body(request)
+    valid_reasons = {value for value, _label in REPORT_REASONS}
+    reason = as_text(payload.get("reason"), 20)
+    if reason not in valid_reasons:
+        reason = "content"
+    detail = as_text(payload.get("detail"), 4000)
+    if not detail:
+        return JsonResponse({"ok": False, "error": "请填写举报内容"}, status=400)
+    from .views import client_ip                   # 懒导入，避免与 views 形成导入环
+
+    report_row = Report.objects.create(
+        world=world,
+        world_name=world.name,
+        world_slug=world.published_slug,
+        doc_slug=as_text(payload.get("doc"), 200),
+        reporter=request.user if request.user.is_authenticated else None,
+        reporter_name=request.user.username if request.user.is_authenticated else "",
+        reason=reason,
+        detail=detail,
+        contact=as_text(payload.get("contact"), 200),
+        ip=client_ip(request),
+    )
+    return JsonResponse({"ok": True, "id": report_row.id})
+
+
+def _json_body(request):
+    """举报也接受 JSON 体（前端 fetch 两种都发得出来，容错取用）。"""
+    import json
+
+    try:
+        parsed = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

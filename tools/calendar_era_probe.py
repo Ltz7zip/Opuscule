@@ -2,11 +2,12 @@
 """日历视图 + 纪元分支的验证。"""
 from __future__ import annotations
 import json, pathlib, sys, urllib.request
+import os
 from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/ux_shots"); SHOTS.mkdir(exist_ok=True)
 opener = make_opener(); ensure_login(opener)
 
@@ -43,11 +44,14 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)
     cells = page.locator(".cal-cell").count()
     heads = page.locator(".cal-head").count()
+    pages = page.locator(".cal-page").count()
     events = page.locator(".cal-event").count()
     moons = page.locator(".cal-moon").count()
     label = page.locator(".cal-label").inner_text() if page.locator(".cal-label").count() else ""
-    print(f"日历视图：{heads} 列表头 · {cells} 个格子 · {events} 个事件 · {moons} 个月相 · {label}")
-    if heads != 7 or cells < 28:
+    print(f"日历视图：{pages} 页 · {heads} 列表头 · {cells} 个格子 · {events} 个事件 · {moons} 个月相 · {label}")
+    # 轨道里放三页（上个月 / 这个月 / 下个月）做 scroll-snap，所以表头/格子按页算：
+    # 每页 7 个表头、至少 28 个格子（4 周）。
+    if pages < 1 or heads != pages * 7 or cells < pages * 28:
         problems.append("日历网格不完整")
     if not label:
         problems.append("没有显示年月")

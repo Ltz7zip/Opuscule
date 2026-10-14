@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 import json
 import pathlib
 import sys
@@ -20,7 +21,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 REPORT = pathlib.Path("/tmp/ux_report.md")
 SHOTS = pathlib.Path("/tmp/ux_shots")
 SHOTS.mkdir(exist_ok=True)
@@ -54,7 +55,7 @@ def main() -> int:
         by_type.setdefault(doc["type"], doc)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=True)
+        browser = p.chromium.launch(channel="chrome", headless=True, args=["--disable-dev-shm-usage"])
         page = browser.new_page(viewport={"width": 1680, "height": 1000})
         ensure_login_page(page)
         console_errors: list[str] = []
@@ -86,9 +87,10 @@ def main() -> int:
         if card:
             page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
             page.wait_for_timeout(400)
-            # 点「＋ 文本」加一个区块
+            # 点插入条上的「文本」加一个区块（按钮现在的类名是 .insert-btn，
+            # 文案是「文本」——"＋ 文本"是更早一版的写法，早就不在了）
             try:
-                page.click("text=＋ 文本", timeout=3000)
+                page.locator(".insert-bar .insert-btn").first.click(timeout=3000)
                 page.wait_for_timeout(700)
                 note("点「＋ 文本」加区块：成功")
             except Exception as exc:  # noqa: BLE001
@@ -123,16 +125,41 @@ def main() -> int:
         if timeline:
             page.goto(f"{BASE}/world#doc={timeline['id']}", wait_until="networkidle")
             page.wait_for_timeout(500)
+            before_events = {row["id"] for row in
+                             json.loads(opener.open(f"{BASE}/api/world/timelines/{timeline['id']}",
+                                                    timeout=10).read())["events"]}
             try:
                 canvas = page.query_selector(".tl-canvas, iframe")
                 box = canvas.bounding_box() if canvas else None
                 if box:
                     page.mouse.click(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
                     page.wait_for_timeout(800)
-                    note("时间线画布中央点击：已执行（会新建事件）")
+                    note("时间线画布中央点击：已执行（新事件跑完会删掉）")
                     page.screenshot(path=str(SHOTS / "timeline_click.png"))
             except Exception as exc:  # noqa: BLE001
                 issues.append(f"时间线点击失败：{exc}")
+            finally:
+                # 探针点出来的事件收尾删掉：演示数据不该被探针越堆越多。
+                # 轮询一下再删——编辑器是"点完先乐观更新、随后才落库"，
+                # 落库比这里的第一眼要晚一点。
+                deadline = time.time() + 3
+                while time.time() < deadline:
+                    after_events = {row["id"] for row in
+                                    json.loads(opener.open(
+                                        f"{BASE}/api/world/timelines/{timeline['id']}",
+                                        timeout=10).read())["events"]}
+                    fresh = after_events - before_events
+                    if fresh:
+                        for event_id in fresh:
+                            try:
+                                request = urllib.request.Request(f"{BASE}/api/items/{event_id}",
+                                                                 method="DELETE")
+                                opener.open(request, timeout=10).read()
+                            except Exception:               # noqa: BLE001
+                                pass
+                        note(f"已清理探针点出来的 {len(fresh)} 个事件")
+                        break
+                    time.sleep(0.3)
 
         # 5) 侧栏：搜索、右键菜单、拖拽
         page.goto(f"{BASE}/world", wait_until="networkidle")
