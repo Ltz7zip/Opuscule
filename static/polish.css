@@ -1,0 +1,1694 @@
+/* ==========================================================================
+   polish.css  —  动效与观感收尾层
+   --------------------------------------------------------------------------
+   功能模块：全站的动效与观感收尾层。它遵守一套扁平、极简的语言：
+   灰阶主色、一档圆角、4px 栅格、几乎归零的阴影、扁平靠边框分层。
+   所以这一层**不做热闹的动效**——它做的是"每个交互都有回应，而且回得又快又轻"：
+
+     · 时间：微反馈 120ms / 状态 180ms / 面片 260ms / 大面片 380ms
+     · 曲线：出场用 ease-out（cubic-bezier(.22,1,.36,1)），
+             小控件落定带极轻的回弹（.34,1.32,.5,1），不许有明显过冲
+     · 只动 opacity / transform / 颜色 / 边框 / 阴影；不动布局尺寸
+     · 系统开了"减少动效"就全部让路
+
+   关键实现：时长、曲线都用 --pf-* 自定义属性统一收口（见第 1 节），
+   换肤文件不会污染这层；动效只碰 opacity / transform / 颜色 / 边框 / 阴影。
+
+   加载顺序（依据 DESIGN.md §4 的契约，顺序不能改）：polish 排在换肤层
+   （apple / terminal）之后、体验层 experience.css 之前；它只加动效、不改配色。
+     workspace     = workspace→minimal→responsive→shell→apple→terminal→**polish**→experience
+     relationship  = minimal→relationship→apple→terminal→**polish**→experience
+     site          = site→apple→terminal→**polish**→experience
+     auth          = minimal→responsive→apple→terminal→**polish**→experience→auth
+     legacy（经典时间线页 /legacy）**不加载**本文件（只加载 style）。
+
+   为免踩坑，这里刻意**不碰**的东西（都是 JS 每帧在写的通道）：
+     · .rt-grid / .map-paper 的 transform（拖拽缩放）
+     · .rt-node / .canvas-item / .map-marker 的 left/top/transform（拖拽定位）
+     · .tl-dot / .tl-stem / .tl-pill 的 left/top（时间轴布局）
+     · .rt-canvas-wrap 的 background-position/size（点阵随画布平移）
+     · 浮层的 left/top（JS 算坐标）——浮层入场只用 opacity + translate/scale
+     · .fc-menu / #rtEmptyHint / .rt-side-foot 的 display（靠 hidden 属性收放）
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 动效 token
+   --------------------------------------------------------------------------
+   命名一律 --pf-* ：site.css 与 minimal.css 对 --ink/--line/--ink-soft/--ink-dim
+   的定义完全不同，共用名字会互相污染。
+   ========================================================================== */
+:root {
+  --pf-ease: cubic-bezier(0.22, 1, 0.36, 1);          /* 出场：快起慢收 */
+  --pf-ease-inout: cubic-bezier(0.4, 0, 0.2, 1);      /* 状态来回 */
+  --pf-ease-spring: cubic-bezier(0.34, 1.32, 0.5, 1); /* 小控件落定：极轻回弹 */
+
+  --pf-t-micro: 120ms;   /* 按下 / 悬停 */
+  --pf-t: 180ms;         /* 颜色 / 边框 / 图标 */
+  --pf-t-pop: 240ms;     /* 浮层 / 弹窗 */
+  --pf-t-panel: 380ms;   /* 面板 / 整页 */
+
+  /* Apple 语言的阴影纪律：卡片 / 按钮 / 文字一律没有阴影，
+     系统里唯一允许的一道只给"落在表面上的产品图"（见 apple.css）。
+     所以这里的"抬起"用表面色 + 边框表达，而不是 box-shadow。 */
+  --pf-lift: none;
+  --pf-lift-strong: none;
+  --pf-hover-bg: color-mix(in srgb, var(--mn-ink, #1d1d1f) 4%, transparent);
+  --pf-ring: 0 0 0 3px color-mix(in srgb, var(--mn-focus, #0071e3) 24%, transparent);
+  --pf-press: 0.95;      /* 全系统统一的按下状态 */
+}
+
+:root[data-theme="dark"] {
+  --pf-lift: none;
+  --pf-lift-strong: none;
+  --pf-hover-bg: color-mix(in srgb, #ffffff 8%, transparent);
+}
+
+/* ==========================================================================
+   2. 入场关键帧
+   --------------------------------------------------------------------------
+   只用 opacity + translate/scale（独立属性）。这一层元素多半自带 transform
+   （居中 / 定位），用 transform 做动画会把它们顶掉；独立属性是叠加关系，
+   天然安全。浏览器不支持时逐条丢弃，只留 opacity 淡入。
+   ========================================================================== */
+@keyframes pf-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 浮层：从触发点方向轻轻撑开。
+   只给"打开瞬间没人拿 getBoundingClientRect 量它"的元素用——
+   scale 会改变量出来的盒子，量出来偏了，浮层就会摆错位置。 */
+@keyframes pf-pop-in {
+  from { opacity: 0; translate: 0 6px; scale: 0.985; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+/* 下拉 / 菜单：往上收一点，像从按钮里长出来 */
+@keyframes pf-drop-in {
+  from { opacity: 0; translate: 0 -5px; scale: 0.98; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+/* 容器级入场：整块浮上来。
+   刻意**不带 scale**——关系树的 fitTo() 会在挂载后的第一帧量容器的
+   getBoundingClientRect()，而 transform 会算进这个测量值；给祖先加 0.99
+   的缩放，量出来的画布就小了 1%，自动适应视野会整体偏掉。 */
+@keyframes pf-rise-in {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* 列表行：错峰淡入（错峰量由 --pf-i 给，见第 8 节） */
+@keyframes pf-row-in {
+  from { opacity: 0; translate: 0 5px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* 提示条：从下往上弹出来 */
+@keyframes pf-toast-in {
+  from { opacity: 0; translate: 0 12px; scale: 0.97; }
+  62% { opacity: 1; translate: 0 -1.5px; scale: 1.005; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+/* 地图针落下来 —— 只在关系树错误页那种"一次生成"的图形上用 */
+@keyframes pf-pin-in {
+  from { opacity: 0; scale: 0.7; }
+  70% { opacity: 1; scale: 1.04; }
+  to { opacity: 1; scale: 1; }
+}
+
+/* 强调色扫过：只给"当前项"用 */
+@keyframes pf-sweep-x {
+  from { transform: scaleX(0); opacity: 0.4; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* 空状态插画：几乎察觉不到的呼吸 */
+@keyframes pf-breathe {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -4px; }
+}
+
+/* ==========================================================================
+   3. 浮层：模态框 / 命令面板 / 右键菜单 / 提示条
+   --------------------------------------------------------------------------
+   靠 hidden 属性收放的元素，进场用关键帧（display 由 none 变回来时动画会
+   重新播放），退场则要靠 transition-behavior: allow-discrete 才能把
+   display:none 也变成可过渡的值。所以两者分开写：
+     · 所有浏览器：都有进场
+     · 支持 allow-discrete 的浏览器：额外获得退场（下面第 3.2 节）
+   ========================================================================== */
+
+/* ------------------------------------------------------------ 3.1 进场 */
+/* 一条铁律：**只给"一次性生成、之后不会被重建"的元素加入场动画**。
+   面板里的东西（renderPanels() 每帧重画：时间线一拖动就会整块重建）
+   一律不加，否则动画会在每一帧重新开始，看着就是抖。
+   所以下面这些浮层——弹窗、命令面板、右键菜单、气泡工具条、@ 提及、
+   卡片选择器、评论便签——它们挂在 body 上、按需创建，加动画是安全的。 */
+
+/* 带 scale 的：打开瞬间没有人去量它们的盒子（要么用 offsetWidth，
+   要么用固定常量定位），撑开的手感留着。 */
+.md-box,
+.pl-box,
+.picker-box,
+.format-bar,
+.fb-actions,
+.fb-menu,
+.fb-wrap,
+.mention-pop,
+.date-pop,
+.block-menu {
+  animation: pf-pop-in var(--pf-t-pop) var(--pf-ease) both;
+}
+
+/* 不带 scale 的：.comment-pop 的定位靠 getBoundingClientRect()，
+   缩放会让它偏；.fc-menu / .rt-* 同理，统一走纯位移。 */
+.comment-pop,
+.ctx,
+.rt-menu,
+.rt-relations-pop,
+.rt-card-tools,
+.fc-menu {
+  animation: pf-drop-in var(--pf-t) var(--pf-ease) both;
+}
+
+.palette,
+.modal {
+  animation: pf-fade-in var(--pf-t) var(--pf-ease) both;
+}
+
+.toast,
+.rt-toast {
+  animation: pf-toast-in var(--pf-t-panel) var(--pf-ease-spring) both;
+}
+
+/* 对话框里的列表（一次生成，跟着点击重画但频率很低） */
+.type-grid,
+.guide-grid {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+
+/* 外壳三块面板是常驻的，不在 #panels 里，可以安心浮上来 */
+.sidebar,
+.topbar,
+.workspace {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+
+/* ------------------------------------------------------------ 3.2 退场 */
+@supports (transition-behavior: allow-discrete) {
+  /* 进场已经由 transition + @starting-style 接管，关掉关键帧，
+     否则 fill: both 会把动画终态一直压在上面，退场根本动不了。 */
+  .modal,
+  .palette {
+    animation: none;
+    opacity: 1;
+    transition: opacity var(--pf-t) var(--pf-ease),
+                backdrop-filter var(--pf-t) var(--pf-ease),
+                -webkit-backdrop-filter var(--pf-t) var(--pf-ease),
+                display var(--pf-t) allow-discrete;
+  }
+  .modal[hidden],
+  .palette[hidden] {
+    opacity: 0;
+    transition-duration: var(--pf-t-micro);
+  }
+
+  .md-box,
+  .pl-box {
+    animation: none;
+    opacity: 1;
+    transition: opacity var(--pf-t-pop) var(--pf-ease),
+                transform var(--pf-t-pop) var(--pf-ease),
+                display var(--pf-t-pop) allow-discrete;
+  }
+  .modal[hidden] .md-box,
+  .palette[hidden] .pl-box {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+    transition-duration: 110ms;
+  }
+
+  .ctx {
+    animation: none;
+    opacity: 1;
+    transform-origin: top left;
+    transition: opacity var(--pf-t) var(--pf-ease),
+                transform var(--pf-t) var(--pf-ease),
+                display var(--pf-t) allow-discrete;
+  }
+  .ctx[hidden] {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+    transition-duration: 90ms;
+  }
+
+  .toast {
+    animation: none;
+    opacity: 1;
+    transition: opacity var(--pf-t-pop) var(--pf-ease),
+                translate var(--pf-t-panel) var(--pf-ease-spring),
+                display var(--pf-t) allow-discrete;
+  }
+  .toast[hidden] {
+    opacity: 0;
+    translate: 0 10px;
+  }
+
+  /* 进场起始态：元素第一次变得可见时先套上这组值，再由 transition 收回 */
+  @starting-style {
+    .modal:not([hidden]) { opacity: 0; }
+    .palette:not([hidden]) { opacity: 0; }
+    .modal:not([hidden]) .md-box { opacity: 0; transform: translateY(14px) scale(0.965); }
+    .palette:not([hidden]) .pl-box { opacity: 0; transform: translateY(-8px) scale(0.975); }
+    .ctx:not([hidden]) { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    .toast:not([hidden]) { opacity: 0; translate: 0 14px; }
+  }
+}
+
+/* 遮罩与对话框：压暗 + 轻微毛玻璃（rgba(0,0,0,.7) + blur(4px)）。
+   注意**不要**用 --mn-ink 之类的语义墨色变量：终端层把 --ap-ink/--mn-ink 重映射成了
+   浅色的 --tx-ink，用它配 34% 会在深色界面上糊一层白雾（整页发灰、对比度掉下来）。 */
+.modal,
+.palette {
+  background-color: color-mix(in srgb, #000000 70%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.md-box,
+.pl-box {
+  position: relative;
+}
+.md-head {
+  position: relative;
+}
+/* 标题栏底部那道线在滚动时才显得必要：让它淡一点 */
+.md-head {
+  border-bottom-color: color-mix(in srgb, var(--mn-border, #e4e4e7) 70%, transparent);
+}
+.md-body {
+  overscroll-behavior: contain;
+}
+
+/* 关闭按钮：悬停转 90°，图标按钮里最该有的一个小动作 */
+.md-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.md-close:hover {
+  background: var(--mn-surface-muted, rgba(0, 0, 0, 0.05));
+  color: var(--mn-ink, #0a0a0a);
+  transform: rotate(90deg);
+}
+.md-close:active {
+  transform: rotate(90deg) scale(0.9);
+}
+
+/* 命令面板：选中项左侧那道强调色竖条。
+   注意：结果列表每敲一个字就重建，所以这里**不做入场动画**，只做状态动效。 */
+.pl-item {
+  position: relative;
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease);
+}
+.pl-item::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--mn-accent, #0066cc);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transform-origin: center;
+  transition: opacity var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.pl-item.is-active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+/* 提示条：一条会走完的进度线，比"到点突然消失"友好。
+   时长由 workspace.js 的 toast() 写进 --pf-toast-ms，跟真实显示时间对上。 */
+.toast,
+.rt-toast {
+  overflow: hidden;
+}
+.toast::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 55%, transparent);
+  transform-origin: left center;
+  animation-name: pf-toast-life;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  animation-duration: var(--pf-toast-ms, 1900ms);
+}
+@keyframes pf-toast-life {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+/* 提示条里出现动作按钮时给它一点强调色 */
+.toast-act {
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease);
+}
+
+/* ==========================================================================
+   3b. 面板内容：拿掉"每次重建都重放"的入场动画
+   --------------------------------------------------------------------------
+   responsive.css 给 .card-view / .tl-frame-wrap / .tree-wrap / .map-canvas /
+   .graph-canvas 挂了一条 320ms 的 mn-rise（透明度 + 位移）。问题在于
+   renderPanels() 会把 #panels 整个清空重建，而它被调用的场合远比"切标签页"
+   多：改一次区块类型、拖一下时间线（新渲染器每帧都会调）都会重建一次。
+   动画每重建一次就从 opacity:0 重新跑一遍——写东西的时候整块内容一闪一闪。
+
+   所以这一层不在这几处挂动画，改给常驻的 .panels 容器一次入场：
+   壳子浮上来一次，内容本身不闪。切标签页的反馈交给标签条那道扫开的
+   强调色（见第 5 节），反馈更准，也不会晃到正文。
+   ========================================================================== */
+.card-view,
+.tl-frame-wrap,
+.tree-wrap,
+.map-canvas,
+.graph-canvas {
+  animation: none;
+}
+.panels {
+  animation: pf-fade-in var(--pf-t-panel) var(--pf-ease) both;
+}
+
+/* ==========================================================================
+   4. 按钮与控件：按下有回应，悬停有提示，聚焦看得见
+   ========================================================================== */
+
+.mini-btn, .tb-btn, .tb-view, .sb-new, .icon-btn, .sb-icon, .link-btn,
+.insert-btn, .tl-mini, .sel-btn, .badge, .chip, .world-chip, .user-chip,
+.era-chip, .state-chip, .seg-btn, .tl-tool, .tl-zoom button, .map-bar button,
+.tree-bar button, .tl-frame-bar button, .graph-controls button,
+.ctx button, .fb-menu button, .format-bar button, .mention-row, .picker-row,
+.type-item, .trash-row, .folder-row, .suggest-row, .publish-row,
+.board-add, .board-card, .list-row, .media-card, .dice-card,
+.md-body button, .prop-table button, .mini-select, .prop-select, .mini-input,
+.prop-input, .list-input, .tl-field input, .tl-field select, .tl-event-card input,
+.tl-event-card select, .tl-event-card textarea,
+.rt-btn, .rt-tool, .rt-back, .rt-topbar-back, .rt-relation-btn, .rt-add-relation,
+.rt-template-item, .rt-existing-row, .rt-zoom button, .rt-menu button,
+.rt-pop-item, .rt-pop-add, .rt-pop-row, .rt-card-tools button,
+.tile, .te-btn, .te-dock-btn, .fc-btn, .fc-item, .pager-btn, .era-pill,
+.search-inline button, .gate button, .gate input, .nav-search input,
+.kbd, kbd, .swatch-btn, .ci-del, .bc-del {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease),
+              opacity var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+
+/* 按下：整体缩一点点，像真的被按下去 */
+.mini-btn:active:not(:disabled),
+.tb-btn:active:not(:disabled),
+.tb-view:active:not(:disabled),
+.sb-new:active:not(:disabled),
+.icon-btn:active:not(:disabled),
+.sb-icon:active:not(:disabled),
+.insert-btn:active:not(:disabled),
+.link-btn:active:not(:disabled),
+.ctx button:active:not(:disabled),
+.fb-menu button:active:not(:disabled),
+.rt-btn:active:not(:disabled),
+.rt-tool:active:not(:disabled),
+.rt-relation-btn:active:not(:disabled),
+.rt-zoom button:active:not(:disabled),
+.te-btn:active:not(:disabled),
+.te-dock-btn:active:not(:disabled),
+.fc-btn:active:not(:disabled),
+.fc-item:active:not(:disabled),
+.pager-btn:active:not(:disabled),
+.era-pill:active:not(:disabled),
+.tile:active,
+.picker-row:active,
+.type-item:active {
+  transform: scale(var(--pf-press));   /* 全系统统一的按下状态 */
+  transition-duration: var(--pf-t-micro);
+}
+
+/* 悬停不做几何位移。
+   Apple 语言的按钮悬停只换底色、不动位置，没有"抬 1px"这种位移。
+   悬停反馈交给 apple.css 的底色/边框变化，以及下面这些强调与微位移。 */
+.mini-btn:active:not(:disabled),
+.tb-btn:active:not(:disabled),
+.rt-btn:active:not(:disabled),
+.te-btn:active:not(:disabled),
+.tile:active,
+.search-inline button:active,
+.gate button:active {
+  transform: scale(var(--pf-press));
+}
+
+/* 主按钮：Apple 语言不允许装饰性渐变，所以不加顶部高光；
+   悬停只加深底色（由 apple.css 的 :hover 负责），这里不叠任何东西。 */
+.mini-btn.is-primary:hover,
+.rt-btn--primary:hover {
+  opacity: 1;
+  box-shadow: none;
+}
+.mini-btn.is-primary:active,
+.rt-btn--primary:active {
+  opacity: 1;
+}
+
+/* 危险按钮：悬停时颜色往红里走一格，不额外加粗 */
+.mini-btn.is-danger:hover,
+button[data-danger="1"]:hover,
+.rt-relation-btn.is-danger:hover,
+.rt-card-tools button.is-danger:hover,
+.ctx button.is-danger:hover,
+.fb-menu button.is-danger:hover {
+  background: color-mix(in srgb, var(--mn-danger, #cf001c) 12%, transparent);
+}
+
+/* 复选框 / 单选 / 滑块：给系统控件上强调色与过渡 */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--mn-accent, #0066cc);
+  transition: transform var(--pf-t-micro) var(--pf-ease-spring);
+}
+input[type="checkbox"]:active,
+input[type="radio"]:active {
+  transform: scale(0.88);
+}
+input[type="range"] {
+  accent-color: var(--mn-accent, #0066cc);
+}
+.graph-slider input,
+.sound-volume {
+  accent-color: var(--mn-accent, #0066cc);
+}
+
+/* 聚焦环：对应 button-primary-focus —— 2px solid Focus Blue。
+   从外向内收一圈，比硬切一条线柔和。
+   刻意不写 fill-mode：动画跑完就还给 CSS，免得把 .row / .tab 的
+   outline-offset:-2px（贴在行内侧的那一圈）也一起钉死。 */
+:focus-visible {
+  outline: 2px solid var(--mn-focus, #0071e3);
+  outline-offset: 2px;
+  border-radius: var(--mn-radius-sm, 8px);
+  animation: pf-ring-in var(--pf-t) var(--pf-ease);
+}
+@keyframes pf-ring-in {
+  from { outline-offset: 6px; }
+  to { outline-offset: 2px; }
+}
+.row:focus-visible,
+.tab:focus-visible {
+  animation: none;
+}
+
+/* 输入框聚焦：边框染色 + 一圈柔光 */
+.mini-input:focus,
+.mini-select:focus,
+.prop-input:focus,
+.prop-select:focus,
+.list-input:focus,
+.tl-field input:focus,
+.tl-field select:focus {
+  box-shadow: none;
+  outline: 2px solid color-mix(in srgb, var(--mn-focus, #0071e3) 34%, transparent);
+  outline-offset: 0;
+  transition: border-color var(--pf-t) var(--pf-ease),
+              outline-color var(--pf-t) var(--pf-ease);
+}
+
+/* 图标在按钮里的那点小位移：只在带文字的键上生效 */
+/* 图标在按钮里的那点小位移：只在带文字的键上生效。
+   Apple 的按钮悬停不动位置，所以这里只做极轻的放大，不做位移。 */
+.mini-btn .icon,
+.tb-btn .icon,
+.rt-btn .icon,
+.te-btn .icon,
+.rt-tool .icon {
+  transition: transform var(--pf-t) var(--pf-ease-spring), color var(--pf-t) var(--pf-ease);
+}
+.mini-btn:hover .icon,
+.tb-btn:hover .icon,
+.rt-btn:hover .icon,
+.te-btn:hover .icon {
+  transform: scale(1.05);
+}
+
+/* ==========================================================================
+   5. 侧栏 / 标签页 / 面板 / 外壳
+   ========================================================================== */
+
+/* 侧栏树行：悬停时整行右移一点点，当前行左侧一道强调色 */
+.sb-tree .row {
+  position: relative;
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              border-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease),
+              translate var(--pf-t) var(--pf-ease);
+}
+.sb-tree .row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--mn-accent, #0066cc);
+  opacity: 0;
+  transform: scaleY(0.3);
+  transition: opacity var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.sb-tree .row:hover::before {
+  opacity: 0.4;
+  transform: scaleY(0.7);
+}
+.sb-tree .row.is-active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+.sb-tree .row:hover {
+  translate: 2px 0;
+}
+
+/* 折叠箭头：换向时蹦一下（行是重画的，动画自然重播） */
+.r-caret {
+  display: inline-grid;
+  place-items: center;
+  animation: pf-caret-in var(--pf-t) var(--pf-ease-spring) both;
+  transition: color var(--pf-t-micro) var(--pf-ease);
+}
+@keyframes pf-caret-in {
+  from { opacity: 0; scale: 0.5; }
+  to { opacity: 1; scale: 1; }
+}
+.row:hover .r-caret {
+  color: var(--mn-ink-muted, #525252);
+}
+
+/* 拖放目标：整行亮起来，而不是只描一道虚线 */
+.row.sb-drop,
+.sb-drop {
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 10%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--mn-accent, #0066cc) 55%, transparent);
+  outline-offset: -2px;
+  animation: pf-fade-in var(--pf-t-micro) var(--pf-ease) both;
+}
+
+/* 标签页：当前页签底部一道会"扫开"的强调色 */
+.panel-tabs .tab {
+  position: relative;
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease);
+}
+.panel-tabs .tab::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--mn-accent, #0066cc);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--pf-t) var(--pf-ease);
+}
+.panel-tabs .tab.is-active::after {
+  animation: pf-sweep-x var(--pf-t-pop) var(--pf-ease) both;
+}
+.tab .t-close {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  opacity: 0.35;
+  transition: opacity var(--pf-t-micro) var(--pf-ease),
+              background-color var(--pf-t-micro) var(--pf-ease),
+              transform var(--pf-t-micro) var(--pf-ease-spring);
+}
+.tab:hover .t-close {
+  opacity: 0.8;
+}
+.tab .t-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--mn-ink, #0a0a0a) 12%, transparent);
+  transform: scale(1.12);
+}
+.tab .t-close:active {
+  transform: scale(0.9);
+}
+
+/* 面板分割条：抓住时亮起来 */
+.panel-grip {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease);
+}
+.panel-grip:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mn-accent, #0066cc) 34%, transparent);
+}
+
+/* 顶栏 / 侧栏 / 工作区三张卡：进场时轻微浮起（它们是常驻外壳，不在 #panels 里） */
+.sidebar,
+.topbar,
+.workspace {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.sidebar { animation-delay: 40ms; }
+.workspace { animation-delay: 80ms; }
+
+/* 世界头像 / 用户头像：悬停时轻微放大 */
+.wc-avatar,
+.uc-avatar,
+.presence .pr {
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              box-shadow var(--pf-t) var(--pf-ease);
+}
+.world-chip:hover .wc-avatar,
+.user-chip:hover .uc-avatar {
+  transform: scale(1.06);
+  box-shadow: var(--pf-ring);
+}
+
+/* ==========================================================================
+   6. 内容面：卡片 / 表格 / 看板 / 画布 / 工具页
+   ========================================================================== */
+
+/* 卡片页：封面 / 工具页的图标块——这里只做悬停动效。
+   卡片和工具页都在 #panels 里，renderPanels() 会整块重建
+   （时间线拖动时每帧都重建），加入场动画就会每帧重放。 */
+.card-cover {
+  overflow: hidden;
+  transition: border-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease);
+}
+.card-cover img {
+  transition: transform var(--pf-t-panel) var(--pf-ease),
+              filter var(--pf-t) var(--pf-ease);
+}
+.card-cover:hover {
+  border-color: var(--mn-border-strong);
+}
+.card-cover:hover img {
+  transform: scale(1.02);
+}
+.cover-empty,
+.page-cover {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.cover-empty:hover {
+  border-color: color-mix(in srgb, var(--mn-accent, #0066cc) 45%, transparent);
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 6%, transparent);
+}
+
+/* 正文块：悬停时左边的工具条淡入并落下（响应式层已经把它改成 opacity 收放，
+   这里只补一点位移；注意它带 display:flex !important，别去碰 display） */
+.block {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease);
+}
+.block-tools {
+  translate: 0 -3px;
+  transition: opacity var(--pf-t) var(--pf-ease),
+              translate var(--pf-t) var(--pf-ease-spring);
+}
+.block:hover > .block-tools,
+.block:focus-within > .block-tools,
+.block-tools:focus-within {
+  translate: 0 0;
+}
+.block-tools button {
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease),
+              transform var(--pf-t-micro) var(--pf-ease-spring);
+}
+.block-tools button:hover {
+  color: var(--mn-ink);
+}
+/* 拖拽排序：落点用一条会呼吸的强调色线，而不是干巴巴一条 */
+.block.drop-before,
+.block.drop-after {
+  position: relative;
+}
+.block.drop-before::before,
+.block.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--mn-accent, #0066cc);
+  animation: pf-drop-line 900ms var(--pf-ease-inout) infinite alternate;
+}
+.block.drop-before::before { top: -3px; }
+.block.drop-after::after { bottom: -3px; }
+@keyframes pf-drop-line {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
+}
+.block.is-dragging {
+  opacity: 0.55;
+  transition: opacity var(--pf-t-micro) var(--pf-ease);
+}
+
+/* 表格：只做行悬停与单元格的"平时不描边"。
+   表头的字体/字重/字距归 apple.css 管——动效层不写排版，否则会盖掉设计语言。
+   注意：不碰 border-collapse / position:sticky，那两样会改动表格的盒模型，
+   而 .table-scroll 才是滚动容器，吸顶在这里本来也吸不住。 */
+.table-grid tbody tr {
+  transition: background-color var(--pf-t-micro) var(--pf-ease);
+}
+.table-grid tbody tr:hover {
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 5%, transparent);
+}
+.table-grid td {
+  border-bottom-color: color-mix(in srgb, var(--mn-border, #e4e4e7) 70%, transparent);
+  transition: border-color var(--pf-t-micro) var(--pf-ease);
+}
+.table-grid tbody tr:hover td {
+  border-bottom-color: color-mix(in srgb, var(--mn-accent, #0066cc) 22%, transparent);
+}
+/* 单元格里的输入框平时不描边，指上去才现出来——表格看着更干净 */
+.table-grid td .mini-input,
+.table-grid td .mini-select {
+  background: transparent;
+  border-color: transparent;
+}
+.table-grid td .mini-input:hover,
+.table-grid td .mini-select:hover {
+  background: var(--mn-surface, #fff);
+  border-color: var(--mn-border, #e4e4e7);
+}
+.table-grid td .mini-input:focus,
+.table-grid td .mini-select:focus {
+  background: var(--mn-surface, #fff);
+  border-color: var(--mn-ring, #3f3f46);
+}
+
+/* 看板：列悬停抬一点，卡片鼠标抓住时立起来 */
+.board-col {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease);
+}
+.board-col:hover {
+  border-color: var(--mn-border-strong, #d4d4d8);
+}
+.board-card:hover {
+  border-color: var(--mn-border-strong);
+  cursor: grab;
+}
+.board-card:active {
+  cursor: grabbing;
+  transform: scale(var(--pf-press));
+}
+
+/* 自由画布上的便签：拖起来的时候抬高 */
+.canvas-item {
+  transition: box-shadow var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              opacity var(--pf-t-micro) var(--pf-ease);
+}
+.canvas-item:hover {
+  border-color: var(--mn-border-strong, #d4d4d8);
+}
+/* 注意：.canvas-item 的 left/top 由 JS 每帧写，不能给它们加过渡 */
+.canvas-item.is-dragging {
+  opacity: 0.88;
+  border-color: var(--mn-accent);
+}
+.ci-del {
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease),
+              opacity var(--pf-t-micro) var(--pf-ease);
+  opacity: 0;
+}
+.canvas-item:hover .ci-del,
+.canvas-item:focus-within .ci-del {
+  opacity: 1;
+}
+.ci-del:hover {
+  background: color-mix(in srgb, var(--mn-danger, #cf001c) 14%, transparent);
+  color: var(--mn-danger, #cf001c);
+}
+
+/* 列表 / 待办：完成项划掉时有个过渡，勾选不再"啪"地一下 */
+.list-row {
+  transition: opacity var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.list-row.is-done {
+  transition: opacity var(--pf-t-panel) var(--pf-ease);
+}
+.list-row.is-done .list-input {
+  text-decoration-color: var(--mn-ink-dim, #858585);
+  transition: text-decoration-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease);
+}
+.list-row:hover {
+  border-color: var(--mn-border-strong, #d4d4d8);
+}
+
+/* 媒体卡：图片轻微推近 */
+.media-card {
+  overflow: hidden;
+}
+.media-card img {
+  transition: transform var(--pf-t-panel) var(--pf-ease);
+}
+.media-card:hover img {
+  transform: scale(1.03);
+}
+
+/* 图例、状态点：亮一下，表示"这是活的" */
+.radar-legend-item .rd-dot,
+.b-dot,
+.mm-dot,
+.presence .pr {
+  transition: transform var(--pf-t) var(--pf-ease-spring);
+}
+.radar-legend-item:hover .rd-dot {
+  transform: scale(1.25);
+}
+
+/* 图表本体：**这里刻意不做入场动画**。
+   时间线、图谱、雷达、看板、地图全都活在 #panels 里，而 renderPanels() 会把
+   #panels 整个清空重建——时间线拖动、滚轮缩放时每一帧都在重建。给这些元素加
+   animation，动画就会每帧从头开始，看上去是在抖，不是在动。
+   所以图表这一层只做"悬停/选中"的状态动效（鼠标不动就不会被重建打断）。 */
+
+/* 图谱节点：悬停时浮起来一点，连线也跟着淡出层次 */
+.graph-node circle {
+  transition: filter var(--pf-t) var(--pf-ease),
+              r var(--pf-t) var(--pf-ease);
+}
+.graph-node:hover circle {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.22));
+}
+/* 数字等宽（tabular-nums）属于排版，归 apple.css —— 动效层不写排版，
+   否则 .graph-stats 的宽度会被这一层改掉 3px。 */
+
+/* 地图针：悬停时抬起来（marker 的 left/top/transform 都由 JS 每帧写，别碰） */
+.map-marker .mm-pin {
+  transition: filter var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease);
+}
+.map-marker:hover .mm-pin {
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.32));
+}
+.map-marker.is-selected .mm-pin {
+  animation: pf-map-ping 1.8s var(--pf-ease-inout) infinite;
+}
+@keyframes pf-map-ping {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-accent, #0066cc) 45%, transparent), 0 4px 14px rgba(0, 0, 0, 0.5); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--mn-accent, #0066cc) 6%, transparent), 0 4px 14px rgba(0, 0, 0, 0.5); }
+}
+
+/* 时间轴上的事件点：选中的那一颗有很轻的呼吸圈，一眼看出"现在指的是它" */
+.tl-dot.is-selected {
+  animation: pf-dot-ping 1.8s var(--pf-ease-inout) infinite;
+}
+@keyframes pf-dot-ping {
+  0%, 100% { box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.92), 0 0 0 4px color-mix(in srgb, var(--mn-accent, #0066cc) 30%, transparent); }
+  50% { box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.92), 0 0 0 9px color-mix(in srgb, var(--mn-accent, #0066cc) 4%, transparent); }
+}
+.tl-dot:hover {
+  filter: brightness(1.25);
+}
+.tl-pill {
+  transition: border-color var(--pf-t-micro) var(--pf-ease),
+              background-color var(--pf-t-micro) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.tl-pill:hover {
+  border-color: var(--mn-border-strong);
+}
+.tl-era-band {
+  transition: filter var(--pf-t) var(--pf-ease);
+}
+.tl-era-band:hover {
+  filter: brightness(1.12);
+}
+
+/* ==========================================================================
+   7. 空状态 / 插画 / 滚动条 / 选区
+   ========================================================================== */
+/* 空状态：插画很轻地呼吸；标题与按钮依次浮现。
+   .empty-hint 是 .workspace 的直接子元素（不在 #panels 里），可以安心加入场；
+   .empty-block 活在面板里，会被 renderPanels() 重建，所以只留无限循环的呼吸。 */
+.empty-hint .eh-art,
+.empty-block .eb-art,
+.graph-empty .ge-art {
+  animation: pf-breathe 6s var(--pf-ease-inout) infinite;
+}
+.empty-hint h2 {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.empty-hint p {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+  animation-delay: 60ms;
+}
+.empty-hint .eh-actions {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+  animation-delay: 120ms;
+}
+.empty-block b,
+.empty-block p {
+  color: inherit;
+}
+/* 左侧引导模板卡：悬停时图标轻轻抬起 */
+.guide-card .gc-art,
+.tool-art {
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              color var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease);
+}
+.guide-card:hover .gc-art {
+  transform: translateY(-2px) scale(1.06);
+}
+
+/* 滚动条：细、圆、悬停变粗（WebKit + Firefox） */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--mn-ink, #0a0a0a) 22%, transparent) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--mn-ink, #0a0a0a) 18%, transparent);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  transition: background-color var(--pf-t) var(--pf-ease);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--mn-ink, #0a0a0a) 34%, transparent);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 选中文字：用强调色，但压得很淡，不抢正文 */
+::selection {
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 26%, transparent);
+  color: inherit;
+}
+
+/* 页面主体切主题时整体柔和过渡（世界主题切换不至于"闪"一下）。
+   支持 View Transitions 的浏览器由第 7 节末尾那段接管，这里是不支持时的兜底。 */
+body {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease);
+}
+
+/* ------------------------------------------------- 7b. 其余零散控件 */
+/* 分段控件（.seg）：滑块式的选中态 */
+.seg {
+  transition: border-color var(--pf-t) var(--pf-ease);
+}
+.seg-btn {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease),
+              transform var(--pf-t-micro) var(--pf-ease-spring);
+}
+.seg-btn:hover:not(.is-on) {
+  color: var(--mn-ink, #0a0a0a);
+  background: color-mix(in srgb, var(--mn-ink, #0a0a0a) 5%, transparent);
+}
+
+/* 日历：格子悬停亮一点，事件条按住缩一下 */
+.cal-cell {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.cal-cell:hover {
+  border-color: var(--mn-border-strong, #d4d4d8);
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 3%, var(--mn-surface, #fff));
+}
+.cal-event {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              transform var(--pf-t-micro) var(--pf-ease-spring);
+}
+.cal-event:hover {
+  background: color-mix(in srgb, var(--mn-accent, #0066cc) 24%, transparent);
+}
+.cal-event:active {
+  transform: scale(var(--pf-press));
+}
+
+/* 拖放区：东西拖到上面时整块亮起来 */
+.drop-zone {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.drop-zone.is-over {
+  transform: scale(1.005);
+}
+
+/* 发布状态点：只有"已发布且最新"才轻轻呼吸——一眼看出这份是活的 */
+.badge[data-state="live"] .b-dot,
+.state-chip[data-state="live"] .b-dot {
+  animation: pf-live 2.4s var(--pf-ease-inout) infinite;
+}
+@keyframes pf-live {
+  0%, 100% { opacity: 0.9; scale: 1; }
+  50% { opacity: 0.45; scale: 0.8; }
+}
+
+/* 谁在这里：头像外圈很轻地扩一下（表示"在线"），不做成刺眼的闪烁 */
+.presence .pr {
+  animation: pf-online 3.2s var(--pf-ease-inout) infinite;
+}
+.presence .pr:nth-child(2) { animation-delay: 0.4s; }
+.presence .pr:nth-child(3) { animation-delay: 0.8s; }
+.presence .pr:nth-child(4) { animation-delay: 1.2s; }
+@keyframes pf-online {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mn-accent, #0066cc) 34%, transparent); }
+  55% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mn-accent, #0066cc) 0%, transparent); }
+}
+
+/* 命令面板 / 选择器的输入框：聚焦时底线染成强调色 */
+.pl-box input:focus,
+.picker-head input:focus {
+  border-bottom-color: var(--mn-accent, #0066cc);
+  transition: border-color var(--pf-t) var(--pf-ease);
+}
+
+/* 换主题：支持 View Transitions 的浏览器走一次整页交叉溶解（由 workspace.js 的
+   applyThemeAnimated 触发），不支持的浏览器就是普通切换，没有任何副作用。
+   刻意让旧快照定住、只让新快照淡入——两张半透明叠在一起会发灰。 */
+::view-transition-old(root) {
+  animation: none;
+  opacity: 1;
+}
+::view-transition-new(root) {
+  animation: pf-view-in var(--pf-t-panel) var(--pf-ease) both;
+}
+@keyframes pf-view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ==========================================================================
+   8. 列表错峰
+   --------------------------------------------------------------------------
+   只给"一次渲染、之后不再跟着输入重画"的列表加错峰。
+   命令面板（.pl-item）和卡片选择器（.picker-row）每敲一个字就重建整列，
+   给它们加入场动画会变成每敲一下闪一次，所以那两个刻意排除在外。
+   ========================================================================== */
+:root {
+  --pf-stagger: 22ms;
+}
+.type-item,
+.suggest-row,
+.trash-row,
+.folder-row,
+.rt-template-item,
+.rt-relation-row,
+.rt-existing-row,
+.media-card,
+.dice-card,
+.hit,
+.era-event {
+  animation: pf-row-in var(--pf-t) var(--pf-ease) both;
+  animation-delay: calc(var(--pf-i, 0) * var(--pf-stagger));
+}
+.type-item:nth-child(1), .suggest-row:nth-child(1), .trash-row:nth-child(1),
+.folder-row:nth-child(1), .rt-template-item:nth-child(1),
+.rt-relation-row:nth-child(1), .rt-existing-row:nth-child(1),
+.media-card:nth-child(1), .dice-card:nth-child(1),
+.hit:nth-child(1), .era-event:nth-child(1) { --pf-i: 0; }
+.type-item:nth-child(2), .suggest-row:nth-child(2), .trash-row:nth-child(2),
+.folder-row:nth-child(2), .rt-template-item:nth-child(2),
+.rt-relation-row:nth-child(2), .rt-existing-row:nth-child(2),
+.media-card:nth-child(2), .dice-card:nth-child(2),
+.hit:nth-child(2), .era-event:nth-child(2) { --pf-i: 1; }
+.type-item:nth-child(3), .suggest-row:nth-child(3), .trash-row:nth-child(3),
+.folder-row:nth-child(3), .rt-template-item:nth-child(3),
+.rt-relation-row:nth-child(3), .rt-existing-row:nth-child(3),
+.media-card:nth-child(3), .dice-card:nth-child(3),
+.hit:nth-child(3), .era-event:nth-child(3) { --pf-i: 2; }
+.type-item:nth-child(4), .suggest-row:nth-child(4), .trash-row:nth-child(4),
+.folder-row:nth-child(4), .rt-template-item:nth-child(4),
+.rt-relation-row:nth-child(4), .rt-existing-row:nth-child(4),
+.media-card:nth-child(4), .dice-card:nth-child(4),
+.hit:nth-child(4), .era-event:nth-child(4) { --pf-i: 3; }
+.type-item:nth-child(5), .suggest-row:nth-child(5), .trash-row:nth-child(5),
+.folder-row:nth-child(5), .rt-template-item:nth-child(5),
+.rt-relation-row:nth-child(5), .rt-existing-row:nth-child(5),
+.media-card:nth-child(5), .dice-card:nth-child(5),
+.hit:nth-child(5), .era-event:nth-child(5) { --pf-i: 4; }
+.type-item:nth-child(6), .suggest-row:nth-child(6), .trash-row:nth-child(6),
+.folder-row:nth-child(6), .rt-template-item:nth-child(6),
+.rt-relation-row:nth-child(6), .rt-existing-row:nth-child(6),
+.media-card:nth-child(6), .dice-card:nth-child(6),
+.hit:nth-child(6), .era-event:nth-child(6) { --pf-i: 5; }
+.type-item:nth-child(7), .suggest-row:nth-child(7), .trash-row:nth-child(7),
+.folder-row:nth-child(7), .rt-template-item:nth-child(7),
+.rt-relation-row:nth-child(7), .rt-existing-row:nth-child(7),
+.media-card:nth-child(7), .dice-card:nth-child(7),
+.hit:nth-child(7), .era-event:nth-child(7) { --pf-i: 6; }
+.type-item:nth-child(n+8), .suggest-row:nth-child(n+8), .trash-row:nth-child(n+8),
+.folder-row:nth-child(n+8), .rt-template-item:nth-child(n+8),
+.rt-relation-row:nth-child(n+8), .rt-existing-row:nth-child(n+8),
+.media-card:nth-child(n+8), .dice-card:nth-child(n+8),
+.hit:nth-child(n+8), .era-event:nth-child(n+8) { --pf-i: 7; }
+
+/* ==========================================================================
+   8b. 顺手补上几个"有元素、没样式"的角落
+   --------------------------------------------------------------------------
+   这些 class 是 JS 真的会生成的，但四张表里一条规则都没有，元素在用浏览器
+   默认长相；顺手给它们一套和系统一致的写法，属于纯增量。
+   ========================================================================== */
+/* 发布记录里"谁改的"那一段：默认跟着行继承，这里只补一个更弱的颜色，
+   别动布局——.pl-diff 已经占了 margin-left:auto。 */
+.pl-who {
+  color: var(--mn-ink-dim, #858585);
+}
+/* 注意：地图标注里的 .mm-text 是 .kind-label 的子元素，字色/字体/描边
+   都已经从父级继承下来了，这里刻意不重复声明——父级按 marker.scale
+   算出来的字号会被子元素的固定 font-size 顶掉。 */
+/* 注意：.table-tool 是表格工具的**整体容器**（renderTableTool 建的那个 div），
+   不是"工具条上的按键"。它靠浏览器默认 display:block 撑着列向排版，
+   一旦给它写 display:flex 就会把工具条和表格并排——所以这里刻意不碰它。 */
+/* 注意：.panel-stage 是 JS 用来"寄存"嵌入 iframe 的容器，靠 hidden 属性收着，
+   所以这里**绝不能**给它写 display —— 会盖掉 [hidden] 的 display:none，
+   把寄存的 iframe 全放出来。放过它。 */
+
+/* 发布差异预览里两处写错的 token（--mn-line / --mn-ink-soft 根本没定义），
+   结果是边框整条失效、颜色回退到继承。这里按系统 token 补回来。 */
+.pp-group {
+  border: 1px solid var(--mn-border, #e4e4e7);
+}
+.pp-list li {
+  color: var(--mn-ink-muted, #525252);
+}
+
+/* ==========================================================================
+   9. 站点（site.css 之上）
+   --------------------------------------------------------------------------
+   site.css 里的 token 是"纸"那一套（--paper/--ink/--line/--site-primary），
+   和 minimal.css 的 --mn-* 不是一个体系，所以这一节只用 --pf-* 和站点自己的名字。
+   ========================================================================== */
+
+/* 导航：滚动时贴住，底色半透明 + 毛玻璃，下面那根线只在滚动后才明显 */
+.site-nav,
+body > .nav {
+  transition: box-shadow var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+body > .nav {
+  background: color-mix(in srgb, var(--paper-2, #fffdf8) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+}
+.nav-links a {
+  position: relative;
+  padding-bottom: 2px;
+  transition: color var(--pf-t) var(--pf-ease);
+}
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--ap-blue, #0066cc);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--pf-t) var(--pf-ease);
+}
+.nav-links a:hover {
+  text-decoration: none;
+  color: var(--ink, #23201a);
+}
+.nav-links a:hover::after {
+  transform: scaleX(1);
+}
+
+/* 输入框：聚焦时边框染色 + 柔光。若只瞬切边框色、又没有 outline，
+   聚焦几乎看不出来，所以这里同时上颜色过渡与 outline。 */
+.nav-search input,
+.search-inline input,
+.gate input {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.nav-search input:focus,
+.search-inline input:focus,
+.gate input:focus {
+  border-color: var(--mn-focus, #0071e3);
+  box-shadow: none;
+  outline: 2px solid color-mix(in srgb, var(--mn-focus, #0071e3) 34%, transparent);
+  outline-offset: 0;
+}
+
+/* 按钮：补上 hover / active / focus 状态 */
+.search-inline button,
+.gate button {
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              box-shadow var(--pf-t) var(--pf-ease),
+              filter var(--pf-t) var(--pf-ease);
+}
+.search-inline button:hover,
+.gate button:hover {
+  filter: brightness(1.06);
+}
+.search-inline button:focus-visible,
+.gate button:focus-visible,
+.fc-btn:focus-visible,
+.fc-item:focus-visible,
+.te-btn:focus-visible,
+.pager-btn:focus-visible,
+.era-pill:focus-visible {
+  outline: 2px solid var(--ap-blue, #0066cc);
+  outline-offset: 2px;
+}
+
+/* 卡片：抬起来 + 边缘染色，入场时按网格错峰浮起 */
+.tile {
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              border-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.grid .tile:nth-child(3n+2) { animation-delay: 45ms; }
+.grid .tile:nth-child(3n+3) { animation-delay: 90ms; }
+.tile:hover {
+  border-color: var(--mn-border-strong, #d2d2d7);
+  background: var(--mn-surface-muted, #fafafc);
+}
+.tile-cover {
+  transition: filter var(--pf-t) var(--pf-ease),
+              transform var(--pf-t-panel) var(--pf-ease);
+}
+.tile:hover .tile-cover {
+  filter: saturate(1.06);
+  transform: scale(1.015);
+}
+
+/* 筛选项：选中态不只加粗，还给底色；悬停时整行右移一点点 */
+.fc-menu {
+  animation: pf-drop-in var(--pf-t) var(--pf-ease) both;
+}
+.fc-item {
+  position: relative;
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease),
+              translate var(--pf-t) var(--pf-ease);
+}
+.fc-item.is-on {
+  background: color-mix(in srgb, var(--ap-blue, #0066cc) 10%, transparent);
+}
+.fc-item:hover {
+  translate: 2px 0;
+}
+.fc-caret {
+  transition: transform var(--pf-t) var(--pf-ease-spring);
+  display: inline-block;
+}
+.filter-chip:has(.fc-menu:not([hidden])) .fc-caret {
+  transform: rotate(180deg);
+}
+
+/* 纪元 pill：选中态给个实底 */
+.era-pill {
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease);
+}
+.era-pill.is-on {
+  border-color: color-mix(in srgb, currentColor 42%, transparent);
+  background: color-mix(in srgb, currentColor 10%, var(--surface, #fff));
+}
+
+/* 搜索结果：命中项入场 + 关键词高亮有个底色渐入 */
+.hit {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.hit:hover {
+  background: color-mix(in srgb, var(--ap-blue, #0066cc) 3%, transparent);
+}
+.hit-snippet mark {
+  border-radius: 3px;
+  animation: pf-mark-in var(--pf-t-panel) var(--pf-ease) both;
+}
+@keyframes pf-mark-in {
+  from { background-color: transparent; }
+  to { background-color: #f6e7a8; }
+}
+
+/* 关系 / 事件行：悬停时左侧滑出一条短线（只位移，不改内边距，避免行内文字重排） */
+.related li,
+.era-event {
+  position: relative;
+  transition: translate var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease);
+}
+.related li::before,
+.era-event::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  width: 0;
+  height: 1px;
+  background: var(--ap-blue, #0066cc);
+  transition: width var(--pf-t) var(--pf-ease);
+}
+.related li:hover,
+.era-event:hover {
+  translate: 10px 0;
+}
+.related li:hover::before,
+.era-event:hover::before {
+  left: -10px;
+  width: 8px;
+}
+
+/* 正文里的引用块 / 提示块 */
+.callout {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.page blockquote {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease);
+}
+.page blockquote:hover {
+  border-left-color: var(--ap-blue, #0066cc);
+}
+
+/* 属性表：行悬停时给一点底色，读长表不串行 */
+.props tr {
+  transition: background-color var(--pf-t-micro) var(--pf-ease);
+}
+.props tr:hover {
+  background: color-mix(in srgb, var(--ap-blue, #0066cc) 4%, transparent);
+}
+
+/* 嵌入的时间线 / 画布：出现时浮上来 */
+.timeline-embed,
+.canvas-embed {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.te-dock {
+  transition: opacity var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.te-btn,
+.te-dock-btn {
+  transition: background-color var(--pf-t-micro) var(--pf-ease),
+              color var(--pf-t-micro) var(--pf-ease),
+              border-color var(--pf-t-micro) var(--pf-ease),
+              transform var(--pf-t-micro) var(--pf-ease-spring);
+}
+.te-dock-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* 分页 / 底部 */
+.pager-btn {
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              border-color var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.pager-btn:hover {
+  border-color: var(--ap-blue, #0066cc);
+  background: color-mix(in srgb, var(--ap-blue, #0066cc) 6%, transparent);
+}
+
+/* 密码门 */
+.gate {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.gate-error {
+  animation: pf-pop-in var(--pf-t) var(--pf-ease) both;
+}
+
+/* ==========================================================================
+   10. 关系树（relationship.css 之上）
+   --------------------------------------------------------------------------
+   硬约束：.rt-grid / .rt-node / .rt-canvas-wrap 的几何与 transform 是 JS 每帧
+   在写的（拖动、滚轮缩放、点阵平移），这里一律不碰。只做颜色、透明度、
+   阴影、以及卡片内部与按钮的微动。
+   ========================================================================== */
+
+/* 工具栏 / 按钮 / 菜单：和主工作区同一套手感 */
+.rt-btn,
+.rt-tool,
+.rt-back,
+.rt-topbar-back,
+.rt-relation-btn,
+.rt-add-relation,
+.rt-template-item,
+.rt-existing-row,
+.rt-zoom button,
+.rt-menu button,
+.rt-pop-item,
+.rt-pop-add,
+.rt-pop-row,
+.rt-card-tools button {
+  transition: background-color var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring),
+              opacity var(--pf-t) var(--pf-ease);
+}
+.rt-zoom button:hover,
+.rt-back:hover,
+.rt-topbar-back:hover,
+.rt-relation-btn:hover {
+  transform: translateY(-1px);
+}
+.rt-zoom button:active,
+.rt-back:active,
+.rt-topbar-back:active,
+.rt-relation-btn:active {
+  transform: scale(var(--pf-press));
+}
+.rt-btn:focus-visible,
+.rt-tool:focus-visible,
+.rt-template-item:focus-visible,
+.rt-existing-row:focus-visible,
+.rt-zoom button:focus-visible,
+.rt-relation-btn:focus-visible,
+.rt-back:focus-visible,
+.rt-topbar-back:focus-visible,
+.rt-card-tools button:focus-visible {
+  outline: 2px solid var(--mn-focus, #0071e3);
+  outline-offset: 2px;
+}
+
+/* 模板选择：图标在悬停时轻轻弹一下，当前项给一圈强调色 */
+.rt-template-item .rt-template-icon {
+  transition: transform var(--pf-t) var(--pf-ease-spring),
+              background-color var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease);
+}
+.rt-template-item:hover .rt-template-icon {
+  transform: translateY(-2px) scale(1.05);
+}
+.rt-template-item.is-active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mn-accent, #0066cc) 22%, transparent);
+}
+
+/* 关系行：关掉的那条滑动到半透明 */
+.rt-relation-row {
+  transition: opacity var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease);
+}
+.rt-relation-row:hover {
+  border-color: color-mix(in srgb, var(--mn-accent, #0066cc) 30%, var(--mn-border, #e4e4e7));
+}
+
+/* 画布上的卡片：选中 / 拖放 / 悬停都用"外圈"表达，不动几何尺寸 */
+.rt-card {
+  transition: border-color var(--pf-t) var(--pf-ease),
+              box-shadow var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease);
+}
+.rt-node:not(.is-empty) .rt-card:hover {
+  border-color: color-mix(in srgb, var(--mn-accent, #0066cc) 34%, var(--mn-border-strong, #d4d4d8));
+}
+.rt-node.is-selected .rt-card {
+  box-shadow: var(--rt-ring, 0 0 0 3px rgba(37, 99, 239, 0.2)),
+              0 10px 26px -12px rgba(0, 0, 0, 0.35);
+}
+.rt-node.is-drop-target .rt-card {
+  animation: pf-drop-pulse 700ms var(--pf-ease-inout) infinite alternate;
+}
+@keyframes pf-drop-pulse {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mn-accent, #0066cc) 30%, transparent); }
+  to { box-shadow: 0 0 0 6px color-mix(in srgb, var(--mn-accent, #0066cc) 0%, transparent); }
+}
+/* 空卡片的"＋"：悬停放大 */
+.rt-node.is-empty .rt-card::after {
+  transition: transform var(--pf-t) var(--pf-ease-spring);
+}
+.rt-node.is-empty .rt-card:hover::after {
+  transform: scale(1.14);
+}
+
+/* 端口手柄：scale 用弹簧曲线到位，而不是硬切 */
+.rt-handle {
+  transition: opacity var(--pf-t) var(--pf-ease),
+              background-color var(--pf-t) var(--pf-ease),
+              border-color var(--pf-t) var(--pf-ease),
+              color var(--pf-t) var(--pf-ease),
+              transform var(--pf-t) var(--pf-ease-spring);
+}
+.rt-handle:hover {
+  transform: translate(-50%, -50%) scale(1.14);
+}
+.rt-handle:active {
+  transform: translate(-50%, -50%) scale(var(--pf-press));
+}
+
+/* 连线：悬停染色（只动 stroke 颜色与宽度，d 由 JS 每帧重写）。
+   虚线连线保持静止——Minimal 的克制在于"结构安静"，让线跑起来太吵。 */
+.rt-edge {
+  transition: stroke var(--pf-t-micro) var(--pf-ease),
+              stroke-width var(--pf-t-micro) var(--pf-ease);
+}
+
+/* 屏幕切换：从选择页到编辑页时整块浮上来（不碰画布尺寸） */
+.rt-screen {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.rt-side {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.rt-topbar {
+  animation: pf-fade-in var(--pf-t) var(--pf-ease) both;
+}
+/* 模板预览画布（不是编辑器那一块）可以安心做几何动画 */
+.rt-stage-canvas > .rt-grid {
+  transition: transform var(--pf-t-panel) var(--pf-ease);
+}
+.rt-stage-canvas {
+  animation: pf-fade-in var(--pf-t-panel) var(--pf-ease) both;
+}
+
+/* 错误页：图标轻轻转一下，别让"打不开"显得像崩了 */
+.rt-error {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+.rt-error-glyph {
+  animation: pf-pin-in var(--pf-t-panel) var(--pf-ease-spring) both;
+}
+
+/* 保存状态：忙碌时有个小呼吸，读起来像"正在进行" */
+.rt-save.is-busy {
+  animation: pf-breathe 1.6s var(--pf-ease-inout) infinite;
+}
+
+/* 空提示：原地浮一下 */
+.rt-empty-hint {
+  animation: pf-rise-in var(--pf-t-panel) var(--pf-ease) both;
+}
+
+/* 关系树的浮层与提示条 */
+.rt-menu,
+.rt-relations-pop,
+.rt-card-tools {
+  animation: pf-drop-in var(--pf-t) var(--pf-ease) both;
+}
+.rt-toast {
+  animation: pf-toast-in var(--pf-t-panel) var(--pf-ease-spring) both;
+}
+
+/* 输入中的名字 / 便签：淡入，避免"啪"地出现 */
+.rt-name-input,
+.rt-note-input {
+  animation: pf-fade-in var(--pf-t-micro) var(--pf-ease) both;
+}
+
+/* ==========================================================================
+   11. 无障碍：系统要求减少动效时，全部让路
+   --------------------------------------------------------------------------
+   responsive.css 覆盖工作区；这一份覆盖站点页与关系树页。
+   .te-frame 的高度过渡是真实布局变化，保留。
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.te-frame),
+  *:not(.te-frame)::before,
+  *:not(.te-frame)::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* 动画被压成 0 之后，靠 animation 撑着的"终态"要手动补回来 */
+  .md-box, .pl-box, .picker-box, .comment-pop, .format-bar, .fb-actions,
+  .fb-menu, .fb-wrap, .mention-pop, .date-pop, .block-menu, .ctx,
+  .rt-menu, .rt-relations-pop, .rt-card-tools, .fc-menu, .palette, .modal,
+  .toast, .rt-toast, .type-grid, .guide-grid, .sidebar, .topbar, .workspace,
+  .r-caret, .sb-drop, .empty-hint h2, .empty-hint p, .empty-hint .eh-actions,
+  .type-item, .suggest-row, .trash-row, .folder-row, .rt-template-item,
+  .rt-relation-row, .rt-existing-row, .media-card, .dice-card, .hit,
+  .era-event, .tile, .rt-screen, .rt-side, .rt-topbar, .rt-stage-canvas,
+  .rt-error, .rt-error-glyph, .rt-empty-hint, .timeline-embed, .canvas-embed,
+  .gate, .gate-error, .rt-name-input, .rt-note-input {
+    animation: none !important;
+  }
+  .rt-edge--dashed,
+  .rt-node.is-drop-target .rt-card,
+  .seg-btn,
+  .presence .pr,
+  .badge[data-state="live"] .b-dot,
+  .state-chip[data-state="live"] .b-dot,
+  .tl-dot.is-selected,
+  .map-marker.is-selected .mm-pin,
+  .block.drop-before::before,
+  .block.drop-after::after,
+  .rt-save.is-busy,
+  .empty-hint .eh-art,
+  .empty-block .eb-art,
+  .graph-empty .ge-art {
+    animation: none !important;
+  }
+}

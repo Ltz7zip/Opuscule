@@ -1,0 +1,29 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>出了点问题 · 500</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射变量，必须最后加载；删掉即回滚 -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+</head>
+<body class="xp-standalone">
+  {% comment %}错误状态：不丢裸错误给用户——说清楚发生了什么，给一条重试的路。{% endcomment %}
+  <main class="xp-standalone-box">
+    <p class="miss-kicker">500 · 服务端出错</p>
+    <h1 class="miss-code">这一页没渲染出来</h1>
+    <p class="xp-standalone-sub">
+      错不在你。可能是这一次请求踩到了服务端的坑，重试通常就好了。<br />
+      你的内容还在库里，没有被写坏。
+    </p>
+    <div class="xp-empty-acts">
+      <a class="te-btn" href="javascript:location.reload()">重试</a>
+      <a class="te-btn" href="/">回到工作区</a>
+    </div>
+    <p class="miss-hint">如果一直是这样：看一下服务端日志（开发模式下 <code>manage.py runserver</code> 的那个终端）。</p>
+  </main>
+</body>
+</html>

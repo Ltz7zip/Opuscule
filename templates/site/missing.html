@@ -1,0 +1,45 @@
+{% extends "site/base.html" %}
+{% block title %}{% if removed %}这一页已经不在了{% else %}信号丢失{% endif %} · {{ world.name }}{% endblock %}
+{% block content %}
+  {% if removed %}
+    {% comment %}
+      已删除文档：不说"404"，说清楚"这儿原来有什么、现在去哪找"。
+      能走到这里说明 slug 在库里还对得上号，只是它没发布 / 被隐藏 / 进了回收站。
+    {% endcomment %}
+    <section class="xp-empty">
+      <p class="miss-kicker">这一页已经不在站点上了</p>
+      <h2 class="glitch" data-text="{{ ghost_name }}">{{ ghost_name }}</h2>
+      <p>它可能被移出了发布范围，或者作者正在改写。世界本身还在——下面是它附近还开着的门。</p>
+    </section>
+
+    {% if related %}
+      <section class="section">
+        <h2>你可能在找</h2>
+        <div class="grid">
+          {% for item in related %}
+            <a class="tile" href="{% url 'site:page' world.published_slug item.slug %}">
+              <span class="tile-kind">{{ item.reason }}</span>
+              <span class="tile-name">{{ item.name }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  {% else %}
+    {% comment %}404：信号丢失风格——glitch 的 404 + 搜索框 + 回首页{% endcomment %}
+    <section class="xp-empty">
+      <p class="miss-kicker">404 · 信号丢失</p>
+      <h2 class="glitch miss-code" data-text="404">404</h2>
+      <p>这个地址没有对应的内容。可能是链接抄错了一个字，也可能是它从来没在这里存在过。</p>
+    </section>
+  {% endif %}
+
+  <form class="search-inline" method="get" action="{% url 'site:search' world.published_slug %}">
+    <input type="search" name="q" placeholder="在这个世界里搜一下…" value="" />
+    <button type="submit">搜索</button>
+  </form>
+
+  <p class="miss-acts">
+    <a class="te-btn" href="{% url 'site:home' world.published_slug %}">回到 {{ world.name }} 首页</a>
+  </p>
+{% endblock %}

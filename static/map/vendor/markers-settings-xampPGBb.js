@@ -1,0 +1,13 @@
+import{Jn as e,P as t}from"./utils-BmikVS3h.js";import{t as n}from"./layers-BxIfJwH8.js";import{i as r}from"./emblems-generator-BjakVvgH.js";import{i}from"./tooltips-BXzxW7Tn.js";import{t as a}from"./controllers-ruU_lk_t.js";import{c as o,i as s}from"./dialog-helpers-B3U8so3J.js";var c=`markersSettings`;function l(){customization||(s(c),t(`dialogs`).insertAdjacentHTML(`beforeend`,`<div id="${c}" class="dialog"></div>`),d(),$(`#${c}`).dialog({resizable:!1,title:`Markers generation settings`,maxHeight:600,position:{my:`left top`,at:`left+10 top+10`,of:`svg`,collision:`fit`},buttons:{Regenerate:()=>{u(),Markers.regenerate(),n.draw(`markers`),o(),d()},Close:function(){$(this).dialog(`close`)}},open:function(){let e=$(this).dialog(`widget`).find(`.ui-dialog-buttonset > button`);e[0].addEventListener(`mousemove`,()=>i(`Apply changes and regenerate markers`)),e[1].addEventListener(`mousemove`,()=>i(`Close the window`))},close:f}))}function u(){let e=t(c).querySelectorAll(`tbody > tr`),n=Array.from(e).map(e=>{let t=e.querySelector(`.type`),n=e.querySelector(`.changeIcon`),r=e.querySelector(`.multiplier`);if(!t||!n||!r)throw Error(`Invalid markers configuration row`);return{type:t.value,icon:n.dataset.icon??``,multiplier:r.valueAsNumber}});Markers.setConfig(Markers.getConfig().map((e,t)=>({...e,...n[t]})))}function d(){let n=Markers.getConfig().map(({type:t,icon:n,multiplier:i})=>`<tr>
+      <td><input class="type" value="${t}" /></td>
+      <td>
+        <button class="changeIcon" data-icon="${e(n)}" data-tip="Change the icon" style="font-size: 1.2em">${r.html(n)}</button>
+      </td>
+      <td><input class="multiplier" type="number" min="0" max="100" step="0.1" value="${i}" /></td>
+      <td style="text-align:center">${pack.markers.filter(e=>e.type===t).length}</td>
+    </tr>`),i=t(c);i.innerHTML=`<table class="table"><thead style='font-weight:bold'><tr>
+    <td data-tip="Marker type name">Type</td>
+    <td data-tip="Marker icon">Icon</td>
+    <td data-tip="Marker number multiplier">Multiplier</td>
+    <td data-tip="Number of markers of that type on the current map">Number</td>
+  </tr></thead><tbody>${n.join(``)}</tbody></table>`,i.querySelectorAll(`button.changeIcon`).forEach(e=>{e.addEventListener(`click`,()=>{a.IconPicker.open({current:e.dataset.icon??``,onPick:t=>{e.dataset.icon=t,e.innerHTML=r.html(t)}})})})}function f(){s(c)}var p={open:l};export{p as MarkersSettings};

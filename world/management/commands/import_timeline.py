@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""把上一轮 ``timeline`` 应用的扁平数据迁进新的世界模型。
+"""把 ``timeline`` 应用的扁平条目迁进 ``world`` 的世界模型。
 
 映射关系：
 
@@ -25,13 +25,9 @@ from world.models import (
     CAL_EARTH,
     DOC_CARD,
     DOC_TIMELINE,
-    Calendar,
-    Card,
-    Document,
-    Era,
-    TimelineEvent,
     World,
 )
+from documents.models import Calendar, Card, Document, Era, TimelineEvent
 
 
 def split_year(value: float) -> tuple[int, int]:

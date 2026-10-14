@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
-"""写操作守门人：登录 + 有编辑权限才放行。
+"""请求级的世界作用域 + 读 / 写守门人。
 
-放在中间件里统一拦，而不是给每个视图挂装饰器——写接口太多（卡片、事件、地图、
-关系树、类型、导入…），漏一个就是一个洞。白名单见 permissions.OPEN_WRITE_PREFIXES。
+* ``ActiveWorldMiddleware``：每个请求进来先解析"当前世界"（会话选定 → 自己的第一个
+  世界 → 兜底），写进 contextvar，请求结束复位。全站 ``current_world()`` 都读它，
+  所以多世界不需要改那 87 处调用。
+* ``ReadPermissionMiddleware``：读 ``/api/world/*`` 要登录 + 是那个世界的成员；
+  只给"发布站点的只读嵌入"开一个口子（游客带 ``?embed=<已发布文档>``）。
+* ``EditPermissionMiddleware``：登录 + 有编辑权限才放行写操作。两者都放在世界作用域
+  之后，才对着"正确的那一个世界"判权限。守门逻辑见 ``permissions``。
 """
 
 from __future__ import annotations
@@ -17,6 +22,44 @@ PROTECTED_PREFIXES = (
     "/api/view",
 )
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+READ_METHODS = {"GET", "HEAD"}
+#: 读守门人只守工作区自己的接口；``/api/items``、``/api/view`` 是经典时间线 demo
+#: 模型（与任何世界数据无关），不在此列。
+READ_PROTECTED_PREFIX = "/api/world/"
+
+
+class ActiveWorldMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        world = permissions.resolve_active_world(request)
+        token = permissions.set_active_world(world)
+        try:
+            return self.get_response(request)
+        finally:
+            permissions.reset_active_world(token)
+
+
+class ReadPermissionMiddleware:
+    """读守门人：``/api/world/`` 下的 GET/HEAD 要登录且在那个世界里。
+
+    例外只有一处——发布站点的只读嵌入：游客带着 ``?embed=<已发布文档>`` 能读那一篇
+    （见 ``permissions.allow_public_read``），其余一律拦下。未登录回 401（带
+    ``need_login``，前端据此弹登录），已登录但不在这个世界回 403。
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method in READ_METHODS and request.path.startswith(READ_PROTECTED_PREFIX):
+            world = permissions.current_world_or_none()
+            if not permissions.can_read(request.user, world) and not permissions.allow_public_read(request):
+                if not request.user or not request.user.is_authenticated:
+                    return JsonResponse({"error": "请先登录", "need_login": True}, status=401)
+                return JsonResponse({"error": "你不在这个世界里"}, status=403)
+        return self.get_response(request)
 
 
 class EditPermissionMiddleware:

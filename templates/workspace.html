@@ -1,22 +1,60 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>世界工作区</title>
   <link rel="manifest" href="{% static 'manifest.webmanifest' %}" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#121110" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0b08'/%3E%3Cpath d='M6 20c4-6 8-6 12 0s6 4 8 2' stroke='%23e0a83c' stroke-width='2' fill='none'/%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  <!-- 首屏关键资源提前建连 / 预加载（DESIGN.md）：字体是系统字体，所以只预载样式壳 -->
+  <link rel="preload" as="style" href="{% static 'workspace.css' %}?v={{ static_version }}" />
+  <link rel="preload" as="style" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <!-- 启动屏只在"本次会话第一次进来"时显示：由这一位决定，避免加载完再决定造成闪一下 -->
+  <script>
+    (function () {
+      try {
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced || sessionStorage.getItem('opus.splash') === '1') return;
+        document.documentElement.classList.add('xp-splash');
+        sessionStorage.setItem('opus.splash', '1');
+      } catch (error) { /* 隐私模式：不显示启动屏就是了 */ }
+    })();
+  </script>
   <link rel="stylesheet" href="{% static 'workspace.css' %}?v={{ static_version }}" />
   <!-- Minimal 设计语言（桌面 Minimalist 设计系统的 token：灰阶主色 / 12-16px 圆角 / 4px 栅格 / 扁平） -->
   <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
   <!-- 响应式 / 动效 / 空状态 / 无障碍 -->
   <link rel="stylesheet" href="{% static 'responsive.css' %}?v={{ static_version }}" />
-  <!-- 外壳：悬浮圆角面板（留白 / 圆角 / 缝隙 / 按钮不许被挤扁）——最后加载，只改壳 -->
+  <!-- 外壳：悬浮圆角面板（留白 / 圆角 / 缝隙 / 按钮不许被挤扁）——只改壳 -->
   <link rel="stylesheet" href="{% static 'shell.css' %}?v={{ static_version }}" />
+  <!-- Apple 皮肤层：定义 --ap-* 原始调色板，取值随后被 terminal.css 整体覆盖 -->
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <!-- 现代终端设计语言（仓库根目录 DESIGN.md）—— 全站外观权威：把前几层的语义 token 整体
+       重映射到终端取值，并覆写硬编码色 / 等宽元素 / 装饰手法。合成 VoltAgent 的近黑+电光绿、
+       Ollama 的等宽眉标、Warp 的暖调与紧圆角 -->
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <!-- 动效与观感收尾：统一时长/曲线、浮层出入场、控件微交互 -->
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <!-- 全链路体验层（仓库根目录 DESIGN.md）：启动屏 / 骨架屏 / 切换动效 / 分级提示 / 离线 / 无障碍 -->
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射 --tx-* 等变量、不碰页面结构；
+       靠"变量使用时求值"在最后统一改写取值。删掉这一行即可回滚。取值见 DESIGN.md -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
 </head>
-<body{% if embed_doc %} class="is-embed" data-embed-doc="{{ embed_doc }}" data-embed-readonly="{{ embed_readonly|yesno:'1,0' }}"{% endif %}>
+<body data-surface="workspace" data-sw="{% if sw_enabled %}1{% else %}0{% endif %}" data-sw-version="{{ static_version }}"{% if embed_doc %} class="is-embed" data-embed-doc="{{ embed_doc }}" data-embed-readonly="{{ embed_readonly|yesno:'1,0' }}"{% endif %}>
+  <!-- 启动屏（DESIGN.md）：标记写在首帧里，要不要显示由 <html class="xp-splash"> 决定 -->
+  <div class="osplash" id="osplash" role="status" aria-live="polite">
+    <svg class="osplash-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <circle class="osm-ring" cx="16" cy="16" r="9.6" fill="none" stroke="#f4f2ee" stroke-width="1.4" />
+      <path class="osm-tri" d="M16 8.4 22.6 19.8H9.4Z" fill="none" stroke="#3ddc97" stroke-width="1.4"
+            stroke-linejoin="round" stroke-linecap="round" />
+      <circle class="osm-node" cx="16" cy="16" r="2.5" fill="#3ddc97" />
+    </svg>
+    <p class="osplash-text"><b>&gt;</b> 正在连接世界<span class="osplash-caret" aria-hidden="true"></span></p>
+    <div class="osplash-bar" aria-hidden="true"><i></i></div>
+  </div>
   <!-- 世界主题（字体 / 主色 / 颗粒）由 JS 从 /api/world/state 读出来写进 :root -->
   <div class="grain" id="grain" aria-hidden="true"></div>
 
@@ -25,18 +63,12 @@
     <!-- ---------------------------------------------------------------- 顶栏 -->
     <header class="topbar">
       <div class="tb-side">
-        <button class="world-chip" id="worldChip" type="button" title="世界菜单" aria-label="世界菜单">
-          <span class="wc-avatar" id="worldAvatar">·</span>
-          <span class="wc-name" id="worldName">载入中…</span>
-        </button>
+        {# 顶栏左侧：当前页面的图标 + 名字 #}
+        <span class="tb-crumb" id="tbCrumb" hidden>
+          <span class="crumb-icon" id="crumbIcon" aria-hidden="true"></span>
+          <span class="crumb-name" id="crumbName"></span>
+        </span>
       </div>
-
-      <nav class="tb-nav" id="tbNav">
-        <button class="tb-view is-active" type="button" data-nav="world">世界</button>
-        <button class="tb-view" type="button" data-nav="wiki">维基</button>
-        <button class="tb-view" type="button" data-nav="new-timeline">新建 Timeline</button>
-        <button class="tb-view" type="button" data-nav="new-card">新建卡片</button>
-      </nav>
 
       <div class="tb-side tb-right">
         <button class="tb-btn is-icon" id="sidebarBtn" type="button" title="收起 / 展开侧栏（⌘B）">侧栏</button>
@@ -44,13 +76,9 @@
         <button class="tb-btn is-icon" id="redoBtn" type="button" title="重做（⇧⌘Z）" disabled>重做</button>
         <span class="tb-divider"></span>
         <button class="tb-btn" id="paletteBtn" type="button" title="命令面板">⌘K</button>
-        <button class="tb-btn" id="suggestBtn" type="button" title="值得添加的东西">建议</button>
-        <button class="tb-btn" id="exchangeBtn" type="button" title="导入 / 导出">导入导出</button>
-        <button class="tb-btn" id="typesBtn" type="button">类型</button>
-        <button class="tb-btn" id="erasBtn" type="button">纪元</button>
-        <button class="tb-btn" id="themeBtn" type="button">主题</button>
-        <button class="tb-btn" id="trashBtn" type="button">回收站</button>
         <span class="tb-divider"></span>
+        <span class="save-state" id="saveState" role="status" aria-live="polite" data-kind="saved"
+              title="有改动会先落本地，再写回世界"><i></i><span id="saveStateText">已保存</span></span>
         <span class="era-slot" id="eraChipSlot"></span>
         <div class="presence" id="presence" aria-label="谁在这里"></div>
         <button class="user-chip" id="userChip" type="button" aria-label="账号菜单">
@@ -63,6 +91,13 @@
     <!-- ---------------------------------------------------------- 侧栏 + 工作区 -->
     <div class="body">
       <aside class="sidebar" id="sidebar">
+        {# 侧栏顶部：当前工作区切换器 #}
+        <div class="sb-world">
+          <button class="world-chip" id="worldChip" type="button" title="世界菜单" aria-label="世界菜单">
+            <span class="wc-avatar" id="worldAvatar">·</span>
+            <span class="wc-name" id="worldName">载入中…</span>
+          </button>
+        </div>
         <div class="sb-head">
           <div class="sb-search">
             <input id="sbSearch" type="search" placeholder="搜索文档…" autocomplete="off" />
@@ -70,12 +105,50 @@
           </div>
           <button class="sb-icon" id="sbMenu" type="button" title="展开 / 折叠全部">⇕</button>
         </div>
-        <div class="sb-tree" id="sbTree" role="tree"></div>
-        <!-- 底部三个动作：宽侧栏是"图标 + 文字"，窄侧栏只剩图标（title 里还写着全名） -->
-        <div class="sb-foot">
-          <button class="sb-new" id="newDocBtn" type="button" title="新建文档">＋ 新建文档</button>
-          <button class="sb-new sb-new-ghost" id="newFolderBtn" type="button" title="新建文件夹">＋ 文件夹</button>
-          <button class="sb-new sb-new-ghost" id="templateBtn" type="button" title="用引导模板新建（角色 / 地点 / 事件）">模板</button>
+
+        {# 侧栏顶部的视图药丸（用 #tbNav / data-nav，JS 直接读这两个钩子） #}
+        <nav class="sb-pills" id="tbNav" aria-label="视图切换">
+          <button class="tb-view is-active" type="button" data-nav="world">世界</button>
+          <button class="tb-view" type="button" data-nav="wiki">维基</button>
+        </nav>
+
+        {# 「设置你的工作空间」进度卡：4 项检查由当前世界数据推导 #}
+        <button class="sb-setup" id="sbSetup" type="button">
+          <span class="su-line"><b>设置你的工作空间</b><span class="su-count" id="suCount">0 / 4</span></span>
+          <span class="su-bar" aria-hidden="true"><i id="suBar" style="width:0%"></i></span>
+          <span class="su-list" id="suList"></span>
+        </button>
+
+        <div class="sb-tree" id="sbTree" role="tree">
+          <!-- 骨架屏（DESIGN.md）：首帧就在，boot() 拿到文档树后 renderTree() 会把它换掉 -->
+          <div class="sk-tree xp-skel-wait" data-skeleton="tree" aria-hidden="true">
+            <div class="skt-row"><div class="sk skt-box"></div><div class="sk skt-line" style="width:52%"></div></div>
+            <div class="skt-row"><div class="sk skt-box"></div><div class="sk skt-line" style="width:71%"></div></div>
+            <div class="skt-row" style="--d:1"><div class="sk skt-box"></div><div class="sk skt-line" style="width:44%"></div></div>
+            <div class="skt-row" style="--d:1"><div class="sk skt-box"></div><div class="sk skt-line" style="width:63%"></div></div>
+            <div class="skt-row"><div class="sk skt-box"></div><div class="sk skt-line" style="width:38%"></div></div>
+            <div class="skt-row" style="--d:2"><div class="sk skt-box"></div><div class="sk skt-line" style="width:57%"></div></div>
+            <div class="skt-row" style="--d:2"><div class="sk skt-box"></div><div class="sk skt-line" style="width:46%"></div></div>
+            <div class="skt-row"><div class="sk skt-box"></div><div class="sk skt-line" style="width:69%"></div></div>
+          </div>
+        </div>
+        {% comment %}底部：宽胶囊（新建文档 ⌘N）+ 一个圆形「更多」按钮。动作列表（建议 / 导入导出 / 类型 / 纪元 / 主题 / 回收站）与「文件夹 / 模板」都收进这个圆形按钮的浮层里，不铺在侧栏上。{% endcomment %}
+        <div class="sb-dock">
+          <div class="sb-menu" id="sbMenuPop" hidden>
+            <button class="sb-act" id="newFolderBtn" type="button" title="新建文件夹">＋ 文件夹</button>
+            <button class="sb-act" id="templateBtn" type="button" title="用引导模板新建（角色 / 地点 / 事件）">模板</button>
+            <button class="sb-act" id="suggestBtn" type="button" title="值得添加的东西">建议</button>
+            <button class="sb-act" id="exchangeBtn" type="button" title="导入 / 导出">导入导出</button>
+            <button class="sb-act" id="typesBtn" type="button">类型</button>
+            <button class="sb-act" id="erasBtn" type="button">纪元</button>
+            <button class="sb-act" id="themeBtn" type="button">主题</button>
+            <button class="sb-act" id="trashBtn" type="button">回收站</button>
+          </div>
+          <div class="sb-foot">
+            <button class="sb-new" id="newDocBtn" type="button" title="新建文档">＋ 新建文档</button>
+            <button class="sb-compose" id="sbComposeBtn" type="button" title="更多" aria-label="更多"
+                    aria-expanded="false" aria-controls="sbMenuPop">✎</button>
+          </div>
         </div>
       </aside>
 
@@ -143,5 +216,8 @@
 
   <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
   <script src="{% static 'workspace.js' %}?v={{ static_version }}"></script>
+  <!-- 体验层在业务脚本之后加载：它接管 window.toast（分级/堆叠/撤销），
+       并对外暴露 window.Opus（启动屏、骨架屏、切换动效、离线、焦点管理） -->
+  <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
 </body>
 </html>

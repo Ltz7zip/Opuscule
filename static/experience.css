@@ -1,0 +1,1396 @@
+/* ==========================================================================
+   experience.css  —  全链路体验层（永远最后加载）
+   --------------------------------------------------------------------------
+   依据仓库根目录 DESIGN.md 落地。它按"网络加载流程"的维度描述体验增强，
+   本文件按同样的顺序组织：
+
+     ·  视觉 token —— 沿用终端语言（DESIGN.md）：暖近黑 + 电光绿，
+        不引入新的颜色与字体，只补动效 token（时长 / 曲线）。
+     ·  到达前    —— 主页脚标记、分享卡片（模板侧）、导航进度线
+     ·  启动      —— 工作区启动屏、站点打字机入场、背景网格扩散、遮罩揭开
+     ·  加载      —— 骨架屏 + shimmer（延迟显示 / 最短展示）、块级占位
+     ·  导航      —— View Transitions、共享元素、面包屑、锚点
+     ·  切换      —— 扫描线遮罩、径向遮罩、水平交叠、面板挤压、标签页关闭折叠
+     ·  滚动      —— 滚动显现 + 错峰、Hero 视差、长列表
+     ·  交互      —— Ripple、focus-visible、悬停光晕、按下
+     ·  表单      —— 保存状态点、409 冲突、发布差异
+     ·  反馈      —— 分级 Toast、模态、Popover / Tooltip、通知中心
+     ·  状态      —— 空状态、404 / 500、离线、维护
+     ·  离开      —— beforeunload / pagehide（JS 侧）
+     ·  可访问性  —— 焦点管理、ARIA、减少动效
+
+   三条纪律（跟前两层一致，不许破）：
+     1. 只动 opacity / transform / 颜色 / 边框；不动布局尺寸。
+     2. **#panels 里不许挂有限次 CSS 动画**——renderPanels() 每帧重建，
+        动画会跟着每帧重放。面板内的入场一律走 Web Animations API，
+        而且只在"真的切了标签页"那一次触发（见 experience.js）。
+     3. 所有入场动画的**静止态就是 CSS 的原始状态**（关键帧只写 from），
+        所以 prefers-reduced-motion 把时长压成 0 之后，元素停在正确的位置上。
+
+   关键实现：本层只补动效，不加结构。时长 / 曲线 / 强调色派生值都收在
+   --xp-* 自定义属性里（定义在下面的 :root）；颜色一律从终端 token --tx-*
+   派生，不新增色值。它排在 terminal.css 与 polish.css **之后**，是最后一道
+   外观层。
+   legacy（经典时间线页 /legacy）不加载本文件，也不加载 experience.js。
+   ========================================================================== */
+
+/* ==========================================================================
+   动效 token
+   ========================================================================== */
+:root {
+  /* 时长：宁短勿长。微交互 150–250ms，页面过渡 300–400ms */
+  --xp-t-instant: 100ms;
+  --xp-t-fast: 150ms;
+  --xp-t: 250ms;
+  --xp-t-slow: 400ms;
+  --xp-t-reveal: 600ms;      /* 背景网格扩散 */
+  --xp-t-list: 350ms;        /* 滚动显现（列表逐条浮现） */
+
+  /* 曲线 */
+  --xp-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --xp-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --xp-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* 强调色的三种用法（都从终端 token 派生，不新增颜色） */
+  --xp-line: var(--tx-green-line, rgba(61, 220, 151, 0.32));
+  --xp-wash: var(--tx-green-wash, rgba(61, 220, 151, 0.12));
+  --xp-glow: 0 0 8px rgba(61, 220, 151, 0.3);
+  --xp-glow-strong: 0 0 24px rgba(61, 220, 151, 0.15);
+  --xp-panel: var(--tx-canvas-soft, #1a1917);
+  --xp-raised: var(--tx-canvas-raised, #201f1c);
+  --xp-sunken: var(--tx-canvas-sunken, #0d0c0b);
+  --xp-hairline: var(--tx-hairline, #2c2a27);
+  --xp-ink: var(--tx-ink, #f4f2ee);
+  --xp-body: var(--tx-body, #c9c5be);
+  --xp-mute: var(--tx-mute, #8f8b84);
+  --xp-dim: var(--tx-dim, #67635d);
+  --xp-mono: var(--tx-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --xp-sans: var(--tx-sans, Inter, -apple-system, system-ui, sans-serif);
+  --xp-warning: var(--tx-warning, #e8b055);
+  --xp-danger: var(--tx-danger, #f0736a);
+  --xp-info: var(--tx-info, #7cb7e8);
+}
+
+/* ==========================================================================
+   到达前 —— 导航进度线
+   --------------------------------------------------------------------------
+   顶部 2px 翠绿进度线：跳转开始从左侧出现，完成时到右侧并淡出。
+   它是 fixed 的，不占布局，也不在 #panels 里。
+   ========================================================================== */
+#xpProgress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 9000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--xp-t-fast) linear;
+}
+#xpProgress.is-on { opacity: 1; }
+#xpProgress::before {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: 0 50%;
+  scale: 0 1;
+  background: linear-gradient(90deg,
+    transparent 0,
+    var(--tx-green, #3ddc97) 12%,
+    var(--tx-green, #3ddc97) 88%,
+    transparent 100%);
+}
+#xpProgress.is-run::before { animation: xp-progress-run 1.1s var(--xp-ease-out) forwards; }
+#xpProgress.is-done::before { animation: xp-progress-done 260ms var(--xp-ease-out) forwards; }
+
+@keyframes xp-progress-run {
+  0%   { scale: 0 1; }
+  60%  { scale: 0.7 1; }
+  100% { scale: 0.9 1; }
+}
+@keyframes xp-progress-done {
+  from { scale: 0.9 1; opacity: 1; }
+  to   { scale: 1 1; opacity: 0; }
+}
+
+/* ==========================================================================
+   启动 / 首次进入
+   ========================================================================== */
+
+/* ---- 3.1 工作区启动屏 ------------------------------------------------- */
+/* 默认不显示：只有 <html class="xp-splash">（内联脚本按 sessionStorage 打上）时才出现。
+   这样"本次会话已经启动过"的刷新既不会闪一下启动屏，也不会白白等它。 */
+.osplash { display: none; }
+html.xp-splash .osplash { display: grid; }
+html.xp-splash .osplash {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: var(--xp-sunken);
+  color: var(--xp-ink);
+  font-family: var(--xp-mono);
+}
+.osplash::after {                     /* 扫描线：一条 2px 翠绿水平线扫过 */
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--tx-green, #3ddc97), transparent);
+  opacity: 0.5;
+  animation: xp-scan-down 900ms var(--xp-ease-in-out) 120ms both;
+}
+@keyframes xp-scan-down {
+  from { translate: 0 0; opacity: 0; }
+  30%  { opacity: 0.55; }
+  to   { translate: 0 100vh; opacity: 0; }
+}
+.osplash-mark { width: 56px; height: 56px; display: block; }
+/* 整枚标记要在启动屏收掉之前画完：三段加起来约 370ms，
+   配合 experience.js 的 MIN_MS=460，人看到的是"画完 → 停一拍 → 揭开"。 */
+.osplash-mark .osm-ring {
+  stroke-dasharray: 62;
+  stroke-dashoffset: 62;
+  animation: xp-draw 180ms var(--xp-ease-out) forwards;
+}
+.osplash-mark .osm-tri {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: xp-draw 160ms var(--xp-ease-out) 90ms forwards;
+}
+.osplash-mark .osm-node {
+  opacity: 0;
+  scale: 0.4;
+  transform-origin: 16px 16px;
+  animation: xp-node-in 180ms var(--xp-ease-spring) 190ms forwards;
+}
+@keyframes xp-draw { to { stroke-dashoffset: 0; } }
+@keyframes xp-node-in { to { opacity: 1; scale: 1; } }
+
+.osplash-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--xp-body);
+}
+.osplash-text b { color: var(--tx-green, #3ddc97); font-weight: 400; }
+.osplash-caret {
+  width: 7px;
+  height: 14px;
+  background: var(--tx-green, #3ddc97);
+  animation: xp-caret 1s steps(1, end) infinite;
+}
+@keyframes xp-caret { 50% { opacity: 0; } }
+
+.osplash-bar {
+  width: 180px;
+  height: 1px;
+  background: var(--xp-hairline);
+  overflow: hidden;
+}
+.osplash-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--tx-green, #3ddc97);
+  transform-origin: 0 50%;
+  animation: xp-bar 1.1s var(--xp-ease-in-out) infinite;
+}
+/* 加载时长不再固定，进度条画成"在跑"的不确定态：涨到 90% 再淡出重来，直到收屏。 */
+@keyframes xp-bar {
+  0%   { scale: 0 1; opacity: 1; }
+  70%  { scale: 0.9 1; opacity: 1; }
+  100% { scale: 0.9 1; opacity: 0; }
+}
+
+/* 程序就绪（opus:booted）即刻交还指针事件：最短停留 460ms 与淡出只负责"好看"，
+   不该继续挡住用户的第一下点击——否则首次打开会有约 0.5s「点了没反应」。 */
+.osplash.is-ready { pointer-events: none; }
+
+.osplash.is-out {
+  animation: xp-splash-out 240ms var(--xp-ease-out) forwards;
+  pointer-events: none;
+}
+@keyframes xp-splash-out {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* ---- 3.3 只读站点入场 ------------------------------------------------- */
+
+/* 背景网格扩散：从中心 scale + opacity，用世界自己的主色 */
+.site .hero,
+.site .era-head,
+.site .page-head { position: relative; isolation: isolate; }
+.site .hero::before,
+.site .era-head::before,
+.site .page-head::before {
+  content: '';
+  position: absolute;
+  inset: -40px -10vw auto;
+  height: 260px;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--site-primary, #3ddc97) 14%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--site-primary, #3ddc97) 14%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 72%);
+  animation: xp-grid-spread var(--xp-t-reveal) var(--xp-ease-out) both;
+}
+@keyframes xp-grid-spread {
+  from { opacity: 0; scale: 0.92; }
+  to   { opacity: 1; scale: 1; }
+}
+
+/* 遮罩揭开：整页从顶部向下退出（只做一次，不动布局） */
+.site.xp-page-enter::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: var(--xp-sunken, #121110);
+  pointer-events: none;
+  animation: xp-mask-lift var(--xp-t-slow) var(--xp-ease-out) forwards;
+}
+@keyframes xp-mask-lift {
+  from { clip-path: inset(0 0 0 0); }
+  to   { clip-path: inset(0 0 100% 0); }
+}
+/* 错峰淡入：纪元标签、搜索框、时间线入口晚 50ms 依次出现 */
+.xp-rise {
+  animation: xp-rise-in var(--xp-t-slow) var(--xp-ease-out) both;
+  animation-delay: calc(var(--xp-i, 0) * 50ms);
+}
+@keyframes xp-rise-in {
+  from { opacity: 0; translate: 0 10px; }
+}
+
+/* 打字机标题：光标闪到文字敲完（JS 逐字写，CSS 只管光标） */
+.xp-type { --xp-type-done: 0; }
+.xp-type .xp-caret {
+  display: inline-block;
+  width: 0.06em;
+  min-width: 2px;
+  height: 0.92em;
+  margin-left: 0.08em;
+  translate: 0 0.08em;
+  background: var(--site-primary, #3ddc97);
+  animation: xp-caret 1.05s steps(1, end) infinite;
+}
+.xp-type[data-done='1'] .xp-caret { animation: xp-caret 1.05s steps(1, end) 2; }
+
+/* ==========================================================================
+   加载 / 渲染
+   --------------------------------------------------------------------------
+   骨架屏必须跟真实内容的布局对上，否则会自己制造布局偏移。
+   ========================================================================== */
+.sk {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--xp-ink) 5%, transparent);
+}
+.sk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--xp-ink) 8%, transparent) 50%,
+    transparent 100%);
+  background-size: 200% 100%;
+  animation: xp-shimmer 1.5s linear infinite;
+}
+@keyframes xp-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+/* 延迟显示：400ms 内还没好才浮出来，避免"闪一下就没了"的 FOLS */
+.xp-skel-wait {
+  opacity: 0;
+  animation: xp-skel-show var(--xp-t-fast) linear 400ms forwards;
+}
+@keyframes xp-skel-show { to { opacity: 1; } }
+
+/* 文档树骨架：8–10 个带缩进的占位行，行高与真实 .row 对齐 */
+.sk-tree { display: grid; gap: 2px; padding: 6px 10px; }
+.sk-tree .skt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding-left: calc(var(--d, 0) * 14px);
+}
+.sk-tree .skt-box { width: 15px; height: 15px; flex: none; }
+.sk-tree .skt-line { height: 9px; border-radius: 999px; }
+
+/* 卡片正文骨架：标题 60% + 属性表 3×2 + 3–4 行段落 */
+.sk-card { padding: 26px 30px; display: grid; gap: 14px; }
+.sk-card .skc-title { height: 26px; width: 60%; }
+.sk-card .skc-grid { display: grid; grid-template-columns: 120px 1fr; gap: 10px 16px; }
+.sk-card .skc-grid .sk { height: 14px; }
+.sk-card .skc-line { height: 12px; }
+
+/* 时间线骨架：水平发光线段 + 圆形占位节点 + 半透明纪元色带 */
+.sk-timeline { position: relative; height: 320px; }
+.sk-timeline .skt-axis {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 152px;
+  height: 1px;
+  background: var(--tx-green-line, rgba(61, 220, 151, 0.32));
+  box-shadow: var(--xp-glow);
+}
+.sk-timeline .skt-node {
+  position: absolute;
+  top: 146px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+}
+.sk-timeline .skt-band {
+  position: absolute;
+  top: 176px;
+  height: 26px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--xp-ink) 5%, transparent);
+}
+.sk-timeline .skt-label {
+  position: absolute;
+  top: 108px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+/* 通用堆叠骨架：一列等高占位块（关系树模版列 / 已有列表用） */
+.sk-stack { display: grid; gap: 8px; padding: 8px 2px; }
+
+/* 关系树骨架：网格点阵 + 灰色圆角节点 + 虚线连接 */.sk-graph {
+  position: relative;
+  height: 320px;
+  background-image: radial-gradient(circle, var(--xp-hairline) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.sk-graph .skg-node {
+  position: absolute;
+  width: 108px;
+  height: 44px;
+  border-radius: 6px;
+}
+.sk-graph .skg-link {
+  position: absolute;
+  height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--xp-ink) 12%, transparent);
+  transform-origin: 0 0;
+}
+
+/* 只读站点首页骨架：hero + 纪元标签 + 三张卡片（300×120） */
+.sk-site { display: grid; gap: 22px; }
+.sk-site .sks-hero { height: 46px; width: 46%; }
+.sk-site .sks-sub { height: 14px; width: 30%; }
+.sk-site .sks-pills { display: flex; gap: 8px; }
+.sk-site .sks-pill { height: 26px; width: 92px; border-radius: 999px; }
+.sk-site .sks-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.sk-site .sks-tile { height: 120px; border-radius: 6px; }
+@media (max-width: 720px) {
+  .sk-site .sks-grid { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   导航 / 页面跳转
+   ========================================================================== */
+
+/* 只读站点（MPA）：跨文档过渡 */
+@view-transition { navigation: auto; }
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--xp-t-slow);
+  animation-timing-function: var(--xp-ease-out);
+}
+/* 过渡期间盖在页面上的那一层是"照片"：**不许它吃点击**。
+   不然飞行还没跑完（380ms）时点别的卡片会一点反应都没有——
+   看着像"有些卡片点不动"，其实是点在快照上了。 */
+::view-transition,
+::view-transition-group(*),
+::view-transition-image-pair(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  pointer-events: none;
+}
+/* 共享元素：卡片封面 / 标题从网格飞到 Hero */
+::view-transition-group(xp-cover),
+::view-transition-group(xp-title) {
+  animation-duration: 450ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-old(xp-cover),
+::view-transition-new(xp-cover) { border-radius: 8px; }
+
+/* 面包屑：最后一级不可点（模板里就不再是链接） */
+.site .crumbs span[aria-current] { color: var(--xp-body); }
+
+/* ==========================================================================
+   高级交互动效
+   ========================================================================== */
+
+/* 扫描线遮罩：切换标签页时，一条 2px 翠绿线从上往下扫过编辑区。
+   注意：这一个元素必须挂在 #panels **外面**（在 .workspace 里），
+   否则 renderPanels() 每帧重建会把它连同动画一起重放。 */
+#xpSweep {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+}
+#xpSweep::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--tx-green, #3ddc97), transparent);
+  box-shadow: var(--xp-glow-strong);
+}
+#xpSweep.is-on { opacity: 1; }
+#xpSweep.is-on::before { animation: xp-sweep var(--xp-t) var(--xp-ease-out) forwards; }
+@keyframes xp-sweep {
+  from { translate: 0 0; opacity: 0; }
+  20%  { opacity: 1; }
+  to   { translate: 0 var(--xp-sweep-h, 100%); opacity: 0.2; }
+}
+
+/* 并排面板"挤压"交叠：右面板滑入、左面板微微收一下（机械卡扣） */
+.panel.is-squeezed { animation: xp-squeeze 350ms var(--xp-ease-spring); }
+@keyframes xp-squeeze {
+  from { scale: 0.98 1; }
+  to   { scale: 1 1; }
+}
+.panel[data-panel='1'].is-sliding-in { animation: xp-panel-in 350ms var(--xp-ease-spring) both; }
+@keyframes xp-panel-in {
+  from { opacity: 0; translate: 30px 0; }
+}
+
+/* 文档树 → 编辑区：工作区里不用 View Transition（那一层快照在 Chrome 里
+   不可穿透，飞行期间的点击会丢——文档树恰恰是高频点击的地方）。
+   标题"落地"的那束光由 Opus.switchFx.titleArrive 用 WAAPI 播，不挡输入。
+   真正的共享元素过渡留在只读站点那边（跨页跳转，冻结几百毫秒无所谓）。 */
+
+/* 只读站点：卡片 → 详情（跨文档过渡）。
+   名字只在"被点的那一张"上由 JS 临时挂上，目标页写在样式里——
+   同一页几十张卡片若都叫 xp-title，浏览器会直接放弃整次过渡。 */
+.site .page-cover { view-transition-name: xp-cover; }
+.site .page-head h1 { view-transition-name: xp-title; }
+
+/* 文档页目录锚点：平滑滚动 + 顶栏不吃标题（nav 是 sticky 的） */
+html { scroll-behavior: smooth; }
+.site .page-body h2,
+.site .page h2,
+.site .section > h2 { scroll-margin-top: 72px; }
+.page-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 14px 0 22px;
+  padding: 10px 12px;
+  border: 1px solid var(--tx-hairline, #2c2a27);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--xp-ink, #f4f2ee) 3%, transparent);
+}
+.page-toc-title {
+  width: 100%;
+  font-family: var(--xp-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--xp-dim, #67635d);
+}
+.page-toc a {
+  font-size: 12.5px;
+  color: var(--xp-mute, #8f8b84);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.page-toc a:hover { color: var(--tx-green, #3ddc97); }
+.page-toc a.is-on {
+  color: var(--xp-ink, #f4f2ee);
+  border-bottom-color: var(--tx-green-line, rgba(61, 220, 151, 0.32));
+}
+
+/* 列表页脚：已显示 x / y 条 + 回到顶部 */
+.list-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.list-count {
+  font-family: var(--xp-mono, monospace);
+  font-size: 11.5px;
+  color: var(--xp-mute, #8f8b84);
+}
+.to-top {
+  font-family: var(--xp-mono, monospace);
+  font-size: 11.5px;
+  color: var(--xp-mute, #8f8b84);
+  text-decoration: none;
+}
+.to-top:hover { color: var(--tx-green, #3ddc97); }
+
+/* 交叠滑动：只让编辑区内容位移 20px，外壳（文档树 / 顶栏）不动。
+   由 experience.js 用 WAAPI 挂在 .panel-body 上，只在真的切标签时触发。 */
+
+/* ==========================================================================
+   跨文档共享元素：工作区 <-> 只读站点
+   --------------------------------------------------------------------------
+   顶栏「维基」是同标签跳转（新标签会把过渡整个吃掉）。两边给同一个
+   view-transition-name，浏览器就会把元素"接"过去：世界名从顶栏飞到站点导航，
+   当前这篇的标题从编辑区飞到文档页大标题；其余部分走默认的淡入淡出。
+   只在支持的浏览器里生效，不支持就是普通跳转——纯增强。
+   ========================================================================== */
+.wc-name { view-transition-name: xp-world; }
+.site .nav-brand { view-transition-name: xp-world; }
+.panel[data-panel='0'] .card-title { view-transition-name: xp-doc-title; }
+.site .doc-title { view-transition-name: xp-doc-title; }
+
+/* 共享元素自己走长一点、软一点；剩下的表面用默认的短淡入 */
+::view-transition-group(xp-world),
+::view-transition-group(xp-doc-title) { animation-duration: 380ms; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+::view-transition-old(xp-world),
+::view-transition-new(xp-world),
+::view-transition-old(xp-doc-title),
+::view-transition-new(xp-doc-title) { animation-duration: 380ms; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ==========================================================================
+   滚动 / 页面内浏览
+   ========================================================================== */
+.xp-reveal {
+  opacity: 0;
+  translate: 0 12px;
+  /* 显现 350ms、错峰 50ms */
+  transition:
+    opacity var(--xp-t-list, 350ms) var(--xp-ease-out),
+    translate var(--xp-t-list, 350ms) var(--xp-ease-out);
+  transition-delay: calc(var(--xp-i, 0) * 50ms);
+}
+.xp-reveal.is-in { opacity: 1; translate: 0 0; }
+
+/* Hero 视差：背景网格跟滚动走（JS 用 rAF 写 --xp-parallax） */
+.site .hero::before { translate: 0 var(--xp-parallax, 0px); }
+
+/* 长列表：搜索用"加载更多"，按钮上方给计数 */
+.xp-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+.xp-more-count {
+  font-family: var(--xp-mono);
+  font-size: 12px;
+  color: var(--xp-mute);
+}
+
+/* ==========================================================================
+   交互 / 手势
+   ========================================================================== */
+
+/* 图谱：悬停点亮、长按拖动、拖动时邻居被拽着走
+   --------------------------------------------------------------------------
+   悬停停一小会儿（260ms）这一颗才"亮起来"：变大、发光、名字变白，
+   和它相连的线亮起来、不相干的线暗下去。亮着的时候按住 180ms 就能拖着走，
+   拖的时候连着的点会被弹簧拽过来。纯好玩，不影响任何数据。 */
+.graph-node circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), filter 160ms ease;
+}
+.graph-node.is-hover circle,
+.graph-node.is-dragging circle {
+  transform: scale(1.35);
+  filter: brightness(1.35) drop-shadow(0 0 10px rgba(61, 220, 151, 0.55));
+}
+.graph-node.is-dragging { cursor: grabbing; }
+.graph-node.is-hover,
+.graph-node.is-dragging { cursor: grab; }
+.graph-node.is-hover .graph-label,
+.graph-node.is-dragging .graph-label {
+  fill: var(--tx-ink, #f4f2ee);
+  font-weight: 500;
+}
+.graph-link {
+  transition: opacity 160ms ease, stroke-width 160ms ease;
+}
+.graph-link.is-lit {
+  stroke: var(--tx-green, #3ddc97);
+  stroke-width: 1.8;
+  opacity: 1 !important;
+}
+.graph-link.is-dim { opacity: 0.12 !important; }
+/* 不相干的点也跟着退到后面去，剩下这一簇自己在发光 */
+.graph-node { transition: opacity 160ms ease; }
+.graph-node.is-dim { opacity: 0.3; }
+/* 图谱底部那条"还没连起来的卡片"提示：跟在名单后面的小字 */
+.graph-tip-hint {
+  font-family: var(--xp-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--xp-dim, #67635d);
+}
+
+/* 地图标记聚合：相近图钉聚成一个数字圆（workspace.js 的 refreshPins 负责分簇） */
+.map-pins { position: absolute; inset: 0; }
+.map-cluster {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  translate: -50% -50%;
+  border: 1px solid var(--tx-green-line, rgba(61, 220, 151, 0.32));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tx-canvas-raised, #201f1c) 90%, transparent);
+  color: var(--tx-green, #3ddc97);
+  font-family: var(--tx-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1;
+  cursor: zoom-in;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: border-color var(--xp-t-fast) var(--xp-ease-out),
+              box-shadow var(--xp-t-fast) var(--xp-ease-out),
+              background-color var(--xp-t-fast) var(--xp-ease-out);
+}
+.map-cluster:hover {
+  border-color: var(--tx-green, #3ddc97);
+  background: var(--tx-canvas-soft, #1a1917);
+  box-shadow: 0 0 0 4px var(--tx-green-wash, rgba(61, 220, 151, 0.12));
+}
+.map-cluster:active { scale: 0.96; }
+.map-cluster:focus-visible {
+  outline: 2px solid var(--tx-green, #3ddc97);
+  outline-offset: 2px;
+}
+
+/* 关系树：缩小时按层级减负（relationship.js 在 applyView 里切类，这里只定观感） */
+.rt-canvas-wrap.is-zoom-far .rt-name,
+.rt-canvas-wrap.is-zoom-far .rt-note-body { opacity: 0; }
+.rt-canvas-wrap.is-zoom-far .rt-handle { opacity: 0; pointer-events: none; }
+.rt-canvas-wrap.is-zoom-far-out .rt-portrait { opacity: 0; }
+.rt-canvas-wrap.is-zoom-far-out .rt-card {
+  background: transparent;
+  border-style: solid;
+  box-shadow: none;
+}
+.rt-canvas-wrap.is-zoom-far-out .rt-node.is-empty .rt-card::after { opacity: 0; }
+
+/* Ripple：从点击位置扩散的翠绿波纹 */
+.fx-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle,
+    var(--xp-wash) 0%,
+    color-mix(in srgb, var(--tx-green, #3ddc97) 6%, transparent) 60%,
+    transparent 70%);
+  scale: 0;
+  opacity: 1;
+  animation: xp-ripple var(--xp-t-slow) var(--xp-ease-out) forwards;
+}
+@keyframes xp-ripple {
+  to { scale: 1; opacity: 0; }
+}
+
+/* 焦点可见性：统一到一条翠绿描边（各层已经各写了一份，这里兜住新组件） */
+.notice-panel :focus-visible,
+.notice-btn:focus-visible,
+.xp-more button:focus-visible,
+.maint-box a:focus-visible {
+  outline: 2px solid var(--tx-green, #3ddc97);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   表单 / 输入 / 提交
+   ========================================================================== */
+
+/* 保存状态：琥珀脉冲（保存中）/ 翠绿静止（已保存）/ 灰虚线（离线待同步） */
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  color: var(--xp-mute);
+}
+.save-state > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--xp-dim);
+}
+.save-state[data-kind='saving'] { color: var(--xp-warning); }
+.save-state[data-kind='saving'] > i { background: var(--xp-warning); animation: xp-pulse 1.1s ease-in-out infinite; }
+.save-state[data-kind='saved'] { color: var(--tx-green, #3ddc97); }
+.save-state[data-kind='saved'] > i { background: var(--tx-green, #3ddc97); }
+.save-state[data-kind='offline'] { color: var(--xp-mute); border-bottom: 1px dashed var(--xp-hairline); }
+.save-state[data-kind='error'] { color: var(--xp-danger); }
+.save-state[data-kind='error'] > i { background: var(--xp-danger); }
+@keyframes xp-pulse {
+  50% { opacity: 0.35; }
+}
+
+/* 冲突：并排两个版本，被改动的行高亮 */
+.conflict-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 4px;
+}
+.conflict-col { min-width: 0; }
+.conflict-col > b {
+  display: block; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--xp-mute, #8f8b84); font-weight: 500;
+}
+.conflict-body {
+  max-height: 260px; overflow: auto; padding: 8px 10px;
+  background: var(--xp-sunken, rgba(0, 0, 0, 0.35));
+  border: 1px solid var(--xp-hairline, rgba(255, 255, 255, 0.08));
+  border-radius: 8px; font-family: var(--xp-mono, ui-monospace, monospace); font-size: 11.5px;
+}
+.conflict-line { white-space: pre-wrap; word-break: break-word; padding: 1px 4px; border-radius: 3px; color: var(--xp-dim, #a9a49c); }
+.conflict-line.is-mine { background: rgba(224, 168, 60, 0.14); color: #e8c98a; }
+.conflict-line.is-theirs { background: rgba(61, 220, 151, 0.12); color: #a8e6c4; }
+@media (max-width: 720px) { .conflict-grid { grid-template-columns: 1fr; } }
+
+/* 模态框：1px 翠绿边 + 强光晕。
+   深色画布上"暗底 + 大阴影"分不清层级，所以改用翠绿边 + 光晕来分层。 */
+.modal:not([hidden]) .md-box,
+.palette:not([hidden]) .pl-box {
+  border: 1px solid color-mix(in srgb, var(--tx-green, #3ddc97) 42%, transparent);
+  /* 设计的强光晕 + 一点落地阴影（深色画布上要能浮起来） */
+  box-shadow: var(--xp-glow-strong), 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================================
+   反馈 / 浮层
+   ========================================================================== */
+
+/* 分级 Toast：左侧状态符号等宽，成功 3s / 警告 5s / 错误不自动消失。
+   多条时叠在底部中央的 .toast-stack 里（首条仍是 #toast，退场过渡接在它身上）。 */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 46px;          /* 让开工作区底部那条状态带 */
+  translate: -50% 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast-stack .toast {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  transform: none;
+  translate: none;
+  pointer-events: auto;
+  max-width: min(620px, calc(100vw - 32px));
+}
+.toast { gap: 10px; align-items: center; }
+.toast .toast-ic {
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  flex: none;
+}
+.toast .toast-text { min-width: 0; }
+.toast .toast-act {
+  flex: none;
+  margin-left: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--xp-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tx-green, #3ddc97);
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.toast .toast-act:hover { background: var(--xp-wash); }
+.toast[data-kind='ok'] .toast-ic { color: var(--tx-green, #3ddc97); }
+.toast[data-kind='warn'] .toast-ic { color: var(--xp-warning); }
+.toast[data-kind='err'] .toast-ic { color: var(--xp-danger); }
+.toast[data-kind='err'] { border-color: color-mix(in srgb, var(--xp-danger) 45%, transparent); }
+
+/* 模态：遮罩模糊 + 1px 翠绿边框 + 光晕（焦点陷阱在 JS 侧） */
+.modal:not([hidden]) .md-box {
+  border-color: var(--xp-line);
+  box-shadow: var(--xp-glow-strong);
+}
+
+/* 通知中心 */
+.notice-btn {
+  position: relative;
+}
+.notice-btn .notice-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--tx-green, #3ddc97);
+  color: var(--tx-on-green, #0d1114);
+  font-family: var(--xp-mono);
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+}
+.notice-btn .notice-badge[hidden] { display: none; }
+
+.notice-panel {
+  position: fixed;
+  z-index: 6200;
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(70vh, 460px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--xp-hairline);
+  border-radius: 6px;
+  background: var(--xp-raised);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  font-family: var(--xp-sans);
+}
+.notice-panel[hidden] { display: none; }
+.notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 8px;
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--xp-mute);
+  text-transform: uppercase;
+}
+.notice-head button {
+  border: 0;
+  background: transparent;
+  color: var(--xp-mute);
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.notice-head button:hover { color: var(--tx-green, #3ddc97); }
+.notice-row {
+  display: flex;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 4px;
+  border-top: 1px solid var(--xp-hairline);
+}
+.notice-row:first-of-type { border-top: 0; }
+.notice-row:hover { background: color-mix(in srgb, var(--xp-ink) 4%, transparent); }
+.notice-kind {
+  flex: none;
+  font-family: var(--xp-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--xp-mute);
+  padding-top: 2px;
+  width: 54px;
+}
+.notice-kind[data-kind='publish'] { color: var(--tx-green, #3ddc97); }
+.notice-kind[data-kind='comment'] { color: var(--xp-info); }
+.notice-kind[data-kind='invite'] { color: var(--xp-warning); }
+.notice-body { min-width: 0; }
+.notice-what { font-size: 13px; color: var(--xp-body); }
+.notice-when { font-family: var(--xp-mono); font-size: 10px; color: var(--xp-dim); margin-top: 2px; }
+.notice-empty { padding: 18px 10px; text-align: center; color: var(--xp-mute); font-size: 13px; }
+
+/* Popover / Tooltip（时间线节点 hover：事件名 / 时间 / 涉及卡片） */
+.xp-pop {
+  position: fixed;
+  z-index: 6400;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid var(--xp-hairline);
+  border-radius: 4px;
+  background: var(--xp-raised);
+  color: var(--xp-body);
+  font-family: var(--xp-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.xp-pop[hidden] { display: none; }
+.xp-pop b { color: var(--xp-ink); font-weight: 400; }
+.xp-pop .xp-pop-meta { font-family: var(--xp-mono); font-size: 10px; color: var(--xp-mute); }
+.xp-has-tip { cursor: help; }
+
+/* ==========================================================================
+   状态 / 异常
+   ========================================================================== */
+
+/* 404：信号丢失（glitch 只做颜色抖动，不动布局） */
+.glitch {
+  position: relative;
+  font-family: var(--xp-mono);
+  letter-spacing: 0.08em;
+  color: var(--xp-ink);
+}
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  clip-path: inset(0 0 50% 0);
+}
+.glitch::before { color: var(--tx-green, #3ddc97); animation: xp-glitch-a 3.2s steps(1, end) infinite; }
+.glitch::after { color: var(--xp-danger); clip-path: inset(50% 0 0 0); animation: xp-glitch-b 2.7s steps(1, end) infinite; }
+@keyframes xp-glitch-a {
+  0%, 92%, 100% { translate: 0; opacity: 0; }
+  93% { translate: -2px 0; opacity: 0.8; }
+  96% { translate: 2px 0; opacity: 0.6; }
+}
+@keyframes xp-glitch-b {
+  0%, 88%, 100% { translate: 0; opacity: 0; }
+  90% { translate: 2px 0; opacity: 0.7; }
+  94% { translate: -1px 0; opacity: 0.5; }
+}
+
+/* 空状态"这里还是一片虚空"：世界一份文档都没有时的形态（比"没开文档"更庄重一点） */
+.empty-hint.is-void .opuscule-mark {
+  color: var(--tx-green, #3ddc97);
+  opacity: 0.85;
+}
+.empty-hint.is-void h2 { letter-spacing: 0.01em; }
+.empty-hint.is-void p { color: var(--xp-mute); }
+
+/* 404 / 500 / 已移除文档 的公共零件 */
+.miss-kicker {
+  margin: 0;
+  font-family: var(--xp-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--xp-mute);
+}
+.miss-code { font-size: 76px; line-height: 1.05; margin: 2px 0 4px; }
+/* 空状态里的 h2 是 17px，所以 404 与"这一页已经不在了"要更高一档 */
+.xp-empty h2.miss-code,
+.xp-standalone h1.miss-code { font-size: 72px; line-height: 1; letter-spacing: 0.02em; }
+.xp-empty h2.glitch { font-size: 34px; line-height: 1.2; }
+.miss-hint {
+  margin: 18px 0 0;
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  color: var(--xp-dim);
+  line-height: 1.7;
+}
+.miss-hint code { color: var(--xp-mute); }
+.miss-acts { margin: 18px 0 60px; }
+
+/* 独立错误页（404 / 500 / 维护页）：没有外壳，自己居中一屏 */
+.xp-standalone {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background: var(--xp-sunken);
+  color: var(--xp-body);
+  font-family: var(--xp-sans);
+}
+.xp-standalone-box {
+  max-width: 56ch;
+  padding: 40px 24px;
+  text-align: left;
+}
+.xp-standalone-box h1 { color: var(--xp-ink); font-weight: 400; }
+.xp-standalone-sub { color: var(--xp-mute); line-height: 1.8; font-size: 14px; }
+
+/* 空状态：块级出现在画布上，居中、克制 */.xp-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 46px 20px;
+  text-align: center;
+  color: var(--xp-mute);
+}
+.xp-empty h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--xp-body);
+}
+.xp-empty p { margin: 0; font-size: 13px; line-height: 1.6; max-width: 46ch; }
+.xp-empty-acts { display: flex; gap: 8px; margin-top: 4px; }
+
+/* 离线：顶栏徽标 + 待同步计数 */
+.offline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px dashed var(--xp-hairline);
+  border-radius: 999px;
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  color: var(--xp-mute);
+}
+.offline-badge[hidden] { display: none; }
+.offline-badge > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--xp-warning);
+}
+.sync-queue {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  translate: -50% 0;
+  z-index: 6300;
+  padding: 6px 12px;
+  border: 1px solid var(--xp-hairline);
+  border-radius: 999px;
+  background: var(--xp-raised);
+  font-family: var(--xp-mono);
+  font-size: 11px;
+  color: var(--xp-body);
+}
+.sync-queue[hidden] { display: none; }
+
+/* 维护页：终端启动序列，逐行显示 */
+.maint {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  background: var(--xp-sunken);
+  color: var(--xp-body);
+  font-family: var(--xp-mono);
+  font-size: 13px;
+  line-height: 1.9;
+}
+/* 维护页：终端启动序列，逐行显示。
+   注意每一行的**静止态就是可见**（不是为了好看写成 opacity:0）——关键帧只写
+   from，动画被 prefers-reduced-motion 压成 0 之后元素才停在对的位置上。 */
+.maint-line {
+  animation: xp-maint-line var(--xp-t) var(--xp-ease-out) both;
+  animation-delay: calc(var(--xp-i, 0) * 300ms);
+}
+.maint-line b { color: var(--tx-green, #3ddc97); font-weight: 400; }
+@keyframes xp-maint-line { from { opacity: 0; translate: 0 4px; } }
+.maint-box a { color: var(--tx-green, #3ddc97); }
+/* 维护页 / 独立错误页自带样式（它们不加载 site.css，别指望 .te-btn 在） */
+.xp-standalone .te-btn,
+.maint .te-btn {
+  display: inline-block;
+  padding: 7px 14px;
+  border: 1px solid var(--xp-hairline, #2c2a27);
+  border-radius: 4px;
+  color: var(--xp-ink, #f4f2ee);
+  font-family: var(--xp-mono, monospace);
+  font-size: 12px;
+  text-decoration: none;
+}
+.xp-standalone .te-btn:hover,
+.maint .te-btn:hover { border-color: var(--xp-line, rgba(61, 220, 151, 0.32)); color: var(--tx-green, #3ddc97); }
+
+/* ==========================================================================
+   可访问性
+   ========================================================================== */
+.xp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 减少动效：运动性动画全部让路；骨架屏留在静态底色上。
+   polish.css 已经有一条全局的时长压零，这里只补"被压掉之后还需要交代"的部分。 */
+@media (prefers-reduced-motion: reduce) {
+  .osplash { display: none; }
+  .osplash-caret,
+  .skeleton,
+  .sk::after { animation: none !important; }
+  .sk::after { opacity: 0.5; }
+  #xpSweep { display: none; }
+  .xp-reveal { opacity: 1; translate: 0 0; }
+  .site .hero::before { scale: 1; opacity: 1; }
+  .site.xp-page-enter::before { display: none; }
+  .glitch::before,
+  .glitch::after { animation: none; opacity: 0; }
+}
+
+/* ==========================================================================
+   新手引导：整块浮层，每一步是一个终端块（Warp 的"块"概念）
+   ========================================================================== */
+.onboard {
+  position: fixed; inset: 0; z-index: 80;
+  display: grid; place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000000 72%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.onboard[hidden] { display: none; }
+.ob-card {
+  width: min(620px, 94vw); max-height: 86vh; overflow: auto;
+  background: var(--xp-panel, #16150f);
+  border: 1px solid color-mix(in srgb, var(--tx-green, #3ddc97) 34%, transparent);
+  border-radius: 14px;
+  box-shadow: var(--xp-glow-strong), 0 20px 60px rgba(0, 0, 0, 0.55);
+  padding: 18px 20px 20px;
+}
+.ob-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.ob-dots { display: inline-flex; gap: 6px; }
+.ob-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--xp-hairline, rgba(255,255,255,.16)); }
+.ob-dots i.is-done { background: color-mix(in srgb, var(--tx-green, #3ddc97) 55%, transparent); }
+.ob-dots i.is-now { background: var(--tx-green, #3ddc97); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tx-green, #3ddc97) 20%, transparent); }
+.ob-count { font-family: var(--xp-mono, ui-monospace, monospace); font-size: 11px; color: var(--xp-mute, #8f8b84); }
+.ob-skip { margin-left: auto; background: none; border: 0; color: var(--xp-mute, #8f8b84); font-size: 12px; cursor: pointer; }
+.ob-skip:hover { color: var(--tx-ink, #f4f2ee); }
+.ob-log { display: grid; gap: 6px; margin-bottom: 12px; }
+.ob-block {
+  border-left: 2px solid color-mix(in srgb, var(--tx-green, #3ddc97) 45%, transparent);
+  padding: 2px 0 2px 12px;
+}
+.ob-block.is-done { border-left-color: var(--xp-hairline, rgba(255,255,255,.14)); opacity: .62; }
+.ob-prompt {
+  font-family: var(--xp-mono, ui-monospace, monospace); font-size: 12.5px;
+  color: var(--tx-green, #3ddc97); letter-spacing: .02em;
+}
+.ob-block.is-done .ob-prompt { color: var(--xp-mute, #8f8b84); }
+.ob-note { font-size: 11.5px; color: var(--xp-dim, #a9a49c); margin-top: 2px; }
+.ob-text { margin: 8px 0 10px; font-size: 13px; line-height: 1.6; color: var(--xp-dim, #a9a49c); }
+.ob-input { width: 100%; margin-bottom: 8px; }
+.ob-colors { display: flex; gap: 8px; margin-bottom: 12px; }
+.ob-color { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.ob-color.is-active { border-color: var(--tx-ink, #f4f2ee); }
+.ob-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ob-chip {
+  background: none; border: 1px solid var(--xp-hairline, rgba(255,255,255,.14));
+  border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--xp-dim, #a9a49c); cursor: pointer;
+}
+.ob-chip.is-active { border-color: var(--tx-green, #3ddc97); color: var(--tx-green, #3ddc97); }
+.ob-actions { display: flex; gap: 8px; margin-top: 12px; }
+.ob-site { margin-top: 10px; font-size: 12px; color: var(--xp-dim, #a9a49c); }
+.ob-link { color: var(--tx-green, #3ddc97); margin-left: 6px; }
+
+/* 会话到期提示条 */
+.session-bar {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 70; display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 10px;
+  background: var(--xp-panel, #16150f);
+  border: 1px solid color-mix(in srgb, var(--xp-warning, #e0a83c) 42%, transparent);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  font-size: 12.5px; color: var(--xp-dim, #a9a49c);
+}
+.session-bar .sb-action { border: 0; background: none; color: var(--tx-green, #3ddc97); cursor: pointer; font-size: 12.5px; }
+.session-bar .sb-close { border: 0; background: none; color: var(--xp-mute, #8f8b84); cursor: pointer; font-size: 12px; }
+
+/* exit intent：只读站点的追更提示 */
+.exit-intent {
+  position: fixed; right: 20px; bottom: 20px; z-index: 66;
+  width: min(340px, 90vw); padding: 14px 16px;
+  background: var(--xp-panel, #16150f);
+  border: 1px solid color-mix(in srgb, var(--tx-green, #3ddc97) 30%, transparent);
+  border-radius: 12px;
+  box-shadow: var(--xp-glow-strong), 0 18px 44px rgba(0, 0, 0, 0.5);
+  animation: xp-rise 320ms var(--xp-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.exit-intent b { display: block; font-size: 13.5px; color: var(--tx-ink, #f4f2ee); margin-bottom: 6px; }
+.exit-intent p { margin: 0 0 10px; font-size: 12px; line-height: 1.55; color: var(--xp-dim, #a9a49c); }
+.ei-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@keyframes xp-rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* 日历月份：横向滚动吸附（滑一下换一个月，和 ‹ › 是同一套状态） */
+.cal-track {
+  display: flex; gap: 12px; align-items: flex-start;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+.cal-page {
+  flex: 0 0 100%; min-width: 0;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-track { scroll-behavior: auto; }
+}
+
+/* 404 上的搜索框：找不到东西时，最有用的动作是搜一下 */
+.miss-search { display: flex; gap: 8px; justify-content: center; margin: 14px auto 12px; max-width: 420px; }
+.miss-search input {
+  flex: 1 1 auto; min-width: 0; padding: 7px 12px;
+  background: var(--xp-sunken, rgba(0, 0, 0, 0.35));
+  border: 1px solid var(--xp-hairline, rgba(255, 255, 255, 0.12));
+  border-radius: 8px; color: var(--tx-ink, #f4f2ee); font-size: 13px;
+}
+.miss-search input:focus-visible { outline: 2px solid var(--tx-green, #3ddc97); outline-offset: 2px; }
+
+/* 发布中：按钮里的转圈 */
+.btn-spinner {
+  width: 12px; height: 12px; margin-right: 6px; display: inline-block;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor; border-radius: 50%;
+  animation: xp-spin 700ms linear infinite;
+}
+@keyframes xp-spin { to { rotate: 1turn; } }
+.mini-btn.is-busy { display: inline-flex; align-items: center; }
+
+/* 焦点可见：给还没有自己写 :focus-visible 的控件一个全局兜底 */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tx-green, #3ddc97) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* 事件拖动：原位留虚线轮廓，拖起来的时候原节点半透明 */
+.tl-ghost {
+  position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+  border: 1px dashed color-mix(in srgb, var(--tx-green, #3ddc97) 70%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.tl-ghost-pill {
+  position: absolute; height: 20px; margin-top: -10px;
+  border: 1px dashed color-mix(in srgb, var(--tx-green, #3ddc97) 45%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+.tl-canvas.is-dragging-event { cursor: grabbing; }
+.tl-canvas.is-dragging-event .tl-dot,
+.tl-canvas.is-dragging-event .tl-pill { cursor: grabbing; }
+.tl-dot, .tl-pill { cursor: grab; }
+
+/* 编辑器级降级块：这一篇画不出来时，别让整格空白 */
+.editor-fallback {
+  margin: 24px auto; max-width: 520px; padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--xp-warning, #e0a83c) 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--xp-warning, #e0a83c) 7%, transparent);
+  text-align: left;
+}
+.editor-fallback .ef-art { color: var(--xp-warning, #e0a83c); margin-bottom: 8px; }
+.editor-fallback b { display: block; font-size: 14px; color: var(--tx-ink, #f4f2ee); margin-bottom: 6px; }
+.editor-fallback p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; color: var(--xp-dim, #a9a49c); }
+.editor-fallback .ef-detail { margin-bottom: 10px; }
+.editor-fallback .ef-detail summary { cursor: pointer; font-size: 12px; color: var(--xp-mute, #8f8b84); }
+.editor-fallback .ef-detail pre {
+  max-height: 180px; overflow: auto; margin: 8px 0 0; padding: 8px 10px;
+  background: var(--xp-sunken, rgba(0, 0, 0, 0.35)); border-radius: 8px;
+  font-family: var(--xp-mono, ui-monospace, monospace); font-size: 11px; color: var(--xp-dim, #a9a49c);
+}
+
+/* 第 3、5 步：标签切换时编辑区上那层 blur(2px) 遮罩（独立元素，不挡输入） */
+.panel-body { position: relative; }
+
+/* 页面显现：工作区从 opacity .6 过渡到 1（200ms）——工具不需要仪式感；
+   只读站点那边走的是"遮罩揭开"，两套不要混。
+   注意：只要 .app 挂着这条动画（哪怕已经结束），它就是一个层叠上下文 ——
+   所以移动端抽屉的遮罩必须挂在 .app **里面**（见 openSidebarDrawer），
+   否则 fixed 抽屉（z-index:60）会被挂着 body 下的遮罩（z-index:55）压住，点不动。 */
+body[data-surface='workspace']:not(.is-embed) .app {
+  animation: xp-workspace-in 200ms var(--xp-ease-out) both;
+}
+@keyframes xp-workspace-in { from { opacity: 0.6; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  body[data-surface='workspace']:not(.is-embed) .app { animation: none; }
+}
+
+/* 交叠式：滑出去的那份旧内容。
+   挂在 body 上的浮层里（不能挂在面板里——面板马上就被重建了），
+   不参与布局、不挡输入。 */
+.outgoing-stage { position: fixed; inset: 0; pointer-events: none; z-index: 45; }
+.xp-outgoing {
+  position: absolute; overflow: hidden;
+  pointer-events: none; will-change: transform, opacity;
+}
+
+/* 卡片徽标上的"在维基里看"：同标签跳转，走跨文档共享元素 */
+.badge.site-link { text-decoration: none; color: var(--tx-green, #3ddc97); }
+.badge.site-link:hover { border-color: color-mix(in srgb, var(--tx-green, #3ddc97) 55%, transparent); }
+
+
+/* 飞行期间：起飞处（树里那一行）和途经处（标签）的名字先让开，
+   飞完再淡回来——屏幕上只留"正在飞的那一份"。 */
+.panel .tab.is-fly-away .t-name,
+#sbTree .row.is-fly-away .r-name { opacity: 0; }
+.panel .tab .t-name,
+#sbTree .row .r-name { transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel .tab .t-name,
+  #sbTree .row .r-name { transition: none; }
+}
+
+/* ==========================================================================
+   并排面板时的"机械卡扣"
+   --------------------------------------------------------------------------
+   右侧多开一格时，左侧文档树跟着向左退让一点点，和编辑区那下 squeeze 呼应。
+   用 transform：侧栏宽度是用户自己拖出来的（--sidebar-w），不能替他改。
+   ========================================================================== */
+.sidebar {
+  transition: transform 220ms cubic-bezier(0.34, 1.2, 0.64, 1);
+  will-change: transform;
+}
+body.is-split .sidebar { transform: translateX(-12px); }
+body.is-split .sidebar::after {
+  content: ''; position: absolute; top: 0; right: -12px; width: 12px; height: 100%;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.28), transparent);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
+  body.is-split .sidebar { transform: none; }
+}
+
+/* ==========================================================================
+   共享元素：飞行中的那一份名字（幽灵）
+   --------------------------------------------------------------------------
+   固定定位、不吃任何指针事件——飞的过程中文档树 / 标签栏 / 命令面板照样点得动。
+   （缺了这条样式，幽灵会退回成 body 末尾的普通块，看起来"根本没飞"，所以别删。）
+   ========================================================================== */
+.xp-fly {
+  position: fixed; z-index: 60;
+  pointer-events: none;
+  white-space: nowrap;
+  transform-origin: left center;
+  font-family: var(--tx-heading, Georgia, serif);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp-fly { display: none; }
+}

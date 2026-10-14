@@ -308,13 +308,19 @@ def main() -> int:
             print(f"  ✓ 手机抽屉可点（命中 {drawer['hit']}）")
         page.screenshot(path=str(SHOTS / "21-手机-侧栏抽屉.png"))
 
-        # 2) 页面底的环境光还在（它得画在 body 背景上，不能是 fixed 浮层）
+        # 2) 页面底不再有装饰性渐变。
+        #    终端风格界面不发光，层次全部来自 1px 发丝线与表面明度，
+        #    所以这里断言 body 上**没有**渐变，防止哪天又有人在页面底刷一层环境光。
         page.set_viewport_size({"width": 1680, "height": 1000})
         page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
         page.wait_for_timeout(1800)
         ambience = page.evaluate("getComputedStyle(document.body).backgroundImage")
-        if "gradient" not in ambience:
-            problems.append("页面底的环境光没画上（body background-image 里没有渐变）")
+        if "gradient" in ambience:
+            problems.append(
+                "页面底出现了装饰性渐变（%s…）——终端风格界面不允许，"
+                "层次应当来自发丝线与表面明度" % ambience[:60])
+        else:
+            print("  ✓ 页面底没有装饰性渐变（终端风格界面不发光）")
 
         browser.close()
 

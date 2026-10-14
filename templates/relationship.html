@@ -4,10 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>关系树 · 世界观共建</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='2'%3E%3Crect x='12' y='5' width='8' height='7' rx='1.6'/%3E%3Crect x='3.5' y='20' width='8' height='7' rx='1.6'/%3E%3Crect x='20.5' y='20' width='8' height='7' rx='1.6'/%3E%3Cpath d='M16 12v4M7.5 20v-4h17v4'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
   <!-- Minimal 设计语言（桌面 Minimalist 设计系统的 token：灰阶主色 / 12-16px 圆角 / 4px 栅格 / 扁平） -->
   <link rel="stylesheet" href="{% static 'minimal.css' %}?v={{ static_version }}" />
   <link rel="stylesheet" href="{% static 'relationship.css' %}?v={{ static_version }}" />
+  <!-- Apple 皮肤层（仓库根目录 DESIGN.md）：定义 --ap-* 原始调色板。取值随后被 terminal.css 整体覆盖 -->
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <!-- 现代终端设计语言（仓库根目录 DESIGN.md）—— 全站外观权威：把前几层的语义 token 整体重映射到终端取值，
+       并覆写硬编码色 / 等宽元素 / 装饰手法。合成 VoltAgent 的近黑+电光绿、Ollama 的等宽眉标、Warp 的暖调与紧圆角 -->
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <!-- 动效与观感收尾：统一时长/曲线、浮层出入场、控件微交互——只加动效，不改配色 -->
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <!-- 全链路体验层（仓库根目录 DESIGN.md）：骨架屏 / 切换动效 / 分级提示 / 离线 / 无障碍 -->
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射 --tx-* 等变量、不含选择器；靠"变量使用时求值"在最后统一改写取值。删掉即回滚 -->
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
 </head>
 <body class="rt-body{% if embed %} is-embed{% endif %}{% if paper %} is-paper{% endif %}">
   <div class="rt-app" id="rtApp"
@@ -28,10 +39,23 @@
             <p>选择您要构建的树的类型</p>
           </div>
         </header>
-        <div class="rt-template-list" id="rtTemplateList" role="listbox" aria-label="关系树模版"></div>
+        <div class="rt-template-list" id="rtTemplateList" role="listbox" aria-label="关系树模版">
+          <!-- 骨架屏（DESIGN.md）：模版接口回来之前先把这一列撑住 -->
+          <div class="sk-stack xp-skel-wait" data-skeleton="rt-templates" aria-hidden="true">
+            <div class="sk" style="height: 54px"></div>
+            <div class="sk" style="height: 54px"></div>
+            <div class="sk" style="height: 54px"></div>
+            <div class="sk" style="height: 54px"></div>
+          </div>
+        </div>
         <div class="rt-side-foot">
           <h2 class="rt-existing-head">已有关系树</h2>
-          <div class="rt-existing" id="rtExisting"></div>
+          <div class="rt-existing" id="rtExisting">
+            <div class="sk-stack xp-skel-wait" data-skeleton="rt-existing" aria-hidden="true">
+              <div class="sk" style="height: 34px"></div>
+              <div class="sk" style="height: 34px"></div>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -196,5 +220,7 @@
 
   <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
   <script src="{% static 'relationship.js' %}?v={{ static_version }}"></script>
+  <!-- 体验层：导航进度线 / Ripple / 骨架屏 / 离线徽标 / 焦点与离开处理 -->
+  <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
 </body>
 </html>

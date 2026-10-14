@@ -1,0 +1,1 @@
+var e={width:0,height:0,scale:1,x:0,y:0},t={labels:e=>(100+100/e)/2,markers:e=>100/Math.sqrt(e),burgIcons:e=>100/(1+(e-1)/80)},n=(e,n)=>Math.max(Math.round(t[e](n)*100)/100,1);function r(t,n){e.width=t,e.height=n}function i(t,n,r){e.scale=t,e.x=n,e.y=r}export{n as a,e as i,r as n,i as r,t};

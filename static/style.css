@@ -1,32 +1,33 @@
 /* ==========================================================================
-   世界观共建 · 时间轴  —  样式
+   经典时间线（/legacy）  —  样式
    --------------------------------------------------------------------------
-   视觉稿来自录屏「The Grand Alchemy」的时间线编辑区，尺寸按 2x 录屏逐像素量取：
+   这是经典时间线编辑器（/legacy 页）的一套完整样式，沿用固定的量取尺寸：
    画布点阵 24px、轴线 1px、时间点圆点 8px、标签胶囊 24px 高、
    纪元色带 26px 高、行距 32px、层级间距 30px。
    ========================================================================== */
 
 /* ------------------------------------------------------------------ 变量 */
 :root {
+  /* —— 配色 token：取值指向 --nb-*（画布用的中性色板），结构与尺寸保持不变 —— */
   /* 画布 */
-  --canvas-bg: #0a0908;
-  --dot: rgba(255, 255, 255, 0.22);
+  --canvas-bg: var(--nb-canvas);
+  --dot: rgba(255, 255, 243, 0.09);        /* 暖调点阵，没有对应的 --nb-* token，单独给出 */
   --dot-size: 24px;
 
   /* 轴线 */
-  --axis-line: rgba(255, 255, 255, 0.27);
-  --tick-line: rgba(255, 255, 255, 0.30);
-  --tick-label: #8e8a83;
+  --axis-line: var(--nb-hairline-strong);
+  --tick-line: rgba(255, 255, 243, 0.20);  /* 无对应 token */
+  --tick-label: var(--nb-body);
 
   /* 时间点 */
-  --event-dot: #dbd8d6;
-  --event-dot-ring: rgba(0, 0, 0, 0.92);
-  --stem: rgba(255, 255, 255, 0.17);
+  --event-dot: var(--nb-ink);
+  --event-dot-ring: var(--nb-canvas);
+  --stem: rgba(255, 255, 243, 0.12);       /* 无对应 token */
   --pill-h: 24px;
   --pill-radius: 12px;
-  --pill-bg: rgb(34, 30, 17);
-  --pill-border: rgba(255, 255, 255, 0.10);
-  --pill-text: #d9d5cf;
+  --pill-bg: var(--nb-canvas-raised);
+  --pill-border: var(--nb-hairline);
+  --pill-text: var(--nb-ink);
   --pill-gap: 6px;          /* 相邻层级之间的空隙 */
   --pill-lift: 20.5px;      /* 最底层胶囊底边距轴线的距离 */
 
@@ -37,19 +38,19 @@
   --era-top: 25.5px;        /* 第一行色带顶边距轴线的距离 */
 
   /* 浮层控件 */
-  --glass: rgba(255, 255, 255, 0.045);
-  --glass-strong: rgba(255, 255, 255, 0.10);
-  --icon: #d6d3ce;
-  --sep: rgba(255, 255, 255, 0.12);
+  --glass: var(--nb-alpha-100);
+  --glass-strong: var(--nb-alpha-300);
+  --icon: var(--nb-mute);
+  --sep: rgba(255, 255, 243, 0.11);            /* 无对应 token */
 
   /* 弹层 */
-  --panel: #211d18;
-  --panel-border: rgba(255, 255, 255, 0.07);
-  --panel-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.4);
-  --field: rgba(255, 255, 255, 0.04);
-  --text: #ece8e1;
-  --text-dim: #a9a49b;
-  --text-faint: #7b766e;
+  --panel: var(--nb-canvas-soft);
+  --panel-border: var(--nb-hairline);
+  --panel-shadow: var(--nb-shadow-xl);
+  --field: var(--nb-alpha-100);
+  --text: var(--nb-ink);
+  --text-dim: var(--nb-body);
+  --text-faint: var(--nb-dim);
 
   --dur: 160ms;
 
@@ -68,11 +69,11 @@
   --ease-spring: cubic-bezier(0.34, 1.32, 0.5, 1);    /* 收尾轻微过冲 */
 }
 
-/* 六种配色，逐像素取自录屏：
+/* 六种配色（每一套由下面四个变量组成）：
    --cs 色板 / 封面色（鲜亮的那一支）
    --c  色带文字
    --cb 色带常态边框
-   --cf 色带底色（不透明 —— 录屏里色带会盖住背景点阵） */
+   --cf 色带底色（不透明 —— 色带会盖住背景点阵） */
 .t-blue   { --cs: 98, 105, 128;  --c: 98, 105, 128;  --cb: 46, 51, 57;   --cf: 20, 20, 17; }
 .t-sky    { --cs: 52, 117, 243;  --c: 52, 117, 243;  --cb: 29, 56, 107;  --cf: 15, 21, 31; }
 .t-violet { --cs: 82, 81, 193;   --c: 82, 81, 193;   --cb: 43, 44, 108;  --cf: 19, 20, 33; }
@@ -93,7 +94,7 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: var(--canvas-bg);
   color: var(--text);
   font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
                system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -124,7 +125,7 @@ svg { display: block; }
 .viewport.is-panning { cursor: grabbing; }
 .viewport.tool-hand { cursor: grab; }
 
-/* 背景暖色光晕：对应录屏里那层被压暗的画面。
+/* 背景暖色光晕：画面上那层被压暗的光。
    26 秒一轮的极慢呼吸，只动 transform，纯合成层开销。 */
 @keyframes ambient-breathe {
   from { transform: scale(1.0) translate3d(0, 0, 0); }
@@ -134,15 +135,16 @@ svg { display: block; }
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* 光晕配色：**保留结构与 26s 呼吸动效**，只把暖琥珀换成中性白。 */
   background:
-    radial-gradient(11% 8% at 70% 76%, rgba(255, 196, 110, 0.40), transparent 72%),
-    radial-gradient(20% 15% at 66% 81%, rgba(205, 125, 45, 0.20), transparent 76%),
-    radial-gradient(23% 15% at 69% 67%, rgba(235, 160, 70, 0.13), transparent 78%),
-    radial-gradient(20% 13% at 29% 97%, rgba(220, 130, 50, 0.13), transparent 78%),
-    radial-gradient(28% 20% at 58% 93%, rgba(190, 110, 40, 0.14), transparent 78%),
-    radial-gradient(32% 22% at 32% 97%, rgba(180, 95, 35, 0.13), transparent 78%),
-    radial-gradient(115% 105% at 54% 48%, rgba(150, 108, 60, 0.115), transparent 88%),
-    #0b0908;
+    radial-gradient(11% 8% at 70% 76%, rgba(255, 255, 255, 0.030), transparent 72%),
+    radial-gradient(20% 15% at 66% 81%, rgba(255, 255, 255, 0.018), transparent 76%),
+    radial-gradient(23% 15% at 69% 67%, rgba(255, 255, 255, 0.014), transparent 78%),
+    radial-gradient(20% 13% at 29% 97%, rgba(255, 255, 255, 0.014), transparent 78%),
+    radial-gradient(28% 20% at 58% 93%, rgba(255, 255, 255, 0.012), transparent 78%),
+    radial-gradient(32% 22% at 32% 97%, rgba(255, 255, 255, 0.012), transparent 78%),
+    radial-gradient(115% 105% at 54% 48%, rgba(255, 255, 255, 0.010), transparent 88%),
+    #191919;
   transform-origin: 62% 82%;
   animation: ambient-breathe 26s var(--ease-both) infinite alternate;
 }
@@ -231,17 +233,17 @@ svg { display: block; }
 }
 
 .ev.is-selected .ev-pill {
-  background: #f4f1ec;
-  border-color: #f4f1ec;
-  color: #17140f;
+  background: #f0f0f0;
+  border-color: #f0f0f0;
+  color: #131313;
 }
 
 .ev.is-hover .ev-pill {
   border-color: rgba(255, 255, 255, 0.26);
-  background: rgb(44, 39, 22);
+  background: rgba(33, 33, 33, 1);
   transform: translateY(-1px);
 }
-.ev.is-hover.is-selected .ev-pill { background: #f4f1ec; }
+.ev.is-hover.is-selected .ev-pill { background: #f0f0f0; }
 
 /* --------------------------------------------------------------- 纪元带 */
 .era {
@@ -309,7 +311,7 @@ svg { display: block; }
   width: 8px;
   border-radius: 5px;
   background: rgb(var(--c));
-  box-shadow: 0 0 0 2px rgba(10, 9, 8, 0.55), 0 2px 8px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 2px rgba(9, 9, 9, 0.55), 0 2px 8px rgba(0, 0, 0, 0.45);
   opacity: 0;
   transform: scaleY(0.55);
   cursor: ew-resize;
@@ -357,9 +359,9 @@ svg { display: block; }
   align-items: center;
   padding: 0 10px;
   border-radius: 8px;
-  background: rgba(30, 27, 22, 0.94);
+  background: rgba(26, 26, 26, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  color: #d8d5cf;
+  color: #d3d3d3;
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
@@ -377,7 +379,7 @@ svg { display: block; }
   margin: -15px 0 0 -15px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(12, 11, 9, 0.55);
+  background: rgba(10, 10, 10, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -389,7 +391,7 @@ svg { display: block; }
   width: 16px;
   height: 16px;
   fill: none;
-  stroke: #f2efea;
+  stroke: #eeeeee;
   stroke-width: 1.6;
   stroke-linecap: round;
 }
@@ -425,8 +427,8 @@ svg { display: block; }
   height: 40px;
   padding: 0 8px 0 14px;
   border-radius: 12px;
-  background: rgba(34, 28, 17, 0.96);
-  border: 1px solid #292317;
+  background: rgba(26, 26, 26, 0.96);
+  border: 1px solid #202020;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
   z-index: 12;
   --tx: -50%;
@@ -436,7 +438,7 @@ svg { display: block; }
 .sel-bar[hidden] { display: none; }
 .sel-count {
   font-size: 12.5px;
-  color: #ece8e1;
+  color: #e6e6e6;
   margin-right: 4px;
   white-space: nowrap;
 }
@@ -447,7 +449,7 @@ svg { display: block; }
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: #d6d3ce;
+  color: #d2d2d2;
   transition: background var(--dur-1) ease, color var(--dur-1) ease,
               transform var(--dur-0) var(--ease-out);
 }
@@ -585,7 +587,7 @@ svg { display: block; }
   gap: 12px;
   padding: 9px 16px;
   border-radius: 10px;
-  background: rgba(30, 27, 22, 0.95);
+  background: rgba(26, 26, 26, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 12px;
   color: var(--text);
@@ -608,7 +610,7 @@ svg { display: block; }
 .toast-act:hover { background: rgba(255, 255, 255, 0.18); }
 
 /* ============================================================ 记录编辑弹层
-   逐像素对齐录屏：360×321 的固定卡片、圆角 27、底色 #221c11、
+   固定尺寸卡片：360×321、圆角 27、底色 #1a1a1a、
    封面 100×100、标题 17px/600、日期行 28 一行、描述 325×100、
    分隔线 y251、底部虚线按钮 325×34。 */
 .editor {
@@ -616,8 +618,8 @@ svg { display: block; }
   width: 360px;
   height: 321px;
   border-radius: 27px;
-  background: #221c11;
-  border: 1px solid #292317;
+  background: #1a1a1a;
+  border: 1px solid #202020;
   z-index: 20;
 }
 .editor[hidden] { display: none; }
@@ -629,7 +631,7 @@ svg { display: block; }
   width: 100px;
   height: 100px;
   border-radius: 12px;
-  background: #2b261b;
+  background: #232323;
   overflow: hidden;
 }
 .ed-cover[data-filled="true"] { background: rgb(var(--cs)); }
@@ -701,7 +703,7 @@ svg { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgb(222, 218, 214);
+  color: rgba(218, 218, 218, 1);
   border-radius: 6px;
 }
 .ed-del svg {
@@ -720,7 +722,7 @@ svg { display: block; }
   display: flex;
   align-items: center;
   gap: 10px;
-  color: rgb(206, 201, 195);
+  color: rgba(200, 200, 200, 1);
   font-size: 13px;
   line-height: 1;
   height: 18px;
@@ -735,7 +737,7 @@ svg { display: block; }
   height: 16px;
   flex: 0 0 auto;
   fill: none;
-  stroke: rgb(224, 220, 215);
+  stroke: rgba(220, 220, 220, 1);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -749,8 +751,8 @@ svg { display: block; }
   height: 100px;
   padding: 12px;
   border-radius: 12px;
-  background: #2b261b;
-  color: #ddd9d2;
+  background: #232323;
+  color: #d8d8d8;
   font-size: 14px;
   line-height: 1.25;
   outline: none;
@@ -758,7 +760,7 @@ svg { display: block; }
 }
 .ed-desc:empty::before {
   content: attr(data-placeholder);
-  color: rgb(207, 203, 197);
+  color: rgba(202, 202, 202, 1);
 }
 
 .ed-divider {
@@ -768,7 +770,7 @@ svg { display: block; }
   top: 251px;
   margin: 0;
   border: 0;
-  border-top: 1px solid rgb(48, 42, 30);
+  border-top: 1px solid rgba(39, 39, 39, 1);
 }
 
 .ed-cards {
@@ -782,7 +784,7 @@ svg { display: block; }
   justify-content: center;
   gap: 11px;
   border-radius: 10px;
-  border: 1px dashed rgb(94, 88, 76);
+  border: 1px dashed rgba(85, 85, 85, 1);
   color: #fff;
   font-size: 14px;
 }
@@ -804,8 +806,8 @@ svg { display: block; }
   gap: 10px;
   padding: 12px;
   border-radius: 14px;
-  background: #221c11;
-  border: 1px solid #292317;
+  background: #1a1a1a;
+  border: 1px solid #202020;
   z-index: 24;
 }
 .palette[hidden] { display: none; }
@@ -856,7 +858,7 @@ svg { display: block; }
 }
 
 /* ============================================================ 日历设置
-   逐像素对齐录屏：316 宽、圆角 16、底色 #261f12（不透明）、无阴影，
+   固定尺寸：316 宽、圆角 16、底色 #1c1c1c（不透明）、无阴影，
    面板水平居中于底部工具条的日历按钮之上，间距 10；只有页脚固定。 */
 .settings {
   position: fixed;
@@ -865,8 +867,8 @@ svg { display: block; }
   flex-direction: column;
   max-height: calc(100vh - 120px);
   border-radius: 16px;
-  background: #261f12;
-  border: 1px solid #2b2619;
+  background: #1c1c1c;
+  border: 1px solid #222222;
   z-index: 22;
 }
 .settings[hidden] { display: none; }
@@ -889,8 +891,8 @@ svg { display: block; }
   margin: 0 0 12px;
   font-size: 13px;
   font-weight: 600;
-  color: #fcfaf8;
-  border-bottom: 1px solid #302a1e;
+  color: #fafafa;
+  border-bottom: 1px solid #272727;
   padding-bottom: 12px;
 }
 .st-pad { padding: 0 16px; }
@@ -899,7 +901,7 @@ svg { display: block; }
   margin: 0 0 10px;
   font-size: 13px;
   font-weight: 600;
-  color: #fcfaf8;
+  color: #fafafa;
 }
 
 .st-field {
@@ -912,23 +914,23 @@ svg { display: block; }
   margin-bottom: 19px;
   padding: 0 12px;
   border-radius: 8px;
-  background: #363024;
-  border: 1px solid #403b2e;
+  background: #2d2d2d;
+  border: 1px solid #373737;
   font-size: 11px;
   text-align: left;
 }
 .st-field:last-child { margin-bottom: 0; }
 .st-field.is-static { margin-bottom: 12px; }
-.st-field:hover { background: #3c3529; }
-.st-label { color: #d4cfca; flex: 0 0 auto; }
-.st-value { color: #fdf9f8; flex: 1 1 auto; }
+.st-field:hover { background: #333333; }
+.st-label { color: #cfcfcf; flex: 0 0 auto; }
+.st-value { color: #fbfbfb; flex: 1 1 auto; }
 .st-chevron {
   position: absolute;
   right: 14px;
   width: 11px;
   height: 11px;
   fill: none;
-  stroke: #d0ccc8;
+  stroke: #cccccc;
   stroke-width: 1.25;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -939,14 +941,14 @@ svg { display: block; }
   text-align: left;
   padding: 6px 0 2px;
   font-size: 11px;
-  color: #cec9c2;
+  color: #c8c8c8;
 }
 .st-row-btn:hover { color: #fff; }
 
 .st-divider {
   margin: 16px 0;
   border: 0;
-  border-top: 1px solid #302a1e;
+  border-top: 1px solid #272727;
 }
 
 .st-head-row {
@@ -954,14 +956,14 @@ svg { display: block; }
   align-items: baseline;
   justify-content: space-between;
 }
-.st-hint { font-size: 11px; color: #cec9c2; }
+.st-hint { font-size: 11px; color: #c8c8c8; }
 
 .st-seg {
   display: flex;
   gap: 3px;
   padding: 4px 3px;
   border-radius: 8px;
-  background: #363022;
+  background: #2c2c2c;
   margin-bottom: 18px;
 }
 .st-seg-item {
@@ -972,16 +974,16 @@ svg { display: block; }
   justify-content: center;
   border-radius: 7px;
   font-size: 11.5px;
-  color: #aba198;
+  color: #a2a2a2;
   transition: background var(--dur) ease, color var(--dur) ease;
 }
-.st-seg-item.is-active { background: #1d190b; color: #fcf8f9; }
+.st-seg-item.is-active { background: #141414; color: #fafafa; }
 
 .st-label-row {
   margin: 0 0 8px;
   font-size: 11px;
   font-weight: 400;
-  color: #cec9c2;
+  color: #c8c8c8;
 }
 
 .st-custom[hidden] { display: none; }
@@ -993,13 +995,13 @@ svg { display: block; }
   margin-bottom: 14px;
   font-size: 11px;
 }
-.st-value-sm { font-size: 11px; color: #cbccc2; }
+.st-value-sm { font-size: 11px; color: #c7c7c7; }
 .st-chip {
   display: inline-block;
   padding: 5px 10px;
   border-radius: 8px;
-  background: #363022;
-  color: #fdf9f8;
+  background: #2c2c2c;
+  color: #fbfbfb;
   font-size: 11px;
   margin-bottom: 18px;
 }
@@ -1017,8 +1019,8 @@ svg { display: block; }
   height: 21px;
   padding: 0 9px;
   border-radius: 11px;
-  background: #363022;
-  color: #fbf9f9;
+  background: #2c2c2c;
+  color: #fafafa;
   font-size: 11px;
 }
 .st-pill svg {
@@ -1037,14 +1039,14 @@ svg { display: block; }
   justify-content: flex-end;
   gap: 20px;
   padding: 10px 16px 12px;
-  border-top: 1px solid #302a1e;
+  border-top: 1px solid #272727;
 }
 .st-format {
   margin-right: auto;
   font-size: 11.5px;
-  color: #cec9c2;
+  color: #c8c8c8;
 }
-.st-format b { color: #fbf9f8; font-weight: 600; margin-left: 4px; }
+.st-format b { color: #fafafa; font-weight: 600; margin-left: 4px; }
 .st-btn {
   font-size: 14px;
   color: #fff;
@@ -1054,9 +1056,9 @@ svg { display: block; }
   width: 55px;
   height: 34px;
   border-radius: 10px;
-  background: #332f21;
+  background: #2a2a2a;
 }
-.st-btn.is-primary:hover { background: #3d382a; }
+.st-btn.is-primary:hover { background: #343434; }
 
 /* --------------------------------------------------------------- 悬停卡片 */
 .hint-card {
@@ -1064,7 +1066,7 @@ svg { display: block; }
   max-width: 320px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(30, 27, 22, 0.96);
+  background: rgba(26, 26, 26, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
   font-size: 12px;
@@ -1088,7 +1090,7 @@ svg { display: block; }
    两条纪律：
    1. 只用 transform / opacity，绝不给 left / top / width 加过渡 ——
       否则拖拽和缩放会变成「追着指针跑」。
-   2. 所有动画都收敛到「静止态」，静止态的坐标与录屏逐像素对齐的结论不变。
+   2. 所有动画都收敛到「静止态」，静止态的坐标始终保持不变。
    ========================================================================== */
 
 /* 通用浮出 / 收起。--tx 用来兼容本来就带 translateX(-50%) 的居中元素。 */
@@ -1261,7 +1263,7 @@ svg { display: block; }
 }
 .empty-btn:hover { background: rgba(255, 255, 255, 0.11); color: #fff; }
 .empty-btn:active { transform: scale(0.96); }
-.empty-btn.is-primary { background: #ece8e1; border-color: #ece8e1; color: #17140f; font-weight: 500; }
+.empty-btn.is-primary { background: #e6e6e6; border-color: #e6e6e6; color: #131313; font-weight: 500; }
 .empty-btn.is-primary:hover { background: #fff; }
 
 /* --------------------------------------------------- 首次使用的一次性提示 */
@@ -1280,8 +1282,8 @@ svg { display: block; }
   gap: 14px;
   padding: 9px 12px 9px 16px;
   border-radius: 11px;
-  background: rgba(34, 28, 17, 0.94);
-  border: 1px solid #322b1d;
+  background: rgba(26, 26, 26, 0.94);
+  border: 1px solid #282828;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
   font-size: 12px;
   color: var(--text-dim);
@@ -1310,7 +1312,7 @@ svg { display: block; }
   gap: 7px;
   padding: 6px 12px;
   border-radius: 9px;
-  background: rgba(28, 25, 20, 0.8);
+  background: rgba(24, 24, 24, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 11.5px;
   color: var(--text-faint);
@@ -1333,7 +1335,7 @@ svg { display: block; }
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(6, 5, 4, 0.5);
+  background: rgba(5, 5, 5, 0.5);
   backdrop-filter: blur(3px);
   z-index: 25;
 }
@@ -1347,8 +1349,8 @@ svg { display: block; }
   display: flex;
   flex-direction: column;
   border-radius: 18px;
-  background: #221c11;
-  border: 1px solid #302a1c;
+  background: #1a1a1a;
+  border: 1px solid #262626;
   box-shadow: var(--panel-shadow);
   z-index: 26;
 }
@@ -1371,9 +1373,9 @@ svg { display: block; }
   align-items: center;
   justify-content: space-between;
   padding: 16px 18px 13px;
-  border-bottom: 1px solid #302a1e;
+  border-bottom: 1px solid #272727;
 }
-.hp-title { margin: 0; font-size: 14px; font-weight: 600; color: #fcfaf8; }
+.hp-title { margin: 0; font-size: 14px; font-weight: 600; color: #fafafa; }
 .hp-close {
   width: 26px;
   height: 26px;
@@ -1407,7 +1409,7 @@ svg { display: block; }
   margin: 0 0 8px;
   font-size: 11.5px;
   font-weight: 600;
-  color: #e6e0d4;
+  color: #dddddd;
   letter-spacing: 0.03em;
 }
 .hp-list { margin: 0; padding: 0; list-style: none; }
@@ -1432,7 +1434,7 @@ svg { display: block; }
 .hp-list kbd {
   font: inherit;
   font-size: 11.5px;
-  color: #efe9dd;
+  color: #e6e6e6;
 }
 .hp-list b { color: var(--text); font-weight: 600; }
 
@@ -1448,10 +1450,10 @@ svg { display: block; }
   transform: translateX(-50%) translateY(3px);
   padding: 5px 9px;
   border-radius: 7px;
-  background: rgba(38, 33, 24, 0.97);
+  background: rgba(31, 31, 31, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
-  color: #ece8e1;
+  color: #e6e6e6;
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
@@ -1469,7 +1471,7 @@ svg { display: block; }
 
 /* ------------------------------------------------------------ 焦点可见 */
 :focus-visible {
-  outline: 2px solid rgba(236, 232, 225, 0.55);
+  outline: 2px solid rgba(230, 230, 230, 0.55);
   outline-offset: 2px;
 }
 
@@ -1491,22 +1493,22 @@ svg { display: block; }
 .tl-list {
   position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px;
   display: flex; flex-direction: column; overflow: hidden;
-  background: var(--panel, #17150f); border: 1px solid var(--line, #2c281f);
+  background: var(--panel, #131313); border: 1px solid var(--line, #262626);
   border-radius: 14px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); z-index: 6;
 }
-.tl-list-head { display: flex; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line, #2c281f); }
+.tl-list-head { display: flex; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line, #262626); }
 .tl-list-head input {
   flex: 1 1 auto; height: 30px; padding: 0 12px; border-radius: 999px;
-  background: rgba(255, 255, 255, .04); border: 1px solid var(--line, #2c281f);
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--line, #262626);
   color: inherit; font: inherit; font-size: 12.5px;
 }
-.tl-list-head input:focus { outline: none; border-color: var(--accent, #c8a24a); }
+.tl-list-head input:focus { outline: none; border-color: var(--accent, #2383e2); }
 .tl-list-filter {
   width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
-  background: rgba(255, 255, 255, .04); border: 1px solid var(--line, #2c281f);
-  color: var(--ink-dim, #8b8578);
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--line, #262626);
+  color: var(--ink-dim, #828282);
 }
-.tl-list-filter.is-on { color: var(--accent, #c8a24a); border-color: var(--accent, #c8a24a); }
+.tl-list-filter.is-on { color: var(--accent, #2383e2); border-color: var(--accent, #2383e2); }
 .tl-list-body { flex: 1 1 auto; overflow: auto; padding: 6px; }
 .tl-list-row {
   display: flex; align-items: center; gap: 8px; padding: 7px 8px;
@@ -1516,13 +1518,13 @@ svg { display: block; }
 .tl-list-row.is-selected { background: rgba(200, 162, 74, .16); }
 .tl-list-flag {
   width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
-  background: transparent; border: 0; color: var(--ink-dim, #8b8578); font-size: 13px;
+  background: transparent; border: 0; color: var(--ink-dim, #828282); font-size: 13px;
 }
-.tl-list-flag.is-on { color: var(--accent, #c8a24a); }
-.tl-list-when { flex: 0 0 auto; font-size: 11px; color: var(--ink-dim, #8b8578); font-variant-numeric: tabular-nums; }
+.tl-list-flag.is-on { color: var(--accent, #2383e2); }
+.tl-list-when { flex: 0 0 auto; font-size: 11px; color: var(--ink-dim, #828282); font-variant-numeric: tabular-nums; }
 .tl-list-title { flex: 1 1 auto; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-list-kind { font-size: 10.5px; color: var(--ink-dim, #8b8578); }
-.tl-list-empty { padding: 20px; text-align: center; color: var(--ink-dim, #8b8578); font-size: 12.5px; }
+.tl-list-kind { font-size: 10.5px; color: var(--ink-dim, #828282); }
+.tl-list-empty { padding: 20px; text-align: center; color: var(--ink-dim, #828282); font-size: 12.5px; }
 
 
 /* ------------------------------------------------- 窄屏 / 触摸（经典编辑器） */
@@ -1574,42 +1576,42 @@ body.is-readonly .stage, body.is-readonly #stage, body.is-readonly .viewport { b
    免得一块深色画布糊在浅色页面上。颜色全部走 token，不碰布局。
    --------------------------------------------------------------- */
 body.is-readonly.is-paper {
-  --bg: #faf7f0;
+  --bg: #f5f5f5;
   --panel: #ffffff;
   --panel-2: #ffffff;
-  --line: #e6e0d3;
-  --line-strong: #d8d0bd;
-  --ink: #1b1710;
-  --ink-soft: #4a4438;
-  --ink-dim: #857c6b;
+  --line: #dcdcdc;
+  --line-strong: #cbcbcb;
+  --ink: #161616;
+  --ink-soft: #414141;
+  --ink-dim: #787878;
   --accent: #8a6a1f;
-  --dot: rgba(27, 23, 16, .22);
+  --dot: rgba(22, 22, 22, 0.22);
 }
-  --canvas-bg: #faf7f0;          /* 画布底色（编辑器默认是深色） */
+  --canvas-bg: #f5f5f5;          /* 画布底色（编辑器默认是深色） */
   --dot-size: 26px;
   --grid-glow: none;
 }
-body.is-readonly.is-paper .tl-list { background: #fff; box-shadow: 0 10px 30px rgba(27,23,16,.12); }
+body.is-readonly.is-paper .tl-list { background: #fff; box-shadow: 0 10px 30px rgba(22, 22, 22, 0.12); }
 body.is-readonly.is-paper .era.is-narrow { display: none; }
-/* 纸面模式下的整套配色与节奏：对着 VVD 的 wiki 时间线调 ——
+/* 纸面模式下的整套配色与节奏 ——
    奶油底 + 极淡点阵、细轴线、黑点白胶囊、柔和粉彩纪元带。
    只改 token 与尺寸，不动 layout.js 的几何计算。 */
 body.is-readonly.is-paper {
-  --canvas-bg: #f7f3e4;
-  --dot: rgba(27, 23, 16, .11);
+  --canvas-bg: #eeeeee;
+  --dot: rgba(22, 22, 22, 0.11);
   --dot-size: 28px;
-  --axis-line: rgba(27, 23, 16, .34);
-  --tick-line: rgba(27, 23, 16, .18);
-  --tick-label: #8b8677;
-  --event-dot: #1b1710;
-  --event-dot-ring: rgba(247, 243, 228, .95);
-  --stem: rgba(27, 23, 16, .22);
+  --axis-line: rgba(22, 22, 22, 0.34);
+  --tick-line: rgba(22, 22, 22, 0.18);
+  --tick-label: #818181;
+  --event-dot: #161616;
+  --event-dot-ring: rgba(238, 238, 238, 0.95);
+  --stem: rgba(22, 22, 22, 0.22);
 
   --pill-h: 26px;
   --pill-radius: 13px;
   --pill-bg: #ffffff;
-  --pill-border: rgba(27, 23, 16, .10);
-  --pill-text: #1b1710;
+  --pill-border: rgba(22, 22, 22, 0.1);
+  --pill-text: #161616;
   --pill-gap: 9px;
   --pill-lift: 26px;
 
@@ -1619,7 +1621,7 @@ body.is-readonly.is-paper {
   --era-top: 34px;
 }
 
-/* 纪元：粉彩底 + 同色系深字，和 VVD 一样"轻" */
+/* 纪元：粉彩底 + 同色系深字，整体观感更"轻" */
 body.is-readonly.is-paper .t-blue   { --c: 47, 74, 122;  --cb: 178, 199, 232; --cf: 206, 222, 245; }
 body.is-readonly.is-paper .t-sky    { --c: 40, 86, 110;  --cb: 168, 208, 228; --cf: 202, 230, 242; }
 body.is-readonly.is-paper .t-violet { --c: 75, 68, 127;  --cb: 194, 189, 232; --cf: 216, 213, 244; }
@@ -1630,34 +1632,34 @@ body.is-readonly.is-paper .t-gold   { --c: 122, 90, 30;  --cb: 232, 208, 152; --
 body.is-readonly.is-paper .era { box-shadow: none; }
 body.is-readonly.is-paper .era-title { font-size: 12px; letter-spacing: .01em; }
 body.is-readonly.is-paper .ev-pill {
-  box-shadow: 0 1px 2px rgba(27, 23, 16, .06);
+  box-shadow: 0 1px 2px rgba(22, 22, 22, 0.06);
   font-size: 11.5px;
 }
-body.is-readonly.is-paper .ev.is-hover .ev-pill { background: #fffdf7; }
+body.is-readonly.is-paper .ev.is-hover .ev-pill { background: #fbfbfb; }
 body.is-readonly.is-paper .axis-line { stroke-width: 1; }
 
-/* 缩放控件做成白色悬浮卡（VVD 右下角那组同款观感） */
+/* 缩放控件做成白色悬浮卡 */
 body.is-readonly.is-paper .zoom-stack {
   background: #ffffff;
-  border: 1px solid rgba(27, 23, 16, .10);
+  border: 1px solid rgba(22, 22, 22, 0.1);
   border-radius: 14px;
-  box-shadow: 0 6px 18px rgba(27, 23, 16, .10);
+  box-shadow: 0 6px 18px rgba(22, 22, 22, 0.1);
   padding: 4px;
 }
-body.is-readonly.is-paper .zoom-btn { background: transparent; color: #4a4438; }
-body.is-readonly.is-paper .zoom-btn:hover { background: rgba(27, 23, 16, .05); }
+body.is-readonly.is-paper .zoom-btn { background: transparent; color: #414141; }
+body.is-readonly.is-paper .zoom-btn:hover { background: rgba(22, 22, 22, 0.05); }
 
 /* 悬停详情卡也换成纸面 */
 body.is-readonly.is-paper .hint-card {
-  background: #fff; color: #1b1710; border: 1px solid rgba(27, 23, 16, .10);
-  box-shadow: 0 10px 30px rgba(27, 23, 16, .12);
+  background: #fff; color: #161616; border: 1px solid rgba(22, 22, 22, 0.1);
+  box-shadow: 0 10px 30px rgba(22, 22, 22, 0.12);
 }
 
 body.is-readonly.is-paper .bg-ambient {
   background:
     radial-gradient(1100px 420px at 62% 78%, rgba(190, 150, 70, .10), transparent 62%),
-    radial-gradient(760px 320px at 26% 22%, rgba(120, 110, 90, .08), transparent 60%),
-    #faf7f0;
+    radial-gradient(760px 320px at 26% 22%, rgba(105, 105, 105, 0.08), transparent 60%),
+    #f5f5f5;
 }
 body.is-readonly.is-paper .era.t-blue { background: rgba(60, 80, 150, .10); }
 body.is-readonly.is-paper .era.t-teal { background: rgba(20, 120, 90, .12); }
@@ -1666,6 +1668,30 @@ body.is-readonly.is-paper .era.t-gold { background: rgba(190, 150, 60, .14); }
 body.is-readonly.is-paper .era.t-violet { background: rgba(120, 90, 190, .12); }
 body.is-readonly.is-paper .era.t-sky { background: rgba(60, 130, 200, .12); }
 body.is-readonly.is-paper .era-title { color: var(--ink-soft); }   /* 缩得太小的色带读不出内容 */
-body.is-readonly.is-paper .hint-card { background: #fff; color: var(--ink); box-shadow: 0 10px 30px rgba(27,23,16,.14); }
+body.is-readonly.is-paper .hint-card { background: #fff; color: var(--ink); box-shadow: 0 10px 30px rgba(22, 22, 22, 0.14); }
 body.is-readonly.is-paper .ev-pill { background: #fff; }
 body.is-readonly.is-paper .zoom-stack, body.is-readonly.is-paper .zoom-btn { background: #fff; }
+
+/* 事件拖动：原位留一个虚线轮廓（松手或取消时移除） */
+.ev-ghost {
+  position: absolute;
+  width: 12px; height: 12px; margin: -6px 0 0 -6px;
+  border: 1px dashed rgba(35, 131, 226, 0.75);
+  border-radius: 50%;
+  pointer-events: none;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+}
+
+/* hover 卡上的"涉及卡片"（点得动，能让宿主打开那张卡） */
+.hc-cards {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px;
+  margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11.5px;
+}
+.hc-cards-label { color: var(--ink-dim, #8a8a8a); font-family: var(--mono, ui-monospace, monospace); }
+.hc-card { color: var(--green, #2383e2); text-decoration: none; border-bottom: 1px dashed rgba(35, 131, 226, 0.4); }
+.hc-card:hover { border-bottom-style: solid; }
+.hc-sep, .hc-more { color: var(--ink-dim, #8a8a8a); }

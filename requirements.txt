@@ -1,3 +1,11 @@
-# 后端依赖（原 Flask 版本已完全移除，不再需要 flask / flask-cors / flask-sqlalchemy）
+# 后端依赖：Django 全栈（自带 ORM / 模板 / 开发服务器），无需额外的 Web 框架
 # 安装：.venv/bin/pip install -r requirements.txt
 Django==6.1.1
+
+# 部署用的 WSGI 服务器；本地开发用 manage.py runserver 时用不到
+gunicorn==23.0.0
+
+# Django admin 的两步验证（TOTP / 静态备用码），见 docs/13-部署与运维.md §4.11。
+# 这是本项目唯一的第三方依赖——后台是「直接操作数据库」的高危入口，自己搓 TOTP
+# 容易在时钟漂移、限流、密钥熵上翻车，交给成熟的库更稳妥。
+django-otp==1.7.4

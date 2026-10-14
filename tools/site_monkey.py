@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import os
 import json
 import pathlib
 import random
@@ -31,7 +32,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/site_monkey")
 SHOTS.mkdir(parents=True, exist_ok=True)
 CLICKS_PER_PAGE = int(sys.argv[1]) if len(sys.argv) > 1 else 12

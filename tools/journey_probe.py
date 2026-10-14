@@ -15,6 +15,7 @@ import json
 import pathlib
 import re
 import sys
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -25,7 +26,8 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, make_opener  # noqa: E402
 
-BASE = "http://127.0.0.1:8000"
+# 跟其它探针一致：端口用 WS_BASE 覆盖（默认 8000），别再写死一个。
+BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/journey")
 SHOTS.mkdir(parents=True, exist_ok=True)
 
@@ -90,7 +92,7 @@ def main() -> int:
     print(f"所有者发出邀请码：{code}")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=True)
+        browser = p.chromium.launch(channel="chrome", headless=True, args=["--disable-dev-shm-usage"])
         page = browser.new_page(viewport={"width": 1440, "height": 950})
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -101,7 +103,8 @@ def main() -> int:
         print(f"邀请链接：{link}")
         page.goto(link, wait_until="networkidle")
         page.wait_for_timeout(600)
-        filled = page.evaluate("() => (document.querySelector('#invite')||{}).value || ''")
+        filled = page.evaluate(
+            "() => { const box = document.querySelector('input[name=\"invite\"]'); return box ? box.value : ''; }")
         if not filled:
             note("注册", "链接里带了 ?invite=…，但注册表单没有自动填上邀请码，用户还得手动复制粘贴")
         else:
@@ -109,11 +112,11 @@ def main() -> int:
         page.screenshot(path=str(SHOTS / "A1_register.png"))
 
         # 2) 注册
-        page.fill("#username", NEW_USER)
-        page.fill("#display_name", "旅程用户")
-        page.fill("#password", NEW_PASSWORD)
-        if not filled and page.locator("#invite").count():
-            page.fill("#invite", code)
+        page.fill('input[name="username"]', NEW_USER)
+        page.fill('input[name="display_name"]', "旅程用户")
+        page.fill('input[name="password"]', NEW_PASSWORD)
+        if not filled and page.locator('input[name="invite"]').count():
+            page.fill('input[name="invite"]', code)
         page.click("button[type=submit]")
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(1500)
@@ -228,7 +231,7 @@ def main() -> int:
         print("这个世界还没发布，游客旅程跳过")
     else:
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="chrome", headless=True)
+            browser = p.chromium.launch(channel="chrome", headless=True, args=["--disable-dev-shm-usage"])
             page = browser.new_page(viewport={"width": 1440, "height": 950})
             errors: list[str] = []
             page.on("pageerror", lambda e: errors.append(str(e)))
@@ -302,9 +305,23 @@ def main() -> int:
                 shown = page.evaluate("""() => ({
                   html: document.querySelector('main, .page-body, article')?.innerText.slice(0, 80) || '',
                   img: document.querySelectorAll('img, svg, canvas').length,
+                  iframe: document.querySelectorAll('iframe').length,
                 })""")
-                print(f"{label}页：媒体元素 {shown['img']} · 文字「{shown['html'][:40].replace(chr(10), ' ')}」")
-                if shown["img"] == 0:
+                # 画布是嵌在 iframe 里的（不是 <canvas>），而且是两层：
+                # 站点页 -> /world?embed=.. -> /relationship?doc=..&embed=1，
+                # 所以要遍历所有 frame 数里面的画布节点，别只看第一层。
+                inner = 0
+                for frame in page.frames:
+                    try:
+                        inner += frame.evaluate("""() =>
+                          document.querySelectorAll('.map-canvas, .rt-canvas-wrap, .graph-wrap, .viewport').length""")
+                    except Exception:                       # noqa: BLE001
+                        continue
+                shown["inner"] = inner
+                drawn = shown["img"] + shown["iframe"] + inner
+                print(f"{label}页：媒体元素 {shown['img']} · iframe {shown['iframe']}（内含画布 {shown['inner']}）"
+                      f" · 文字「{shown['html'][:40].replace(chr(10), ' ')}」")
+                if drawn == 0:
                     note("游客", f"{label}页只有文字，没有把工作区里的画布渲染出来")
                 page.screenshot(path=str(SHOTS / f"B4_{kind}.png"))
 

@@ -1,0 +1,950 @@
+/* ==========================================================================
+   apple.css  —  Apple 语言（浅色皮肤）落地层
+   --------------------------------------------------------------------------
+   功能模块：全站共用的一层"皮肤"。它在 :root 定义一套原始调色板 --ap-*，
+   并把 minimal.css 的语义 token（--mn-*）与若干组件外观覆盖成 Apple 语言
+   这套浅色外观。
+
+   取舍：Apple 语言脱胎于营销站式的排版——每个 tile 占一屏、80px 段间距、
+   满幅明暗交替。这是编辑器，照搬会很难用，所以只取设计语言、不取页面结构：
+
+     ✅ 落地**设计语言**：单一强调色、字体阶梯、按钮/卡片/输入框语法、
+        阴影纪律、圆角与间距刻度、字重阶梯、焦点与按下状态。
+     ❌ 不落地**营销页结构**：不改成一屏一个 tile、不把留白放大到 80px、
+        不为了"明暗交替"重排信息架构。
+     例外：全局导航那条黑带是设计语言里最有辨识度的一条，照做。
+        —— 主色：Action Blue #0066cc，全系统唯一的"可点"信号
+        —— 表面：白 canvas / #f5f5f7 parchment / #fafafc pearl / #000 导航
+        —— 圆角：8（紧凑控件）/ 11（珍珠胶囊）/ 18（功能卡）/ 9999（动作胶囊）
+        —— 间距：4 / 8 / 12 / 17 / 24 / 32 / 48
+        —— 字重：300 / 400 / 600 / 700，**500 一律不出现**
+        —— 阴影：只允许一道，且只给"产品图"（封面图）。卡片、按钮、文字、
+           导航一律没有阴影；浮层的层次靠**表面色 + 毛玻璃**表达。
+        —— 渐变：不做装饰性渐变（因此外壳层那两团环境光在这里被归零）
+
+   加载顺序（依据 DESIGN.md §4 的契约，顺序不能改）：apple.css 是中间层皮肤，
+   排在结构与语义层（workspace / minimal / site / relationship）之后、
+   换肤层 static/terminal.css 之前。terminal.css 会把语义 token 整体重映射到
+   终端取值，所以这层皮肤的颜色在工作区里默认被换掉；它保留下来，一是因为
+   组件选择器列表是很有用的结构清单，二是只读站点、关系树等页面仍按同一套
+   顺序叠加。新代码不要再往这里加东西——外观改动一律改 terminal.css。
+
+     workspace     = workspace → minimal → responsive → shell → apple → **terminal** → polish
+     relationship  = minimal → relationship                    → apple → **terminal** → polish
+     site          = site                                      → apple → **terminal** → polish
+     auth          = minimal → responsive                      → apple → **terminal** → polish
+     legacy（经典时间线页 /legacy）不加载 apple / terminal / polish
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 原始 token（Apple 语言的 colors / rounded / spacing）
+   ========================================================================== */
+:root {
+  /* —— 品牌与强调 —— */
+  --ap-blue: #0066cc;          /* Action Blue：唯一的交互色 */
+  --ap-blue-focus: #0071e3;    /* 焦点环专用 */
+  --ap-blue-on-dark: #2997ff;  /* 深色面上的链接：Sky Link Blue */
+
+  /* —— 墨色 —— */
+  --ap-ink: #1d1d1f;           /* 标题与正文（不用纯黑，留住"照片感"） */
+  --ap-ink-80: #333333;        /* 珍珠面上的正文 */
+  --ap-ink-48: #7a7a7a;        /* 禁用与法务小字 */
+
+  /* —— 表面 —— */
+  --ap-canvas: #ffffff;
+  --ap-parchment: #f5f5f7;
+  --ap-pearl: #fafafc;
+  /* 规范里 surface-black 是"纯黑只出现在全局导航"，本项目把导航换成了毛玻璃
+     浅色（见第 4 节），所以纯黑现在**没有用武之地**——留在调色板里备查。 */
+  --ap-black: #000000;
+  --ap-tile-1: #272729;        /* 深色面：卡片 */
+  --ap-tile-2: #2a2a2c;        /* 深色面：比 tile-1 亮一档（规范用来做"最淡的一道分隔"） */
+  --ap-tile-3: #252527;        /* 深色面：次级/幽灵底（对应浅色的 pearl） */
+
+  /* —— 线 —— */
+  --ap-hairline: #e0e0e0;
+  --ap-divider: #f0f0f0;
+  --ap-chip: #d2d2d7;
+
+  /* —— 那道唯一的投影：只给"落在表面上的产品图" —— */
+  --ap-product-shadow: 3px 5px 30px 0 rgba(0, 0, 0, 0.22);
+
+  /* —— 毛玻璃（Apple 语言未形式化，按它给的 production 基线） —— */
+  --ap-frost: saturate(180%) blur(20px);
+  --ap-frost-bg: color-mix(in srgb, #f5f5f7 80%, transparent);
+
+  /* —— 字距：display 收紧、正文收紧、小字微微收 —— */
+  --ap-track-display: -0.374px;
+  --ap-track-body: -0.374px;
+  --ap-track-caption: -0.224px;
+  --ap-track-fine: -0.12px;
+  --ap-track-tagline: 0.231px;
+}
+
+/* ==========================================================================
+   2. 把 minimal.css 的语义 token 重映射到 Apple 值
+   --------------------------------------------------------------------------
+   全站组件几乎都吃 --mn-*，所以这一步就能把"灰阶极简"整体翻成"Apple"。
+   ========================================================================== */
+:root {
+  /* 强调：只有一个蓝 */
+  --mn-accent: var(--ap-blue);
+  --mn-accent-ink: #ffffff;
+  --mn-primary: var(--ap-blue);
+  --mn-primary-ink: #ffffff;
+  --mn-focus: var(--ap-blue-focus);
+
+  /* 表面 */
+  --mn-surface: var(--ap-canvas);
+  --mn-surface-muted: var(--ap-pearl);
+  --mn-surface-sunken: var(--ap-parchment);
+  --mn-nav: var(--mn-surface);   /* 导航底色：毛玻璃浅色（见第 4 节）*/
+  --mn-frost: var(--ap-frost);
+  --mn-frost-bg: var(--ap-frost-bg);
+
+  /* 墨色 */
+  --mn-ink: var(--ap-ink);
+  --mn-ink-muted: var(--ap-ink-80);
+  --mn-ink-dim: var(--ap-ink-48);
+  --mn-icon: var(--ap-ink-80);
+
+  /* 线 */
+  --mn-border: var(--ap-hairline);
+  --mn-border-strong: var(--ap-chip);
+  --mn-divider: var(--ap-divider);
+  --mn-ring: var(--ap-blue-focus);
+
+  /* 圆角：8 / 11 / 18 / 胶囊，中间不再插值 */
+  --mn-radius-sm: 8px;
+  --mn-radius: 11px;
+  --mn-radius-lg: 18px;
+  --mn-radius-xl: 18px;
+  --mn-pill: 999px;
+
+  /* 间距：4 / 8 / 12 / 17 / 24（对齐 Apple 语言的 spacing 刻度） */
+  --mn-1: 4px;
+  --mn-2: 8px;
+  --mn-3: 12px;
+  --mn-4: 17px;
+  --mn-5: 24px;
+
+  /* 字体：macOS 上直接落到真的 SF Pro */
+  --mn-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB",
+    system-ui, sans-serif;
+  --mn-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* 控件高度：鼠标优先的密集界面，取 300/400 档，不用 44 的触控档 */
+  --mn-h-sm: 28px;
+  --mn-h: 32px;
+  --mn-h-lg: 36px;
+  --ap-touch: 44px;            /* 触控档：主 CTA 与粗指针设备 */
+
+  /* 阴影：卡片 / 按钮 / 文字一律没有 */
+  --mn-shadow: none;
+  --mn-shadow-pop: none;
+
+  /* 兼容别名：workspace.css 沿用的 token 名，这里跟着赋值 */
+  --accent-soft: color-mix(in srgb, var(--ap-blue) 10%, transparent);
+  --shadow: none;
+}
+
+:root[data-theme="dark"] {
+  --mn-surface: var(--ap-tile-1);
+  --mn-surface-muted: var(--ap-tile-3);
+  --mn-surface-sunken: #1d1d1f;
+  --mn-frost-bg: color-mix(in srgb, #1d1d1f 80%, transparent);
+
+  --mn-ink: #ffffff;
+  --mn-ink-muted: #cccccc;
+  --mn-ink-dim: var(--ap-ink-48);
+  --mn-icon: #cccccc;
+
+  --mn-border: rgba(255, 255, 255, 0.14);
+  --mn-border-strong: rgba(255, 255, 255, 0.26);
+  --mn-divider: rgba(255, 255, 255, 0.08);
+
+  /* 深色面上链接换 Sky Link Blue；主 CTA 仍是 Action Blue */
+  --mn-accent: var(--ap-blue-on-dark);
+  --mn-accent-ink: #0a0a0a;
+  --mn-focus: var(--ap-blue-on-dark);
+  --mn-ring: var(--ap-blue-on-dark);
+  --accent-soft: color-mix(in srgb, var(--ap-blue-on-dark) 14%, transparent);
+}
+
+/* ==========================================================================
+   3. 排版：字体阶梯 / 字重阶梯 / 负字距
+   --------------------------------------------------------------------------
+   Apple 语言的阶梯是 300 / 400 / 600 / 700 —— **没有 500**。
+   前几层里 500 出现了二十来处，这里一次性收回到 600。
+   ========================================================================== */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--mn-font-sans);
+  font-size: 14px;                     /* caption：界面基准 */
+  line-height: 1.43;
+  letter-spacing: var(--ap-track-caption);
+  color: var(--mn-ink);
+  background-color: var(--mn-surface-sunken);
+}
+
+/* 字重阶梯里没有 500：中重一律 600 */
+.wc-name,
+.row.is-active,
+.cover-empty b,
+.picker-text b,
+.badge.is-typed,
+.prop-table th,
+.suggest-row b,
+.foot-note b,
+.graph-tip b,
+.node-bar b,
+.tl-drawer-head b,
+.trash-info b,
+.version-row .vr-main b,
+.table-grid th,
+.media-title,
+.rt-template-text b,
+.rt-existing-head,
+.rt-existing-row b,
+.rt-btn--primary,
+.rt-relation-row b,
+.rt-topbar-title strong {
+  font-weight: 600;
+}
+
+/* 界面里的小字统一走 caption / fine-print 的字距 */
+.tb-btn, .tb-view, .mini-btn, .icon-btn, .sb-new, .insert-btn, .link-btn,
+.chip, .badge, .pl-item, .picker-row, .type-item, .ctx button,
+.fb-menu button, .format-bar button, .rt-btn, .rt-tool, .fc-btn, .era-pill,
+.te-btn, .pager-btn, .seg-btn, .table-tool, .board-add, .rt-relation-btn,
+.mini-input, .mini-select, .prop-input, .prop-select, .list-input,
+.hint, .foot-note, .trash-info b, .suggest-row b {
+  letter-spacing: var(--ap-track-caption);
+}
+
+/* 大字号收紧：这是那套"Apple tight"的题眼 */
+.card-title,
+.hero h1,
+.page-head h1,
+.hit-name,
+.ee-title,
+.tile-name,
+.md-head h2,
+.tool-name,
+.pl-box input {
+  letter-spacing: var(--ap-track-display);
+}
+.tool-name,
+.md-head h2,
+.hit-name,
+.ee-title,
+.tile-name {
+  font-weight: 600;
+}
+
+/* 正文（真正要读的那一层）：17px / 1.47 / 负字距 —— 少一个像素就不是这个节奏 */
+.block-text {
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: var(--ap-track-body);
+}
+.block-title {
+  font-size: 20px;
+  line-height: 1.3;
+  letter-spacing: var(--ap-track-display);
+}
+.block-quote {
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: var(--ap-track-body);
+}
+
+/* 只读站点的正文：同一个 17px 节奏 */
+.page p,
+.page li,
+.era-desc,
+.ee-desc,
+.hit-snippet,
+.lead,
+.hero-sub {
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: var(--ap-track-body);
+}
+.page-title,
+.section h2,
+.page h2 {
+  letter-spacing: var(--ap-track-display);
+}
+
+/* ==========================================================================
+   4. 全局导航：一条毛玻璃的浅色带子
+   --------------------------------------------------------------------------
+   Apple 语言给的配方是 `sub-nav-frosted`：表面色 80% + backdrop-filter 模糊，
+   高度 52px——「frosted-glass effect」是这套语言里表达"浮在内容之上"的手法。
+   规范原版的 global-nav 是纯黑，这里按项目口径换成毛玻璃浅色：
+   页面底已经是 parchment，所以这条带子用 canvas（白）打底才看得出层次：
+     80% 白 + blur(20px) + 一道 hairline，世界背景图会若隐若现地透过来。
+   导航项是安静的 12px 字，没有按钮外框；唯一的蓝胶囊留给「新建 …」。
+   ========================================================================== */
+:root {
+  --shell-top-height: 52px;                       /* 对齐 sub-nav-frosted 的高度 */
+  --shell-top: calc(var(--shell-top-height) + var(--shell-gap));
+  --mn-nav-frost-bg: color-mix(in srgb, var(--mn-surface) 80%, transparent);
+}
+
+.topbar {
+  height: var(--shell-top-height);
+  /* 顶栏是唯一满幅的元素：把它从外壳留白里拽出来，顶到窗口边缘 */
+  margin: calc(-1 * var(--shell-pad)) calc(-1 * var(--shell-pad)) 0;
+  padding: 0 max(var(--shell-pad), 20px);
+  background: var(--mn-nav-frost-bg);
+  backdrop-filter: var(--mn-frost);
+  -webkit-backdrop-filter: var(--mn-frost);
+  border: 0;
+  border-bottom: 1px solid var(--mn-border);
+  border-radius: 0;
+  color: var(--mn-ink);
+}
+.topbar .tb-btn,
+.topbar .tb-view,
+.topbar .world-chip,
+.topbar .user-chip {
+  background: transparent;
+  border-color: transparent;
+  color: var(--mn-ink-muted);
+  box-shadow: none;
+  font-size: 12px;
+  letter-spacing: var(--ap-track-fine);
+}
+.topbar .tb-btn { border-radius: var(--mn-radius-sm); padding: 0 10px; }
+.topbar .tb-view { border-radius: var(--mn-radius-sm); padding: 6px 12px; }
+.topbar .world-chip,
+.topbar .user-chip { border-radius: var(--mn-pill); padding: 0 12px 0 4px; height: var(--mn-h); }
+
+.topbar .tb-btn:hover:not(:disabled),
+.topbar .tb-view:hover:not(:disabled),
+.topbar .world-chip:hover,
+.topbar .user-chip:hover {
+  background: color-mix(in srgb, var(--mn-ink) 7%, transparent);
+  border-color: transparent;
+  color: var(--mn-ink);
+}
+
+/* 当前视图：一块很淡的底片就够，不要第二颗蓝胶囊 */
+.topbar .tb-view.is-active {
+  background: color-mix(in srgb, var(--mn-ink) 10%, transparent);
+  border-color: transparent;
+  color: var(--mn-ink);
+  box-shadow: none;
+}
+/* 「新建 …」是动作，给唯一的蓝胶囊 */
+.topbar .tb-view[data-nav^="new-"] {
+  background: var(--ap-blue);
+  border-color: var(--ap-blue);
+  color: #ffffff;
+}
+.topbar .tb-view[data-nav^="new-"]:hover {
+  background: var(--ap-blue-focus);
+  border-color: var(--ap-blue-focus);
+  color: #ffffff;
+}
+
+.topbar .wc-avatar {
+  background: color-mix(in srgb, var(--mn-ink) 12%, transparent);
+  color: var(--mn-ink);
+}
+.topbar .uc-avatar { background: var(--ap-blue); color: #ffffff; }
+.topbar .tb-divider { background: var(--mn-border); }
+.topbar .presence .pr { border-color: var(--mn-surface); }
+
+/* ==========================================================================
+   5. 按钮：两种语法 —— 蓝色动作胶囊 + 珍珠工具胶囊
+   --------------------------------------------------------------------------
+   Apple 语言只有两种按钮语法：铺满 Action Blue 的胶囊（动作），和紧凑的
+   工具方块。次级 CTA 用"幽灵胶囊"（透明底 + 1px Action Blue 边 + 蓝字）。
+   按下状态是全系统统一的 transform: scale(0.95)。
+   ========================================================================== */
+.mini-btn, .tb-btn, .sb-new, .insert-btn, .icon-btn, .link-btn,
+.tl-mini, .sel-btn, .badge, .chip, .tl-frame-bar button, .tree-bar button,
+.map-bar button, .rt-btn, .rt-tool, .te-btn, .pager-btn, .fc-btn,
+.era-pill, .table-tool, .board-add, .rt-relation-btn, .rt-add-relation,
+.comment-actions button, .md-body button {
+  border-radius: var(--mn-pill);
+  letter-spacing: var(--ap-track-caption);
+}
+
+/* —— 工具键：珍珠胶囊（表面比画布再浅一档，靠 hairline 定边界） —— */
+.mini-btn,
+.tb-btn,
+.sb-new,
+.insert-btn,
+.icon-btn,
+.link-btn,
+.tl-mini,
+.sel-btn,
+.chip,
+.badge,
+.rt-btn,
+.rt-tool,
+.te-btn,
+.pager-btn,
+.fc-btn,
+.table-tool,
+.board-add,
+.rt-relation-btn {
+  background: var(--mn-surface-muted);
+  border: 1px solid var(--mn-border);
+  color: var(--mn-ink-muted);
+  font-weight: 400;
+}
+/* .era-pill 刻意不在上面这组里：它的底色是**纪元的颜色**（内容），
+   不是界面强调色，套上珍珠底会把纪元色盖掉。 */
+.era-pill {
+  border-radius: var(--mn-pill);
+  letter-spacing: var(--ap-track-caption);
+}
+.mini-btn:hover:not(:disabled),
+.tb-btn:hover:not(:disabled),
+.sb-new:hover,
+.insert-btn:hover,
+.icon-btn:hover,
+.link-btn:hover,
+.rt-btn:hover:not(:disabled),
+.rt-tool:hover:not(:disabled),
+.te-btn:hover:not(:disabled),
+.pager-btn:hover,
+.fc-btn:hover,
+.table-tool:hover,
+.board-add:hover,
+.rt-relation-btn:hover {
+  background: var(--mn-surface);
+  border-color: var(--mn-border-strong);
+  color: var(--mn-ink);
+}
+
+/* —— 主 CTA：Action Blue 胶囊，白字 —— */
+.mini-btn.is-primary,
+.insert-btn.is-primary,
+.rt-btn--primary,
+.search-inline button,
+.gate button,
+.tb-view.is-active:not([data-nav]),
+.mini-btn.is-primary:hover,
+.rt-btn--primary:hover:not(:disabled) {
+  background: var(--ap-blue);
+  border-color: var(--ap-blue);
+  color: #ffffff;
+}
+.mini-btn.is-primary:hover:not(:disabled),
+.rt-btn--primary:hover:not(:disabled),
+.search-inline button:hover,
+.gate button:hover {
+  background: var(--ap-blue-focus);
+  border-color: var(--ap-blue-focus);
+}
+
+/* —— 次级 CTA：幽灵胶囊（透明底 + 蓝边 + 蓝字） —— */
+.mini-btn.is-ghost,
+.rt-btn--ghost {
+  background: transparent;
+  border-color: var(--ap-blue);
+  color: var(--ap-blue);
+}
+.mini-btn.is-ghost:hover,
+.rt-btn--ghost:hover {
+  background: color-mix(in srgb, var(--ap-blue) 8%, transparent);
+}
+
+/* —— 危险动作：留着语义红，但形状跟着走 —— */
+.mini-btn.is-danger,
+.link-btn,
+.danger,
+button[data-danger="1"],
+.rt-card-tools button.is-danger,
+.ctx button.is-danger,
+.fb-menu button.is-danger {
+  color: var(--mn-danger);
+  border-color: color-mix(in srgb, var(--mn-danger) 34%, transparent);
+  background: transparent;
+}
+
+/* 焦点：2px 的 Focus Blue，只有这一种 */
+:focus-visible {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 2px;
+}
+.mini-btn:focus-visible,
+.tb-btn:focus-visible,
+.icon-btn:focus-visible,
+.insert-btn:focus-visible,
+.sb-new:focus-visible,
+.rt-btn:focus-visible,
+.rt-tool:focus-visible,
+.te-btn:focus-visible,
+.fc-btn:focus-visible,
+.pager-btn:focus-visible,
+.era-pill:focus-visible,
+.md-close:focus-visible {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 2px;
+}
+/* 聚焦环统一改用 outline，不再用 box-shadow 画 */
+.mini-btn:focus-visible,
+.tb-btn:focus-visible,
+.icon-btn:focus-visible {
+  box-shadow: none;
+  border-color: var(--mn-focus);
+}
+
+/* ==========================================================================
+   6. 输入与表单：胶囊搜索框 + hairline 字段
+   ========================================================================== */
+.mini-input, .mini-select, .prop-input, .prop-select,
+.tl-field input, .tl-field select,
+.tl-event-card input, .tl-event-card select, .tl-event-card textarea,
+.pl-box input, .picker-head input, .list-input, .comment-input {
+  border-radius: var(--mn-radius-sm);
+  border-color: var(--mn-border);
+  letter-spacing: var(--ap-track-caption);
+}
+.mini-input:focus, .mini-select:focus, .prop-input:focus, .prop-select:focus,
+.list-input:focus {
+  border-color: var(--ap-blue-focus);
+  box-shadow: none;
+  outline: 2px solid color-mix(in srgb, var(--ap-blue-focus) 32%, transparent);
+  outline-offset: 0;
+}
+
+/* 搜索框：胶囊 + 44px（Apple 语言的 search-input）。
+   侧栏里那一行要保密度，收一档到 36px；站点上的主搜索照足 44px。 */
+.sb-search,
+.graph-controls input[type="search"],
+.list-search input,
+.search-field {
+  border-radius: var(--mn-pill);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface-muted);
+}
+.sb-search { min-height: var(--mn-h-lg); padding: 6px 14px; }
+.graph-controls input[type="search"],
+.list-search input { border-radius: var(--mn-pill); padding: 8px 16px; }
+.sb-search:focus-within,
+.search-field:focus-within {
+  border-color: var(--ap-blue-focus);
+  background: var(--mn-surface);
+  box-shadow: none;
+}
+
+/* 属性表：行是 hairline 分隔，不是卡片 */
+.props {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface);
+}
+.prop-row { border-bottom-color: var(--mn-divider); }
+.prop-input, .prop-select { background: transparent; border-color: transparent; }
+.prop-input:hover, .prop-select:hover { background: var(--mn-surface-muted); border-color: var(--mn-border); }
+
+/* ==========================================================================
+   7. 表面：卡片靠 hairline 与表面色分层，一律没有阴影
+   ========================================================================== */
+.sidebar,
+.workspace,
+.panel,
+.panel-tabs,
+.panel-body,
+.shell,
+.tool-view,
+.card-view,
+.table-scroll,
+.board-col,
+.board-card,
+.media-card,
+.dice-card,
+.sound-row,
+.list-row,
+.canvas-stage,
+.canvas-item,
+.embed-card,
+.embed-image,
+.guide-card,
+.picker-box,
+.comment-pop,
+.prop-table,
+.rt-screen,
+.rt-canvas-wrap,
+.rt-stage-canvas,
+.rt-template-icon,
+.rt-chip,
+.store-utility-card,
+.tile,
+.te-frame-wrap,
+.canvas-embed iframe {
+  box-shadow: none;
+}
+
+/* 外壳：去掉投影与顶边高光，也不留那两团环境光（Apple 语言：不做装饰性渐变） */
+body {
+  background-image: none;
+}
+.sidebar,
+.workspace {
+  border: 1px solid var(--mn-border);
+  box-shadow: none;
+}
+.panel + .panel { border-left: 1px solid var(--mn-border); }
+.panel-tabs { border-bottom: 1px solid var(--mn-border); }
+.panel-grip::before { background: var(--mn-border); }
+.panel-grip:hover::before { background: var(--ap-blue); }
+
+/* 侧栏：搜索 + 树 + 底部动作，行是 8px 的紧凑块 */
+.row {
+  border-radius: var(--mn-radius-sm);
+  letter-spacing: var(--ap-track-caption);
+}
+.row.is-active {
+  background: color-mix(in srgb, var(--ap-blue) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ap-blue) 26%, transparent);
+  color: var(--mn-ink);
+}
+.row.is-active .r-icon { color: var(--ap-blue); }
+.sb-section {
+  color: var(--mn-ink-dim);
+  font-size: 12px;
+  letter-spacing: var(--ap-track-fine);
+  text-transform: none;
+}
+.sb-foot { background: var(--mn-surface-muted); border-top: 1px solid var(--mn-border); }
+.sb-icon { border-radius: var(--mn-pill); background: var(--mn-surface-muted); border: 1px solid var(--mn-border); }
+
+/* 标签页：动作胶囊的语法；当前页签给一块白片 + 蓝线 */
+.panel-tabs .tab {
+  border-radius: var(--mn-radius-sm);
+  border: 1px solid transparent;
+  color: var(--mn-ink-muted);
+  letter-spacing: var(--ap-track-caption);
+}
+.panel-tabs .tab:hover { background: var(--mn-surface-muted); border-color: var(--mn-border); color: var(--mn-ink); }
+.panel-tabs .tab.is-active {
+  background: var(--mn-surface);
+  border-color: var(--mn-border);
+  color: var(--mn-ink);
+  box-shadow: none;
+}
+.panel-tabs .tab.is-active .t-icon { color: var(--ap-blue); }
+
+/* ==========================================================================
+   8. 浮层：毛玻璃，没有投影
+   --------------------------------------------------------------------------
+   Apple 语言里 UI 的层次只有两种来源：表面色变化、以及毛玻璃。浮层用后者。
+   ========================================================================== */
+.md-box,
+.pl-box,
+.picker-box,
+.ctx,
+.fb-menu,
+.fb-actions,
+.format-bar,
+.mention-pop,
+.date-pop,
+.block-menu,
+.comment-pop,
+.toast,
+.rt-menu,
+.rt-relations-pop,
+.rt-card-tools,
+.rt-toast,
+.insert-bar,
+.fc-menu,
+.tl-panel,
+.tl-drawer,
+.tl-event-card {
+  background: var(--mn-frost-bg);
+  backdrop-filter: var(--mn-frost);
+  -webkit-backdrop-filter: var(--mn-frost);
+  border: 1px solid var(--mn-border);
+  box-shadow: none;
+}
+.md-box, .pl-box, .picker-box { border-radius: var(--mn-radius-lg); }
+.ctx, .fb-menu, .mention-pop, .date-pop, .block-menu, .comment-pop,
+.rt-menu, .rt-relations-pop, .rt-card-tools { border-radius: var(--mn-radius-lg); }
+.toast, .rt-toast, .insert-bar, .fc-menu { border-radius: var(--mn-pill); }
+.format-bar, .fb-actions { border-radius: var(--mn-radius-lg); }
+.md-head { border-bottom: 1px solid var(--mn-border); }
+.md-head h2 {
+  font-family: var(--mn-font-sans);
+  font-style: normal;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.19;
+  letter-spacing: var(--ap-track-tagline);
+}
+/* 浮层里被毛玻璃托着，实心白的小块反而更清楚 */
+.pl-item, .ctx button, .fb-menu button, .mention-row, .picker-row, .type-item {
+  border-radius: var(--mn-radius-sm);
+}
+.pl-item.is-active, .picker-row.is-active, .mention-row.is-active, .type-item.is-active {
+  background: color-mix(in srgb, var(--ap-blue) 12%, transparent);
+  color: var(--mn-ink);
+}
+.ctx button:hover, .fb-menu button:hover, .mention-row:hover, .picker-row:hover, .type-item:hover {
+  background: color-mix(in srgb, var(--mn-ink) 6%, transparent);
+  color: var(--mn-ink);
+}
+.pl-box input:focus, .picker-head input:focus { border-bottom-color: var(--ap-blue); }
+
+/* 遮罩：压暗 + 模糊，模态浮在上面靠毛玻璃而不是阴影 */
+.modal, .palette {
+  background-color: color-mix(in srgb, var(--ap-ink) 34%, transparent);
+}
+.md-box::before, .pl-box::before { background: none; }
+
+/* ==========================================================================
+   9. 数据面：表格 / 看板 / 画布 / 图表
+   ========================================================================== */
+.table-scroll {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface);
+}
+.table-grid th {
+  background: var(--mn-surface-muted);
+  color: var(--mn-ink-dim);
+  font-family: var(--mn-font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: var(--ap-track-fine);
+  text-transform: none;
+  border-bottom: 1px solid var(--mn-border);
+}
+.table-grid td { border-bottom: 1px solid var(--mn-divider); }
+.table-grid tbody tr:hover { background: var(--mn-surface-muted); }
+
+.board-col {
+  background: var(--mn-surface-muted);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+}
+.board-card {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface);
+}
+.board-card:hover { border-color: var(--mn-border-strong); }
+.board-add { border-radius: var(--mn-pill); border-style: solid; }
+
+.canvas-stage {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  background-color: var(--mn-surface-muted);
+}
+.canvas-item {
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface);
+}
+.canvas-item.color-gold { background: color-mix(in srgb, var(--mn-warning) 16%, var(--mn-surface)); }
+.canvas-item.color-sky { background: color-mix(in srgb, var(--ap-blue) 14%, var(--mn-surface)); }
+.canvas-item.color-green { background: color-mix(in srgb, var(--mn-success) 14%, var(--mn-surface)); }
+
+/* 封面 / 缩略图：系统里唯一允许有投影的地方（"产品图落在表面上"） */
+.card-cover,
+.page-cover,
+.tile-cover,
+.media-card img,
+.ec-cover {
+  box-shadow: var(--ap-product-shadow);
+}
+/* 没有图、只有占位时不要那道影子 */
+.card-cover:has(img[src=""]),
+.card-cover:not(:has(img)) { box-shadow: none; }
+
+.empty-hint .eh-art,
+.empty-block .eb-art {
+  background: var(--mn-surface-muted);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  color: var(--ap-blue);
+}
+
+/* 工具页图标块：11px 的珍珠方块 */
+.tool-art {
+  background: var(--mn-surface-muted);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius);
+  color: var(--ap-blue);
+}
+.tool-name { font-size: 21px; letter-spacing: var(--ap-track-tagline); }
+
+/* 数字读数用等宽数位：两段数字不会因为 1 比 8 窄而左右跳 */
+.graph-stats,
+.graph-tip,
+.pl-diff,
+.pl-time,
+.ee-date,
+.tl-year,
+.dice-log-row,
+.radar-legend-item,
+.sc-key,
+.invite-code {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   10. 只读站点：Apple 语言的"陈列面"，这里可以更贴规范
+   --------------------------------------------------------------------------
+   site.css 的 token（纸黄色 --paper #f6f3ec 那一套）也换成 Apple 的灰。
+   它和 minimal.css 的 --ink / --line 同名但含义不同，而 minimal.css 在站点上
+   不加载——所以这些覆盖**只挂在 body.site 上**（模板给站点页加了 class），
+   免得把工作区的 --ink 一起改掉。
+   ========================================================================== */
+body.site {
+  --paper: var(--ap-parchment);
+  --paper-2: var(--ap-canvas);
+  --ink: var(--ap-ink);
+  --ink-soft: var(--ap-ink-80);
+  --ink-dim: var(--ap-ink-48);
+  --line: var(--ap-hairline);
+  --surface: var(--ap-canvas);       /* site.css 有 6 处 var(--surface, …)，但从未定义过 */
+  --mn-line: var(--ap-hairline);     /* responsive.css 的 .pp-group 引用了未定义的 --mn-line */
+  --mn-ink-soft: var(--ap-ink-80);   /* .pp-list li 同上 */
+}
+
+/* 世界主色只留给"世界的名字"（相当于 logo），所有可交互元素归 Action Blue。
+   Apple 语言：「不要把第二个强调色带进来，每一个"可点"的信号都是 Action Blue。」 */
+body.site a,
+body.site .nav-links a::after,
+body.site .fc-item.is-on,
+body.site .callout,
+body.site .tile:hover,
+body.site .te-btn:hover,
+body.site .pager-btn:hover {
+  --site-primary: var(--ap-blue);
+}
+
+.site-nav,
+body > .nav {
+  background: var(--mn-frost-bg);
+  backdrop-filter: var(--mn-frost);
+  -webkit-backdrop-filter: var(--mn-frost);
+  border-bottom: 1px solid var(--mn-border);
+}
+/* 世界的字标与首页大标题保留世界自己的字体——这是"世界在署自己的名字"，
+   不是界面排版；其余展示层级一律 SF Pro Display 600（Apple 语言的硬边界）。 */
+.nav-brand {
+  font-family: var(--site-heading, var(--mn-font-sans));
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: var(--ap-track-display);
+}
+.nav-links a {
+  font-size: 12px;
+  letter-spacing: var(--ap-track-fine);
+}
+.nav-search input,
+.search-inline input,
+.gate input {
+  height: var(--ap-touch);
+  border-radius: var(--mn-pill);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+  padding: 12px 20px;
+  letter-spacing: var(--ap-track-caption);
+}
+.nav-search input { min-width: 240px; }
+.hero h1 {
+  font-family: var(--site-heading, var(--mn-font-sans));
+  font-style: normal;
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1.07;
+  letter-spacing: -0.28px;
+}
+.page-head h1 {
+  font-family: var(--site-heading, var(--mn-font-sans));
+  font-style: normal;
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+.section h2 { font-family: var(--mn-font-sans); font-size: 24px; font-weight: 600; }
+.tile {
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+}
+/* site.css 给卡片留了"悬停抬 1px"，Apple 的卡片不动——只换边与底色 */
+.tile:hover { transform: none; }
+.tile-name { font-family: var(--mn-font-sans); font-style: normal; font-size: 21px; font-weight: 600; }
+.hit-name { font-family: var(--mn-font-sans); font-style: normal; font-weight: 600; }
+.ee-title { font-family: var(--mn-font-sans); font-style: normal; font-weight: 600; }
+/* 纪元的颜色是**内容**（每个纪元自己的色），不是界面强调色，原样留着 */
+.era-pill {
+  border-radius: var(--mn-pill);
+  letter-spacing: var(--ap-track-caption);
+}
+.era-pill.is-on {
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
+}
+.page blockquote { border-left-color: var(--ap-blue); }
+.callout {
+  background: var(--mn-surface-muted);
+  border: 1px solid var(--mn-border);
+  border-left: 3px solid var(--ap-blue);
+  border-radius: var(--mn-radius-sm);
+}
+.te-frame-wrap, .canvas-embed iframe {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface);
+}
+.foot { color: var(--mn-ink-dim); }
+
+/* ==========================================================================
+   11. 关系树
+   ========================================================================== */
+.rt-screen, .rt-canvas-wrap, .rt-stage-canvas {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  background-color: var(--mn-surface);
+}
+.rt-node .rt-card {
+  border-radius: var(--mn-radius);
+  border: 1px solid var(--mn-border-strong);
+}
+.rt-node.is-selected .rt-card {
+  border-color: var(--ap-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ap-blue) 26%, transparent);
+}
+.rt-chip { border-radius: var(--mn-pill); }
+.rt-template-item { border-radius: var(--mn-radius-lg); }
+.rt-template-icon { border-radius: var(--mn-radius); }
+.rt-template-item.is-active .rt-template-icon {
+  background: var(--ap-blue);
+  border-color: var(--ap-blue);
+  color: #ffffff;
+}
+.rt-relation-row { border-radius: var(--mn-radius); }
+.rt-edge:hover { stroke: var(--ap-blue); }
+.rt-edge--draft { stroke: var(--ap-blue); }
+
+/* ==========================================================================
+   12. htmx 之外的小别名 / 收尾
+   ========================================================================== */
+/* 聚焦环用 outline 表达：Apple 语言不用 box-shadow 画聚焦环 */
+.mini-btn:focus-visible,
+.tb-btn:focus-visible,
+.icon-btn:focus-visible,
+.sb-search:focus-within { box-shadow: none; }
+
+/* 世界主题的颗粒层：Apple 语言里没有这个语言，静音 */
+.grain { display: none; }

@@ -1,11 +1,11 @@
 /* ==========================================================================
-   世界观共建 · 时间轴  —  前端主逻辑
+   经典时间线（/legacy）— 前端主逻辑
    --------------------------------------------------------------------------
    时间模型：1 年 = 12 个月，1 月 = 30 天，内部统一用浮点年保存
    （Year -13 · Month 11 → -13 + 10/12）。负年份同样成立：
-   Math.floor(-13.2) = -14，小数部分 0.8 → Month 11，与录屏里的写法一致。
+   Math.floor(-13.2) = -14，小数部分 0.8 → Month 11。
 
-   交互（对齐录屏「The Grand Alchemy」的时间线编辑区）：
+   交互（时间线编辑区的操作方式）：
      轴线上悬停        → 圆形「+」入口，点击在该时刻新建时间点
      轴线下方悬停      → 虚线预览带，点击新建时间段
      点击时间点 / 纪元  → 选中，并在旁边浮出编辑卡片（改动实时写回）
@@ -62,7 +62,7 @@
   var GAP_ERA = 4;             // 同行两条色带之间的最小横向间隔
   var ERA_MIN_W = 24;          // 色带最小宽度
   var AXIS_ZONE = 26;          // 轴线上下多少像素算「时间点区」
-  var AXIS_TOP = 0.501;        // 轴线在画布高度上的比例（录屏里正好居中）
+  var AXIS_TOP = 0.501;        // 轴线在画布高度上的比例（约在正中）
   var TICK_MIN_PX = 160;       // 主刻度的最小像素间隔
   var TICK_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500,
                     1000, 2000, 2500, 5000, 10000, 20000, 50000, 100000];
@@ -233,7 +233,7 @@
   }
 
   /** 纪元：按记录本身的顺序（即创建顺序）逐个放进最低的、放得下的那一行。
-      录屏里的初始状态就是这个顺序的结果：第4次圣战 / 新纪元 在第一行，
+      初始状态就是这个顺序的结果：第4次圣战 / 新纪元 在第一行，
       更长的 新时代 被挤到第二行，三条短的顺次落在第三行。 */
   function layoutEras() {
     var list = [];
@@ -285,26 +285,63 @@
 
   var bootSeq = 0;             // 开屏时给每条记录排的出场号
 
+  /* 视口裁剪：事件超过 200 条时，只把"视野 ± 两屏"里的记录建成节点。
+     记录少的普通时间线完全不走这条路（VIRTUAL_MIN 以下 win 恒为 null），
+     所以「静止态排版不变」的前提不受影响。
+     布局函数本来就有 `if (!n) return` 的护栏，没建的节点自然不参与排层。 */
+  var VIRTUAL_MIN = 200;
+  var VIRTUAL_MARGIN = 2;
+
+  function itemWindow() {
+    if (state.items.length <= VIRTUAL_MIN) return null;
+    var span = Math.max(1e-6, state.view.end - state.view.start);
+    return { from: state.view.start - span * VIRTUAL_MARGIN,
+             to: state.view.end + span * VIRTUAL_MARGIN };
+  }
+
+  function inWindow(it, win) {
+    if (!win) return true;
+    var end = (it.end === undefined || it.end === null) ? it.start : it.end;
+    return Math.max(it.start, end) >= win.from && Math.min(it.start, end) <= win.to;
+  }
+
   /** 增删节点、写入文案，让 DOM 与 state.items 对齐（量宽度要在这一步之后） */
   function syncNodes() {
     var seen = {};
+    var win = itemWindow();
     state.items.forEach(function (it) {
       seen[it.id] = true;
+      if (!inWindow(it, win)) {
+        delete seen[it.id];                  // 视野之外：这一轮不建也不留
+        if (nodes[it.id]) dropNode(it.id);
+        return;
+      }
       var n = nodes[it.id];
       if (!n) {
         n = nodes[it.id] = createNode(it);
-        // 刚建立的节点才播进场：开屏时错峰，之后是快速弹出
-        animateNodeIn(n, bootSeq++, state.booting);
+        // 刚建立的节点才播进场：开屏时错峰，之后是快速弹出。
+        // 裁剪模式下"滚回来"的节点不算新来的，直接落位——否则拖动时边缘会一闪一闪。
+        if (!win || state.booting) animateNodeIn(n, bootSeq++, state.booting);
       }
       setNodeText(it, n);
     });
+    var alive = {};
+    state.items.forEach(function (it) { alive[it.id] = true; });
     Object.keys(nodes).forEach(function (id) {
-      if (!seen[id]) {
-        var n = nodes[id];
-        delete nodes[id];
-        animateNodeOut(n.root);
-      }
+      if (seen[id] && nodes[id]) return;
+      var n = nodes[id];
+      delete nodes[id];
+      // 只是被移出视野：静默摘下（它在屏幕外，播退场也没人看）
+      if (alive[id]) { if (n.root && n.root.parentNode) n.root.parentNode.removeChild(n.root); }
+      else animateNodeOut(n.root);
     });
+  }
+
+  function dropNode(id) {
+    var n = nodes[id];
+    if (!n) return;
+    delete nodes[id];
+    if (n.root && n.root.parentNode) n.root.parentNode.removeChild(n.root);
   }
 
   function setNodeText(item, n) {
@@ -358,7 +395,7 @@
   }
 
   /* 背景点阵的视差：以载入时的视野为零点，横向挪一点点，让平移有纵深。
-     零点是关键 —— 不在静止态动它，就不会动摇「与录屏逐像素对齐」的前提。 */
+     零点是关键 —— 不在静止态动它，就不会动摇「静止态排版不变」的前提。 */
   var gridOrigin = null;
   function renderGrid() {
     if (gridOrigin === null) gridOrigin = state.view.start;
@@ -602,15 +639,15 @@
     hideHint();
   }
 
-  /* 停一会儿才浮出详情：只是路过就别打扰。
-     只有写了描述的记录才值得浮 —— 否则信息跟轴上的标签重复。 */
+  /* 停一会儿才浮出详情：只是路过就别打扰（时间线事件节点 hover 显示
+     **事件名 / 时间 / 涉及卡片**）。 */
   var hintTimer = null;
   function scheduleHint(id) {
     hideHint();
     hintTimer = setTimeout(function () {
       var item = byId(id);
       var n = nodes[id];
-      if (!item || !n || !(item.desc || '').trim()) return;
+      if (!item || !n) return;
       if (dragging || (state.editing && String(state.editing.id) === String(id))) return;
       showHint(item, n);
     }, 480);
@@ -619,6 +656,11 @@
   function hideHint() {
     if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
     if (!dom.hintCard.hidden) hidePanel(dom.hintCard);
+  }
+
+  function idFromUrl(url) {
+    var matched = /doc=(\d+)/.exec(url || '');
+    return matched ? Number(matched[1]) : 0;
   }
 
   function showHint(item, n) {
@@ -635,6 +677,30 @@
       var p = el('div');
       p.textContent = desc.length > 120 ? desc.slice(0, 120) + '…' : desc;
       dom.hintCard.appendChild(p);
+    }
+    // 涉及卡片（点得动，直接跳到那张卡）
+    var cards = item.cards || [];
+    if (cards.length) {
+      var box = el('div', 'hc-cards');
+      box.appendChild(el('span', 'hc-cards-label', '涉及卡片'));
+      cards.slice(0, 4).forEach(function (card, index) {
+        if (index) box.appendChild(el('span', 'hc-sep', '·'));
+        var link = el('a', 'hc-card');
+        link.textContent = card.title || '未命名';
+        link.href = card.url || '#';
+        link.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'ws-open-doc', id: idFromUrl(card.url), name: card.title }, '*');
+          } else {
+            location.href = card.url || '#';
+          }
+        });
+        box.appendChild(link);
+      });
+      if (cards.length > 4) box.appendChild(el('span', 'hc-more', '等 ' + cards.length + ' 张'));
+      dom.hintCard.appendChild(box);
     }
     showPanel(dom.hintCard);
 
@@ -674,8 +740,8 @@
     var tipH = dom.pmTip.offsetHeight;
     var left = clamp(-tipW / 2, EDGE_PAD - x, state.width - EDGE_PAD - x - tipW);
     dom.pmTip.style.left = Math.round(left) + 'px';
-    // 提示条不能压在附近时间点的胶囊上（录屏里没有这个兜底，
-    // 但实测悬停轴线时它会正好盖住旁边事件的名字）
+    // 提示条不能压在附近时间点的胶囊上，否则悬停轴线时它会正好盖住
+    // 旁边事件的名字
     dom.pmTip.style.top = Math.round(tipTopFor(x, tipW, tipH) - state.axisY) + 'px';
   }
 
@@ -880,13 +946,51 @@
     } else if (dragging.mode === 'event-move') {
       var it3 = byId(dragging.id);
       if (it3) {
-        it3.start = snapTime(dragging.start + dx / pxPerYear());
+        // 拖动时**节点跟手**（先不吸附），松手才吸到刻度上并 200ms 回弹。
+        it3.start = dragging.start + dx / pxPerYear();
         it3.end = it3.start;
+        if (!dragging.ghost) dragGhost(dragging, it3);
         render();
         syncEditor();
-        showDragTip(p.x, p.y, fmtPoint(it3.start));
+        showDragTip(p.x, p.y, fmtPoint(snapTime(it3.start)));
       }
     }
+  }
+
+  /** 原位留一个虚线轮廓：松手前一直标着"它原来在哪儿"。 */
+  function dragGhost(d, item) {
+    var ghost = document.createElement('div');
+    ghost.className = 'ev-ghost';
+    ghost.style.left = yearToX(d.start) + 'px';
+    d.ghost = ghost;
+    dom.eventsLayer.appendChild(ghost);
+    void item;
+  }
+
+  function dropGhost(d) {
+    if (d && d.ghost && d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+    if (d) d.ghost = null;
+  }
+
+  /** 松手回弹：从松手时的位置弹到吸附后的位置，200ms。 */
+  function springTo(id, fromX) {
+    var node = nodes[id];
+    if (!node || !node.root) return;
+    var toX = parseFloat(node.root.style.left);
+    if (isNaN(toX)) return;
+    var delta = fromX - toX;
+    if (Math.abs(delta) < 1 || typeof node.root.animate !== 'function') return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;
+    var parts = [node.root];
+    if (node.dot) parts.push(node.dot);
+    if (node.pill) parts.push(node.pill);
+    parts.forEach(function (part) {
+      part.animate(
+        [{ transform: 'translateX(' + delta + 'px)' }, { transform: 'translateX(0)' }],
+        { duration: 200, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' }
+      );
+    });
   }
 
   function onPointerUp(e) {
@@ -919,11 +1023,25 @@
       });
       return;
     }
+    var dropId = dragging.id;
+    var dropped = dragging.start;
+    var dropX = e ? pointerPos(e).x : yearToX(dropped);
+    dropGhost(dragging);
     dragging = null;
     dom.viewport.classList.remove('is-panning');
     hidePanel(dom.dragTip);
     if (mode === 'pan') { persistView(); }
-    else if (moved) { commitEditor(true); }
+    else if (moved) {
+      // 吸附到刻度 -> 落库 -> 从松手的位置弹到吸附后的位置
+      var it = byId(dropId);
+      if (it && mode === 'event-move') {
+        it.start = snapTime(it.start);
+        it.end = it.start;
+      }
+      commitEditor(true);
+      if (mode === 'event-move') springTo(dropId, dropX);
+      void dropped;
+    }
   }
 
   function showDragTip(x, y, text) {
@@ -938,6 +1056,7 @@
   function cancelDrag() {
     if (!dragging) return false;
     var d = dragging;
+    dragGhost && dropGhost(d);
     dragging = null;
     dom.viewport.classList.remove('is-panning');
     hidePanel(dom.dragTip);
@@ -1316,7 +1435,7 @@
     positionEditor();
   }
 
-  /** 卡片水平居中于锚点，底边距锚点顶边 10px（与录屏一致）；仅在会超出视口顶部时下压 */
+  /** 卡片水平居中于锚点，底边距锚点顶边 10px；仅在会超出视口顶部时下压 */
   function positionEditor() {
     var item = state.editing;
     if (!item || dom.editor.hidden) return;
@@ -1355,8 +1474,8 @@
     if (dom.editor.hidden) return;
     var item = state.editing;
     // 顺序很重要：commitEditor 读的是 state.editing，
-    // 先把它清成 null 的话这次收尾保存就永远不会发生（原版就是这个顺序，
-    // 所以点别处关卡片时最后那几个字其实没落库，全靠防抖和 blur 兜着）。
+    // 先把它清成 null 的话这次收尾保存就永远不会发生
+    // （所以点别处关卡片时最后那几个字其实没落库，全靠防抖和 blur 兜着）。
     if (item && item.__draft) {
       if (!item.title && !item.desc) {
         var idx = state.items.indexOf(item);

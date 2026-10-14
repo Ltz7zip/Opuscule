@@ -1,0 +1,29 @@
+# 持续集成：每次 push / PR 都装依赖并跑一遍测试，挡住回归。
+# 部署文件（deploy/、docs/13）不在 CI 里校验，上线前的自检见 docs/13-部署与运维.md §6。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # 构建号：每次运行递增，注入 OPUSCULE_BUILD（见 settings.py / world/version.py）。
+      # 这样 /meta 与页脚能显示「· build 42」，把一次部署对应到唯一一次 CI 运行。
+      OPUSCULE_BUILD: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 跑测试
+        run: python manage.py test

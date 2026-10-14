@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img">
+  <!-- 分享卡片：暗色画布 + 纪元主题色标题 + 世界名。色值由视图注入（--era / title / sub）。 -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="var(--era, #3ddc97)" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="var(--era, #3ddc97)" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#2c2a27" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#121110"/>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.55"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <circle cx="600" cy="250" r="96" fill="none" stroke="#f4f2ee" stroke-width="3" opacity="0.9"/>
+  <path d="M600 174 666 288H534Z" fill="none" stroke="var(--era, #3ddc97)" stroke-width="3"
+        stroke-linejoin="round"/>
+  <circle cx="600" cy="250" r="12" fill="var(--era, #3ddc97)"/>
+  <text x="600" y="424" text-anchor="middle" fill="#f4f2ee"
+        font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, system-ui, sans-serif"
+        font-size="58" font-weight="400">__TITLE__</text>
+  <text x="600" y="482" text-anchor="middle" fill="#8f8b84"
+        font-family="SF Mono, Menlo, Consolas, monospace" font-size="24" letter-spacing="2">__SUB__</text>
+  <text x="600" y="556" text-anchor="middle" fill="#67635d"
+        font-family="SF Mono, Menlo, Consolas, monospace" font-size="20" letter-spacing="6">OPUSCULE</text>
+</svg>

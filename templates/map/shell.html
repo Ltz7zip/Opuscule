@@ -1,0 +1,94 @@
+{% load static %}
+{# 地图页外壳：项目「终端设计语言」的皮肤。 #}
+{#   tokens.css —— 本页共用的 --tx-* 取值（地图页不加载 terminal.css，原因见该文件头） #}
+{#   panel.css  —— Opuscule 面板与对话框的换肤（含 Opuscule 调色变量的重映射） #}
+{#   shell.css  —— 顶栏 + 让位规则（让位只在顶栏存在时生效） #}
+{# 三份都常驻；顶栏本体只在非 embed 时渲染，所以脚本禁用 / iframe 嵌入都不会崩。 #}
+{# 这一段要在样式表之前：CSS 靠 data-map-host 分辨落地方式 —— #}
+{#   bar   独立页：顶栏在，面板是左栏（默认布局） #}
+{#   embed 嵌进工作区面板 / 发布站点的那一份：同一份面板骨架被挪到右边 #}
+{# 只读的嵌入也走 embed —— 只读不等于要换另一套外壳。 #}
+{# 这样同一张地图在站点上和工作区里长得一致；写入口另由 data-map-readonly 收掉。 #}
+<script>
+  document.documentElement.dataset.mapHost =
+    "{% if shell.show_bar %}bar{% else %}embed{% endif %}";
+  {% if not shell.can_edit %}document.documentElement.dataset.mapReadonly = "1";{% endif %}
+</script>
+<link rel="stylesheet" href="{% static 'map/tokens.css' %}?v={{ static_version }}" />
+<link rel="stylesheet" href="{% static 'map/shell.css' %}?v={{ static_version }}" />
+<link rel="stylesheet" href="{% static 'map/panel.css' %}?v={{ static_version }}" />
+{# Opuscule 设计语言层：本文件只重定义 --tx-* 变量、不含任何选择器，对使用方是安全的。 #}
+{# 地图页不加载 terminal.css（要躲它的全局元素规则、不是躲 token），改用本层单独做 token 重映射。必须放在 map/tokens.css 之后。 #}
+{# 删掉下面这一行即可回滚。 #}
+<link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+{% if shell.show_bar %}
+{# 图标集：顶栏的按钮都有图标；宽度不够时只留图标（文字由 CSS 收起） #}
+<script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
+{# 分布与工作区顶栏一致：左＝文档名 + 计数，中＝视图分段，右＝世界地图▾ / 工作区 / ☰ #}
+<header
+  id="tx-bar"
+  data-view="{{ shell.view }}"
+  data-can-edit="{% if shell.can_edit %}1{% else %}0{% endif %}"
+>
+  <div class="tx-bar__doc">
+    <a class="tx-bar__name" href="{{ shell.home_url }}" title="返回工作区">
+      {% if shell.doc_name %}{{ shell.doc_name }}{% elif shell.doc_missing %}地图不存在{% else %}还没有地图{% endif %}
+    </a>
+    {% if shell.world_name %}<span class="tx-bar__world">{{ shell.world_name }}</span>{% endif %}
+    <span class="tx-bar__stats">{{ shell.stats }}</span>
+    {% if not shell.can_edit %}<span class="tx-bar__chip">只读</span>{% endif %}
+  </div>
+
+  <div class="tx-seg" role="group" aria-label="视图">
+    <button type="button" data-view-mode="standard" title="平面视图，可编辑">平面</button>
+    <button type="button" data-view-mode="mesh" title="三维地形视图，不能编辑">地形</button>
+    <button type="button" data-view-mode="globe" title="把地图投影到地球仪，不能编辑">地球仪</button>
+  </div>
+
+  <div class="tx-bar__right">
+    <details class="tx-menu">
+      <summary data-icon="map" title="换一张地图">世界地图<span class="tx-chev" aria-hidden="true">▾</span></summary>
+      <div class="tx-menu__panel" role="menu">
+        {% for map in shell.maps %}
+          <a class="tx-menu__item{% if map.current %} is-current{% endif %}" role="menuitem"
+             href="?doc={{ map.id }}">{{ map.name }}</a>
+        {% empty %}
+          <span class="tx-menu__empty">这个世界还没有别的地图</span>
+        {% endfor %}
+      </div>
+    </details>
+
+    <a class="tx-bar__btn" href="{{ shell.home_url }}" data-icon="house" title="回到工作区"
+      ><span class="tx-bar__label">工作区</span></a>
+
+    <details class="tx-menu tx-menu--actions">
+      <summary title="菜单" aria-label="菜单"><span aria-hidden="true">☰</span></summary>
+      <div class="tx-menu__panel" role="menu">
+        <div class="tx-menu__group" aria-label="操作">
+          <button type="button" class="is-primary" data-icon="save" data-action="save" role="menuitem">保存到这个世界</button>
+          <button type="button" data-icon="book" data-action="toEditor" role="menuitem">把地图条目导入工作区</button>
+          <button type="button" data-icon="building" data-action="townPlan" role="menuitem">城镇平面预览</button>
+          <button type="button" data-icon="refresh-cw" data-action="newMap" role="menuitem">重新生成地图</button>
+          <button type="button" data-icon="folder-open" data-action="load" role="menuitem">载入地图文件</button>
+          <button type="button" data-icon="download" data-action="export" role="menuitem">导出图片或数据</button>
+          <button type="button" data-icon="maximize" data-action="zoom" role="menuitem">复位缩放</button>
+          <button type="button" data-icon="search" data-action="search" role="menuitem">搜索地图与命令</button>
+        </div>
+        <div class="tx-menu__group" aria-label="面板">
+          <button type="button" data-icon="layers" data-tab="layersTab" role="menuitem">图层</button>
+          <button type="button" data-icon="palette" data-tab="styleTab" role="menuitem">样式</button>
+          <button type="button" data-icon="sliders" data-tab="optionsTab" role="menuitem">选项</button>
+          <button type="button" data-icon="settings" data-tab="toolsTab" role="menuitem">工具</button>
+          <button type="button" data-icon="circle-question-mark" data-tab="aboutTab" role="menuitem">关于</button>
+        </div>
+      </div>
+    </details>
+  </div>
+</header>
+<noscript><p class="tx-bar__noscript">地图由 JavaScript 绘制；脚本被禁用时这里只显示文档信息。</p></noscript>
+{% endif %}
+{# 面板骨架两种落地方式共用：独立页里它就是左栏；嵌进工作区 / 发布站点时才被 CSS 挪到右边。 #}
+{# 放在 if 外面（谁都要），是因为「嵌进去的图也要有这套面板」—— 没有它，嵌进去的地图 #}
+{# 就会用上另一套标签条，两个页面长得不一样。 #}
+{# 只读场景（发布站点 / 游客）也一样：面板照给，改数据的入口由 panel.css 按 data-map-readonly 整块收掉。 #}
+{% include "map/panels.html" %}

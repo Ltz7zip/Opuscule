@@ -1,0 +1,1889 @@
+/* ==========================================================================
+   map/panel.css —— 地图面板与对话框的终端皮肤
+   --------------------------------------------------------------------------
+   地图页嵌的是一套外来的地图应用（本文说「地图应用」）。它的界面**整套**都吃
+   自己那十个调色变量（--bg-main / --bg-light / --header…），而那些变量是运行时
+   以**内联样式**写到 <html> 上的（见 options-tab.ts 的 changeDialogsTheme，
+   由 options.app.ui.themeColor 推导）——也就是说，改它的颜色不能靠改它的样式表，
+   而要盖掉这几个 CSS 变量。
+
+   所以把它套进本项目的终端外观，分两层：
+
+     1. 变量重映射：用 !important 把那一套变量接到终端取值上。
+        内联的非 important 声明打不过样式表里的 important 声明 —— 一处改动，
+        面板、对话框、表格、按钮一起换色，而且不会随样式/主题切换被打回去。
+     2. 纪律覆写：地图应用是一套"紫边 + 斜体标题 + 圆角药丸"的语言，这里只改
+        **规范要求的那几件**：4px 圆角、发丝线分层、机器语言用等宽、电光绿只给
+        主 CTA 与选中态、只有模态档有投影、标题不斜体。
+
+   取值来源与 static/terminal.css 同源（见 DESIGN.md）。
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------- */
+/* 1. 把地图应用的调色变量接到终端取值                                             */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  --bg-opacity: 1 !important; /* 地图应用的"透明度"设置会改这个；宿主里不需要半透明面板 */
+
+  --bg-main: #121110 !important; /* 画布 */
+  --bg-lighter: #201f1c !important; /* 浮层 / 悬停 */
+  --bg-light: #1a1917 !important; /* 面板 / 卡片 */
+  --bg-disabled: #1a1917 !important; /* 停用（靠文字变暗区分，别再压一层色） */
+  --bg-dialogs: #1a1917 !important; /* 对话框 */
+
+  --light-solid: #3d3a36 !important; /* "亮实色" = 我们的强发丝线 */
+  --dark-solid: #2c2a27 !important; /* "暗实色" = 我们的发丝线（地图应用把它用在边框上） */
+
+  --header: #201f1c !important; /* 表头 / 悬停底 */
+  --header-active: #2c2a27 !important; /* 选中底 */
+
+  /* 机器语言用等宽、叙述用无衬线（地图应用常把它俩混着用） */
+  --monospace: var(--tx-mono) !important;
+  --sans-serif: var(--tx-sans) !important;
+  --serif: var(--tx-sans) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. 面板本体                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/* 面板本体：变成左栏的一条竖栏（工作区就是「左栏 + 画布铺满」），不再是浮动卡片 */
+#options {
+  background: var(--tx-canvas);
+  border: 0;
+  border-right: 1px solid var(--tx-hairline);
+  border-radius: 0;
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  padding-bottom: var(--tx-2);
+  box-shadow: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tx-hairline-strong) transparent;
+}
+
+/* 有顶栏时：贴着顶栏往下的整条左栏。
+   必须用 fixed —— 地图应用把 #options 放在 position:relative、高度为 0 的
+   #optionsContainer 里，absolute 的 top/bottom 在零高包含块里会塌成 0 高。 */
+body:has(> #tx-bar) #options {
+  position: fixed !important;
+  top: var(--tx-h-bar) !important;
+  left: 0 !important;
+  right: auto !important;
+  bottom: 0 !important;
+  width: 300px;
+  max-height: none;
+  margin: 0 !important;
+}
+
+/* 嵌在工作区面板里（embed）：没有顶栏，而且面板本身就窄 —— 同一份骨架挪到**右边**贴边，
+   一个面板里放不下两条栏，所以原本的右栏（视图 / 生成 / 三维）在这里不出现。
+   落地方式由 shell.html 顶上的那段脚本写在 <html data-map-host> 上。 */
+:root[data-map-host="embed"] #options {
+  position: fixed !important;
+  top: 0 !important;
+  left: auto !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 300px;
+  max-height: none;
+  margin: 0 !important;
+  border-right: 0;
+  border-left: 1px solid var(--tx-hairline);
+  /* 嵌进去以后面板没法再收起来（没有顶栏按钮，也没有那个 ► 箭头），
+     所以不许 Tab / Esc 那一类开关把它藏了 */
+  display: block !important;
+}
+
+:root[data-map-host="embed"] .tx-rail {
+  display: none !important;
+}
+
+/* 标签行被收掉了（没有可切的东西），所以哪一页都不沿用地图应用记住的选中项：固定显示「图层」 */
+:root[data-map-host="embed"] #options .tabcontent {
+  display: none !important;
+}
+
+:root[data-map-host="embed"] #options #layersContent {
+  display: block !important;
+}
+
+/* 只读嵌入（发布站点 / 游客）也走 embed：不退回地图应用自带的面板，免得同一张地图
+   在站点上和工作区里两副样子。面板照给，改数据的入口收掉：
+   「地图生长」和「生成」是纯写操作；标注那一块本身已经认 canEdit
+   （markers.ts 不画删除键，＋ 也在模板里按 shell.can_edit 决定渲不渲染）。 */
+:root[data-map-readonly="1"] #tx-panel-growth,
+:root[data-map-readonly="1"] #tx-panel-generate {
+  display: none !important;
+}
+
+#options ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#options ::-webkit-scrollbar-thumb {
+  background: var(--tx-hairline-strong);
+  border-radius: var(--tx-r-xxs);
+}
+
+/* 小标题：眉标（等宽、灰、拉开字距），不再是斜体加粗 */
+#options p {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+  margin: var(--tx-3) 0 var(--tx-1);
+}
+
+/* 说明文字：用 --tx-mute 而不是更低的 --tx-dim —— 提示语是要读的，
+   压到 dim 在暖近黑上只有 2.9:1，白读 */
+#options .tip {
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-mono);
+  font-style: normal;
+  color: var(--tx-mute);
+  margin-left: var(--tx-2);
+}
+
+#options i {
+  color: var(--tx-mute);
+}
+
+#options a,
+#aboutContent a,
+#dialogs a,
+.ui-dialog a,
+.ui-widget-content a {
+  color: var(--tx-green);
+  text-decoration: none;
+}
+
+#options a:hover,
+#aboutContent a:hover,
+#dialogs a:hover,
+.ui-dialog a:hover {
+  color: var(--tx-green-hover);
+  text-decoration: underline;
+}
+
+/* 关于页是长篇叙述，放宽行距、收掉两端对齐 */
+#aboutContent {
+  text-align: left;
+  line-height: 1.6;
+  color: var(--tx-body);
+}
+
+#aboutContent p {
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  color: var(--tx-body);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. 图层列表：从三列药丸改成整行清单                                          */
+/* -------------------------------------------------------------------------- */
+
+#mapLayers {
+  display: block;
+  margin: var(--tx-1) 0;
+  padding: 0 var(--tx-2);
+}
+
+#mapLayers li,
+.tabcontent li {
+  float: none;
+  width: auto;
+  text-align: left;
+  text-transform: none;
+  padding: var(--tx-1) var(--tx-2);
+  margin: 0;
+  border-radius: var(--tx-r-sm);
+  border-bottom: 1px solid var(--tx-hairline-soft);
+  background: transparent;
+  color: var(--tx-body);
+  font-size: var(--tx-fs-ui);
+}
+
+#mapLayers li:hover,
+.tabcontent li:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+  box-shadow: none;
+}
+
+/* 关掉的图层：暗一档 + 左边空心标（状态靠那个标，不靠把字压到读不出来） */
+#mapLayers li.buttonoff,
+.tabcontent li.buttonoff {
+  background: transparent;
+  color: var(--tx-mute);
+}
+
+#mapLayers li.buttonoff::before {
+  content: "○";
+  margin-right: var(--tx-2);
+  color: var(--tx-dim);
+}
+
+#mapLayers li:not(.buttonoff)::before {
+  content: "●";
+  margin-right: var(--tx-2);
+  color: var(--tx-green);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 4. 控件：输入框、下拉、按钮                                                   */
+/* -------------------------------------------------------------------------- */
+
+#options input,
+#options select,
+#options textarea,
+#dialogs input,
+#dialogs select,
+#dialogs textarea {
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-ui);
+  padding: 2px 6px;
+}
+
+#options input:focus-visible,
+#options select:focus-visible,
+#dialogs input:focus-visible,
+#dialogs select:focus-visible {
+  outline: none;
+  box-shadow: var(--tx-focus-ring);
+  border-color: var(--tx-green-line);
+}
+
+#options input[type="range"],
+#dialogs input[type="range"] {
+  accent-color: var(--tx-green);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+#options input[type="checkbox"],
+#options input[type="radio"],
+#dialogs input[type="checkbox"],
+#dialogs input[type="radio"] {
+  accent-color: var(--tx-green);
+}
+
+#options input[type="color"],
+#dialogs input[type="color"] {
+  width: 1.6em;
+  height: 1.3em;
+  padding: 0;
+  border-radius: var(--tx-r-xxs);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* 地图应用把「成对 / 长」输入框刷成白底（#options input.paired、.long），
+   它是双类选择器，压得住上面那条单类的；暗色面板上这会是唯一刺眼的白色 */
+#options input.paired,
+#options input.long {
+  background-color: var(--tx-canvas-sunken);
+  color: var(--tx-ink);
+}
+
+/* 分组小标题：地图应用是「#222 斜体加粗 + #333 横线」，压在深底上等于看不见 */
+#options .separator,
+#dialogs .separator {
+  color: var(--tx-mute);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: var(--tx-eyebrow-spacing);
+}
+
+#options .separator::before,
+#options .separator::after,
+#dialogs .separator::before,
+#dialogs .separator::after {
+  border-bottom-color: var(--tx-hairline);
+}
+
+/* 面板里的按钮：默认是安静的一枚，悬停才浮起 */
+#options button,
+.tabcontent button,
+#dialogs button {
+  background: transparent;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+#options button:hover,
+.tabcontent button:hover,
+#dialogs button:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+/* 选中态：绿只出现在这里和主 CTA 上 */
+#options button.active,
+#options button.pressed,
+.tabcontent button.active,
+.tabcontent button.pressed {
+  background: var(--tx-green-wash);
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
+/* 视图模式那三个按钮并排，等宽 */
+#viewMode > button {
+  width: 31%;
+  margin: 0 0.6% var(--tx-2) 0;
+  padding: 4px 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 5. 我们自己的面板（.tx-*）：结构不是地图应用的，所以按规范从头写                  */
+/* -------------------------------------------------------------------------- */
+
+/* 面板被宿主接管后，地图应用那份模板内容不再渲染（我们自己的几块面板要放行）。
+   元素留在 DOM 里是因为它的代码（render/预设/视图模式）还在用它们。 */
+#layersContent[data-tx-owned] > *:not(#tx-panel-layers):not(#tx-panel-markers):not(#tx-panel-growth) {
+  display: none !important;
+}
+
+#options .tx-panel {
+  padding: 0 var(--tx-2) var(--tx-2);
+}
+
+#options .tx-panel__head {
+  display: flex;
+  align-items: center;
+  margin: var(--tx-3) 0 var(--tx-2);
+}
+
+/* 分组小标题 + 计数（工作区左栏的同一种写法） */
+#options .tx-field__label {
+  flex: none;
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+}
+
+/* 面板标题前的记号：与图层行、组标题同一列宽，整条左栏因此只有一条对齐线 */
+#options .tx-panel__icon,
+.tx-rail .tx-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-right: var(--tx-2);
+  color: var(--tx-dim);
+}
+
+#options .tx-panel__count {
+  margin-left: var(--tx-1);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-dim);
+}
+
+/* 分组标题右侧的小按钮：这一枚始终显示（它是空列表时唯一入口）。
+   要写成 .tx-iconbtn.tx-iconbtn--shown —— 单类的修饰符压不过后面那条 #options .tx-iconbtn { opacity: 0 } */
+#options .tx-iconbtn.tx-iconbtn--shown {
+  margin-left: auto;
+  opacity: 1;
+}
+
+#options .tx-field {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  width: 100%;
+}
+
+#options .tx-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#options .tx-list {
+  display: block;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ——— 分组：一栏 = 标题 + 一条竖线挂着的那些行 ———
+   标题是按钮（点一下收起 / 展开，收起的组记在浏览器里）；行装在 .tx-group__body 里，
+   靠左侧竖线 + 缩进表达「这些条目属于上面那一栏」，栏与栏之间用发丝线断开。 */
+
+#options .tx-group {
+  margin: var(--tx-2) 0 0;
+  padding: var(--tx-2) 0 0;
+  border-top: 1px solid var(--tx-hairline-soft);
+  background: transparent;
+  cursor: default;
+}
+
+#options .tx-group:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+#options .tx-group__head {
+  display: grid;
+  grid-template-columns: 18px 1fr auto auto;
+  align-items: center;
+  gap: var(--tx-2);
+  width: 100%;
+  padding: var(--tx-1) var(--tx-2);
+  border: 0;
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+#options .tx-group__head:hover {
+  background: var(--tx-canvas-raised);
+}
+
+#options .tx-group__head:focus-visible {
+  outline: none;
+  box-shadow: var(--tx-focus-ring);
+}
+
+/* 这一栏的行：左边一条竖线把它们和标题拴在一起 */
+#options .tx-group__body {
+  display: block;
+  margin: 0 0 var(--tx-1) 10px;
+  padding: 0 0 0 var(--tx-2);
+  border-left: 1px solid var(--tx-hairline);
+  list-style: none;
+}
+
+#options .tx-group.is-folded .tx-group__body {
+  display: none;
+}
+
+#options .tx-group__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  color: var(--tx-dim);
+}
+
+#options .tx-group__head:hover .tx-group__icon {
+  color: var(--tx-mute);
+}
+
+#options .tx-group__name {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+}
+
+#options .tx-group__count {
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  color: var(--tx-dim);
+}
+
+#options .tx-group__chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--tx-dim);
+  transition: transform 0.15s ease;
+}
+
+#options .tx-group__head:hover .tx-group__chev {
+  color: var(--tx-mute);
+}
+
+/* 收起：箭头转向 */
+#options .tx-group__head[aria-expanded="false"] .tx-group__chev {
+  transform: rotate(-90deg);
+}
+
+#options .tx-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--tx-1);
+  /* 地图应用的 `.tabcontent li` 给每行加了 0.35em 内边距 + 0.2em 外边距，
+     那是它三列药丸的排法；这里要的是紧凑清单，全都压掉 */
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  border-radius: var(--tx-r-sm);
+  border-bottom: 1px solid var(--tx-hairline-soft);
+  transition:
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+#options .tx-row:last-child {
+  border-bottom: 0;
+}
+
+#options .tx-row:hover {
+  background: var(--tx-canvas-raised);
+}
+
+/* 开着的层：左边一道 2px 绿条（状态的第一眼线索，不靠把字压暗来区分） */
+#options .tx-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: var(--tx-r-xxs);
+  background: var(--tx-green);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+#options .tx-row.is-on::before {
+  opacity: 1;
+}
+
+/* 整行就是开关：图标 + 名字 + 快捷键 */
+#options .tx-row__main {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: var(--tx-2);
+  height: var(--tx-h-row);
+  padding: 0 var(--tx-2);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+#options .tx-row__main:hover {
+  background: transparent; /* 悬停底交给整行，别叠两层 */
+}
+
+#options .tx-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  color: var(--tx-dim);
+  transition: color 0.12s ease;
+}
+
+#options .tx-row.is-on .tx-row__icon {
+  color: var(--tx-body);
+}
+
+#options .tx-row:hover .tx-row__icon {
+  color: var(--tx-ink);
+}
+
+#options .tx-row__name {
+  color: var(--tx-mute);
+  font-size: var(--tx-fs-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.12s ease;
+}
+
+#options .tx-row.is-on .tx-row__name {
+  color: var(--tx-body);
+}
+
+#options .tx-row:hover .tx-row__name {
+  color: var(--tx-ink);
+}
+
+#options .tx-row__key {
+  min-width: 2.6em;
+  text-align: right;
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-dim);
+  transition: color 0.12s ease;
+}
+
+#options .tx-row:hover .tx-row__key {
+  color: var(--tx-mute);
+}
+
+/* 排序按钮：平时隐去，指到那一行才出现（安静优先） */
+#options .tx-iconbtn {
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tx-r-xxs);
+  background: transparent;
+  color: var(--tx-mute);
+  font-size: var(--tx-fs-mono);
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+#options .tx-row:hover .tx-iconbtn:not(:disabled) {
+  opacity: 1;
+}
+
+#options .tx-iconbtn:hover:not(:disabled) {
+  background: var(--tx-canvas);
+  color: var(--tx-ink);
+}
+
+#options .tx-iconbtn:disabled {
+  opacity: 0;
+  cursor: default;
+}
+
+/* ——— 地图生长：一行 = 记号 + 名称 + 状态 + 按钮 ——————————————————— */
+
+#options .tx-grow {
+  display: grid;
+  grid-template-columns: 18px 1fr auto auto;
+  align-items: center;
+  gap: var(--tx-2);
+  margin: 0;
+  min-height: var(--tx-h-row);
+  padding: 0 var(--tx-1) 0 var(--tx-2);
+  border-bottom: 1px solid var(--tx-hairline-soft);
+  border-radius: var(--tx-r-sm);
+  transition: background-color 0.12s ease;
+}
+
+#options .tx-grow:last-child,
+#options .tx-grow--base {
+  border-bottom: 0;
+}
+
+#options .tx-grow:hover {
+  background: var(--tx-canvas-raised);
+}
+
+#options .tx-grow__name {
+  color: var(--tx-body);
+  font-size: var(--tx-fs-ui);
+}
+
+#options .tx-grow.is-locked .tx-grow__name {
+  color: var(--tx-mute);
+}
+
+#options .tx-grow__state {
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  color: var(--tx-dim);
+}
+
+#options .tx-grow.is-done .tx-grow__state {
+  color: var(--tx-green);
+}
+
+/* 按钮：地图应用的 `#options button` 是 ID 级规则，所以这里带上 #options 前缀 */
+#options .tx-grow > button,
+#options .tx-grow__all {
+  height: 22px;
+  padding: 0 var(--tx-2);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+#options .tx-grow > button:hover:not(:disabled),
+#options .tx-grow__all:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+#options .tx-grow > button:disabled {
+  border-color: var(--tx-hairline-soft);
+  color: var(--tx-dim);
+  cursor: not-allowed;
+}
+
+#options .tx-grow__all {
+  margin-left: auto;
+}
+
+#options .tx-grow__section {
+  display: block;
+  margin: var(--tx-2) 0 var(--tx-1);
+  padding: 0 var(--tx-2);
+  color: var(--tx-mute);
+}
+
+/* ——— 标注行（左栏第二块）：彩色圆点 + 名称 + 类型 ——————————————————— */
+
+/* 圆点站在图层图标那一列上（居中），两块面板的左缘因此对齐 */
+#options .tx-dot {
+  justify-self: center;
+  border-radius: var(--tx-r-pill);
+}
+
+#options .tx-dot--marker {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  background: var(--tx-mute);
+}
+
+#options .tx-marker .tx-row__name {
+  color: var(--tx-body);
+}
+
+#options .tx-marker:hover .tx-row__name {
+  color: var(--tx-ink);
+}
+
+#options .tx-row__kind {
+  min-width: auto;
+  font-family: var(--tx-sans);
+  color: var(--tx-dim);
+}
+
+#options .tx-marker.is-selected {
+  background: var(--tx-green-wash);
+}
+
+#options .tx-marker.is-selected .tx-row__name {
+  color: var(--tx-green);
+}
+
+#options .tx-panel__hint {
+  margin-top: var(--tx-3);
+  font-size: var(--tx-fs-mono);
+  line-height: 1.6;
+  color: var(--tx-dim);
+}
+
+/* ——— 我们自己的下拉（原生 select 的弹层是系统画的，管不到，所以换掉） ——— */
+
+#options .tx-dd,
+#tx-rail-right .tx-dd,
+.tx-card .tx-dd {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+
+.tx-dd__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-2);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  background: var(--tx-canvas-sunken);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.tx-dd__btn::-webkit-details-marker {
+  display: none;
+}
+
+.tx-dd__btn:hover,
+.tx-dd[open] .tx-dd__btn {
+  border-color: var(--tx-hairline-strong);
+  background: var(--tx-canvas-raised);
+}
+
+.tx-dd__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-dd__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 96;
+  min-width: 100%;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding: var(--tx-1);
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-modal);
+}
+
+.tx-dd__item {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  width: 100%;
+  padding: var(--tx-1) var(--tx-2);
+  border: 0;
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+/* 紧凑：地图应用的 `#options button` 给按钮加了内边距和边框，那是它自己的按钮语言，
+   下拉项要的是清单 —— 高度、边框、圆角都收掉 */
+#options .tx-dd__item,
+#tx-rail-right .tx-dd__item,
+.tx-card .tx-dd__item {
+  height: auto;
+  min-height: 0;
+  padding: 3px var(--tx-2);
+  border: 0;
+  border-radius: var(--tx-r-sm);
+}
+
+.tx-dd__item:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+/* 当前项：要带上 #options 前缀 —— 地图应用有一条 `#options button { color: … }`（ID 级），
+   单靠 .tx-dd__item.is-current 压不过它，当前项会渲染成灰色 */
+#options .tx-dd__item.is-current,
+#tx-rail-right .tx-dd__item.is-current,
+.tx-card .tx-dd__item.is-current {
+  color: var(--tx-green);
+}
+
+/* 当前项前面点一颗实心标：不用颜色也能认出选了哪个 */
+#options .tx-dd__item.is-current::before,
+#tx-rail-right .tx-dd__item.is-current::before,
+.tx-card .tx-dd__item.is-current::before {
+  content: "●";
+  font-size: 0.6em;
+  color: var(--tx-green);
+}
+
+#options .tx-dd__item:hover,
+#tx-rail-right .tx-dd__item:hover,
+.tx-card .tx-dd__item:hover {
+  color: var(--tx-ink);
+}
+
+.tx-dd__swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--tx-r-pill);
+}
+
+/* ——— 右栏：参数 ————————————————————————————————— */
+
+.tx-rail {
+  position: fixed;
+  top: var(--tx-h-bar);
+  right: 0;
+  bottom: 0;
+  z-index: 88;
+  width: 300px;
+  padding: 0 0 var(--tx-4);
+  background: var(--tx-canvas);
+  border-left: 1px solid var(--tx-hairline);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  color: var(--tx-body);
+  /* 参数 + 三维两块叠起来会比窗口高（尤其加上三维设置），让它自己滚 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tx-hairline-strong) transparent;
+}
+
+.tx-rail .tx-panel {
+  padding: var(--tx-1) var(--tx-3) var(--tx-3);
+}
+
+.tx-rail .tx-panel__head {
+  display: flex;
+  align-items: center;
+  margin: var(--tx-3) 0 var(--tx-2);
+}
+
+.tx-rail .tx-field__label {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+}
+
+.tx-param {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tx-2);
+  min-height: var(--tx-h-ctl);
+  padding: var(--tx-1) 0;
+}
+
+/* 模板/选项按钮：名字可能很长，给它一道上限，别把左边的标签挤没 */
+.tx-rail .tx-dd__btn {
+  max-width: 62%;
+}
+
+/* ——— 滑杆行（与工作区右栏同一种）：左标签、右绿值、下面通栏滑杆 ——— */
+
+.tx-slider {
+  padding: var(--tx-2) 0 var(--tx-1);
+}
+
+.tx-slider__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--tx-2);
+  margin-bottom: 6px;
+}
+
+.tx-slider__name {
+  color: var(--tx-mute);
+  font-size: var(--tx-fs-ui);
+}
+
+.tx-slider__value {
+  color: var(--tx-green);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+}
+
+/* 左栏那条滑杆落在 #options 里，而地图应用有一套 ID 级的
+   `#options input[type="range"]`（8px 高、背景 0、白轨道、方滑块）——
+   单靠 .tx-slider 前缀压不过，所以这里每条都带上 #options 的写法。 */
+.tx-slider input[type="range"],
+#options .tx-slider input[type="range"] {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-hairline-strong);
+  cursor: pointer;
+}
+
+/* 轨道铺在 input 自己的背景上，别让地图应用那层白轨道盖住 */
+#options .tx-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.tx-slider input[type="range"]::-webkit-slider-thumb,
+#options .tx-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+  box-shadow: none;
+  transition:
+    transform 0.12s ease,
+    background-color 0.12s ease;
+}
+
+/* 悬停时滑块微微放大：手指落点更明确 */
+.tx-slider input[type="range"]:hover::-webkit-slider-thumb,
+#options .tx-slider input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+  background: var(--tx-green-hover);
+}
+
+.tx-slider input[type="range"]:active::-webkit-slider-thumb,
+#options .tx-slider input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.05);
+  background: var(--tx-green-press);
+}
+
+.tx-slider input[type="range"]:focus-visible,
+#options .tx-slider input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: var(--tx-focus-ring);
+}
+
+.tx-param__name {
+  flex: none;
+  color: var(--tx-mute);
+}
+
+.tx-param__value {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-ink);
+}
+
+.tx-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-2);
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+}
+
+.tx-input:focus-visible {
+  outline: none;
+  border-color: var(--tx-green-line);
+  box-shadow: var(--tx-focus-ring);
+}
+
+/* 数字用的小输入（如「新标注默认大小」）：跟着内容定宽，别抢整行 */
+.tx-input--num {
+  flex: none;
+  width: 4.6em;
+  text-align: right;
+}
+
+/* 勾选：系统画的方框认我们的色就够了，不必自己画一套。
+   注意要写成 input.tx-check[type="checkbox"] —— 地图应用有一条
+   `input[type="checkbox"]:not(.native) { display: none }`，同特异度靠后加载才压得住，
+   否则这个勾选框在 #options 里直接消失。 */
+input.tx-check[type="checkbox"] {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--tx-green);
+  cursor: pointer;
+}
+
+/* 我们自己的输入框在 #options 里：地图应用的 `#options input[type="number"]` 是 ID 级规则
+   （无边框、透明底、3.3em 宽），这里带上同样的元素类型，靠后加载压过它 */
+#options input.tx-input {
+  border: 1px solid var(--tx-hairline);
+  background: var(--tx-canvas-sunken);
+  font-size: var(--tx-fs-mono);
+  text-align: left;
+}
+
+#options input.tx-input--num {
+  width: 4.6em;
+  text-align: right;
+}
+
+#options input.tx-input:focus-visible {
+  outline: none;
+  border-color: var(--tx-green-line);
+  box-shadow: var(--tx-focus-ring);
+}
+
+.tx-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tx-2);
+  margin-top: var(--tx-2);
+}
+
+.tx-btn {
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-3);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.tx-btn:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+/* 一组里只有主 CTA 吃绿 */
+.tx-btn--primary {
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
+.tx-btn--primary:hover {
+  background: var(--tx-green-wash);
+  color: var(--tx-green-hover);
+}
+
+@media (max-width: 1180px) {
+  .tx-rail {
+    width: 260px;
+  }
+  /* 左栏的同一条：要写成和它一样特异度才压得住 */
+  body:has(> #tx-bar) #options {
+    width: 260px;
+  }
+}
+
+/* 窄屏：右栏先收（参数是次要信息），左栏保留 */
+@media (max-width: 980px) {
+  .tx-rail {
+    display: none;
+  }
+}
+
+/* ——— 标注编辑卡片：选中标注后浮在画布左下（工作区那张的同一种） ——— */
+
+.tx-card {
+  position: fixed;
+  left: calc(300px + var(--tx-4));
+  bottom: var(--tx-4);
+  z-index: 92;
+  width: 320px;
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-modal);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+  color: var(--tx-body);
+}
+
+.tx-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tx-2);
+  padding: var(--tx-2) var(--tx-3);
+  border-bottom: 1px solid var(--tx-hairline);
+}
+
+.tx-card__title {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+}
+
+.tx-card__close {
+  border: 0;
+  background: transparent;
+  color: var(--tx-mute);
+  font-size: var(--tx-fs-ui);
+  cursor: pointer;
+}
+
+.tx-card__close:hover {
+  color: var(--tx-ink);
+}
+
+.tx-card__body {
+  padding: var(--tx-2) var(--tx-3) var(--tx-3);
+}
+
+.tx-card__row {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  padding: var(--tx-1) 0;
+}
+
+.tx-card__label {
+  flex: none;
+  width: 3em;
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-mute);
+}
+
+.tx-card__row .tx-input {
+  width: 100%;
+}
+
+.tx-card__area {
+  height: auto;
+  padding: var(--tx-1) var(--tx-2);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.tx-card__coords {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  color: var(--tx-dim);
+}
+
+.tx-card__foot {
+  display: flex;
+  gap: var(--tx-2);
+  margin-top: var(--tx-3);
+}
+
+.tx-card__foot .tx-btn {
+  text-decoration: none;
+  line-height: var(--tx-h-ctl);
+}
+
+@media (max-width: 1180px) {
+  .tx-card {
+    left: calc(260px + var(--tx-3));
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 6. 对话框（地图应用自带 .dialog + jQuery UI 那套）                                */
+/* -------------------------------------------------------------------------- */
+
+/* jQuery UI 自带一条 `.ui-widget.ui-widget-content { border: 1px solid #5e4fa2 }`
+   与 `.ui-widget-content { color: #333 }` —— 而 jquery-ui.css 是在 panel.css **之后**
+   加载的，同特异度就轮不到我们。所以这两个双类选择器不只压边框，
+   也把继承色一并压掉：否则对话框里凡是没自己写颜色的小字（例如 jQuery UI 的
+   表格单元格）都会是 #333 压在我们的深底上，等于看不见 */
+.ui-dialog.ui-widget.ui-widget-content,
+.ui-widget.ui-widget-content {
+  border: 1px solid var(--tx-hairline);
+  color: var(--tx-body);
+}
+
+.dialog,
+.ui-dialog,
+.ui-widget-content {
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+}
+
+/* 模态档：全项目唯一允许的投影 */
+.ui-dialog {
+  box-shadow: var(--tx-shadow-modal);
+}
+
+.ui-dialog-titlebar,
+.ui-widget-header {
+  background: var(--tx-canvas);
+  border: 0;
+  border-bottom: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm) var(--tx-r-sm) 0 0;
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-ui);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  padding: var(--tx-2) var(--tx-3);
+}
+
+.ui-dialog-title {
+  font-weight: 400;
+}
+
+/* jQuery UI 关闭按钮 */
+.ui-dialog-titlebar-close,
+.ui-dialog-titlebar .ui-button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-mute);
+}
+
+.ui-dialog-titlebar-close:hover,
+.ui-dialog-titlebar .ui-button:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+.ui-dialog-buttonpane,
+.ui-dialog .ui-dialog-buttonpane {
+  background: var(--tx-canvas-soft);
+  border-top: 1px solid var(--tx-hairline);
+  margin-top: 0;
+  padding: var(--tx-2) var(--tx-3);
+}
+
+/* jQuery UI 的按钮：常态安静，主按钮（地图应用用 .ui-state-active 标）点绿 */
+.ui-button,
+.ui-state-default,
+.ui-widget-content .ui-state-default {
+  background: var(--tx-canvas-raised);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-weight: 400;
+}
+
+.ui-button:hover,
+.ui-state-default:hover,
+.ui-state-hover {
+  background: var(--tx-canvas-raised);
+  border-color: var(--tx-hairline-strong);
+  color: var(--tx-ink);
+}
+
+.ui-state-active,
+.ui-button:active {
+  background: var(--tx-green-wash);
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
+/* 表格 / 列表类浮层 */
+.ui-widget-content table,
+.ui-widget-content th {
+  background: transparent;
+  color: var(--tx-body);
+  border-color: var(--tx-hairline);
+}
+
+.ui-widget-content td {
+  border-color: var(--tx-hairline-soft);
+}
+
+.ui-widget-content tr:hover td {
+  background: var(--tx-canvas-raised);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 7. 三维设置对话框（#options3d）：地图应用的结构 + 我们的排布                        */
+/* -------------------------------------------------------------------------- */
+/* 控件全是上游的（id 与事件都不动，只是被我们排了版）：行＝「标签 + 值」两列，
+   滑杆不吃值那一列，通栏落到第二行；复选框保留上游的「隐藏 input + :before 方块」
+   那套写法，只把那块方块换成我们的样子。 */
+
+#options3d {
+  min-width: 340px;
+  /* 内容比窗口还高时自己滚：上游没给上限，对话框会顶出屏幕，底部四个动作按钮就找不到了。
+     jQuery UI 会把 `max-height: none` **写在行内**（dialog 的 maxHeight 选项为 false），
+     所以这里必须 !important 才压得过。
+     减掉的 100px 是对话框自身占的地方：顶部偏移（≈20）＋标题栏（≈31）＋内边距与边框（≈22）＋余量。 */
+  max-height: calc(100vh - var(--tx-h-bar) - 100px) !important;
+  overflow-y: auto;
+  /* macOS 的滚动条是浮在内容上的，不占位就会压住右边的数字框；stable 给它留出一条道 */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tx-hairline-strong) transparent;
+  padding: var(--tx-3) var(--tx-3) var(--tx-3);
+}
+
+/* 分区标题：眉标 + 后面拖一条发丝线，一眼看出这是分区而不是一行设置 */
+#options3d .tx-3d__title {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  margin: var(--tx-4) 0 var(--tx-1);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+}
+
+#options3d .tx-3d__title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--tx-hairline-soft);
+}
+
+#options3d .tx-3d__title:first-child {
+  margin-top: 0;
+}
+
+#options3d .tx-3d-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--tx-1) var(--tx-2);
+  margin: 0;
+  padding: var(--tx-1) var(--tx-2);
+  border-radius: var(--tx-r-sm);
+  border-bottom: 1px solid var(--tx-hairline-soft);
+  transition: background-color 0.12s ease;
+}
+
+#options3d .tx-3d-row:hover {
+  background: var(--tx-canvas-raised);
+}
+
+#options3d .tx-3d-row:last-child {
+  border-bottom: 0;
+}
+
+/* 标签：行里的第一个 div / 任意一个直接子 label */
+#options3d .tx-3d-row > div:first-child,
+#options3d .tx-3d-row > label {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  color: var(--tx-mute);
+}
+
+#options3d .tx-3d-row > input[type="number"],
+#options3d .tx-3d-row > select {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+#options3d .tx-3d-row > input[type="range"] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+/* 侵蚀那一段是容器：里面的行挂在它的左竖线下（与左栏图层同一套语汇） */
+#options3d .tx-3d-section {
+  display: block;
+  margin: var(--tx-1) 0 var(--tx-1) 10px;
+  padding: 0 0 0 var(--tx-2);
+  border-left: 1px solid var(--tx-hairline);
+}
+
+/* 颜色那一行是「标签 色块 标签 色块」成对出现 */
+#options3d .tx-3d-row--colors {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+}
+
+#options3d .tx-3d-row--colors > span {
+  color: var(--tx-mute);
+}
+
+/* 纯文字说明（等距圆柱投影那句）：上游写了行内斜体，这里压平 */
+#options3d .tx-3d-note {
+  margin: var(--tx-2) 0 0;
+  font-style: normal !important;
+  font-size: var(--tx-fs-mono);
+  line-height: 1.6;
+  color: var(--tx-dim);
+}
+
+/* ——— 控件 ——— */
+
+#options3d input[type="number"] {
+  width: 5.2em;
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-2);
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  text-align: right;
+}
+
+#options3d select {
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-1);
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-ui);
+}
+
+#options3d input[type="color"] {
+  width: 2.6em;
+  height: var(--tx-h-ctl);
+  padding: 2px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+}
+
+#options3d input[type="range"] {
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-hairline-strong);
+  cursor: pointer;
+}
+
+#options3d input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  border: 0;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+}
+
+/* 勾选：上游会把 input 隐藏，用 label 的 :before 画方块，这里换成我们的方块 */
+#options3d .checkbox + .checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tx-2);
+  color: var(--tx-body);
+}
+
+#options3d .checkbox + .checkbox-label:before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--tx-hairline-strong);
+  border-radius: var(--tx-r-sm);
+  background: var(--tx-canvas-sunken);
+  color: var(--tx-green);
+  font-family: var(--tx-sans);
+  font-size: var(--tx-fs-mono);
+  line-height: 13px;
+  text-align: center;
+}
+
+#options3d .checkbox:checked + .checkbox-label:before {
+  content: "✓";
+  border-color: var(--tx-green);
+  background: var(--tx-green-wash);
+}
+
+#options3d .checkbox-label i {
+  font-style: normal;
+}
+
+/* [slow] 那类提示：上游把颜色写在**行内**（darkred），压到暗底上读不清，
+   所以这里必须 !important 才压得过 */
+#options3d small {
+  color: var(--tx-warning) !important;
+  font-style: normal;
+}
+
+/* 底部动作：四枚图标按钮 */
+#options3d #options3dBottom {
+  display: flex;
+  gap: var(--tx-2);
+  margin-top: var(--tx-3);
+  padding-top: var(--tx-2);
+  border-top: 1px solid var(--tx-hairline);
+}
+
+#options3d #options3dBottom button {
+  width: var(--tx-h-ctl);
+  height: var(--tx-h-ctl);
+  padding: 0;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-mute);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+#options3d #options3dBottom button:hover {
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 8. 城镇平面窗口（.tx-modal）                                                  */
+/*    我们自己的模态：不走 jQuery UI，所以这里从头写一套；里面的下拉 / 滑杆 /    */
+/*    勾选也都要补一份 —— 那些样式原本挂在 #options 作用域里。                   */
+/* -------------------------------------------------------------------------- */
+
+#dialogs .tx-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tx-5);
+  background: rgba(8, 8, 7, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+#dialogs .tx-modal__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(940px, 96vw);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-modal);
+}
+
+#dialogs .tx-modal__head {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  padding: var(--tx-2) var(--tx-3);
+  background: var(--tx-canvas);
+  border-bottom: 1px solid var(--tx-hairline);
+}
+
+#dialogs .tx-modal__head .tx-field__label {
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-ui);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-ink);
+}
+
+#dialogs .tx-modal .tx-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--tx-dim);
+}
+
+#dialogs .tx-modal__spacer {
+  flex: 1 1 auto;
+}
+
+#dialogs .tx-modal__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tx-2) var(--tx-3);
+  padding: var(--tx-3);
+  border-bottom: 1px solid var(--tx-hairline);
+}
+
+/* 控制行里的每项：标签与控件并排（左栏是上下排布，这里横过来） */
+#dialogs .tx-modal__controls .tx-param {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tx-2);
+  min-height: var(--tx-h-ctl);
+  padding: 0;
+}
+
+#dialogs .tx-modal__controls .tx-param__name {
+  flex: none;
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  letter-spacing: var(--tx-eyebrow-spacing);
+  color: var(--tx-mute);
+}
+
+#dialogs .tx-modal input.tx-input {
+  width: 9em;
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-2);
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: var(--tx-fs-mono);
+  text-align: left;
+}
+
+#dialogs .tx-modal input.tx-input:focus-visible {
+  outline: none;
+  border-color: var(--tx-green-line);
+  box-shadow: var(--tx-focus-ring);
+}
+
+/* 规模滑杆：与左栏同一种（4px 绿轨 + 圆滑块） */
+#dialogs .tx-modal input[type="range"] {
+  width: 116px;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-hairline-strong);
+  cursor: pointer;
+}
+
+#dialogs .tx-modal input[type="range"]::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+#dialogs .tx-modal input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+}
+
+#dialogs .tx-modal input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: var(--tx-focus-ring);
+}
+
+/* 勾选：要显式显示 —— 地图应用有一条 `input[type=checkbox]:not(.native){display:none}` */
+#dialogs .tx-modal input.tx-check[type="checkbox"] {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--tx-green);
+  cursor: pointer;
+}
+
+/* 模态里的下拉：base 样式挂在 #options，这里补一份 */
+#dialogs .tx-modal .tx-dd {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+  max-width: 260px;
+}
+
+#dialogs .tx-modal .tx-dd__item {
+  height: auto;
+  min-height: 0;
+  padding: 3px var(--tx-2);
+}
+
+#dialogs .tx-modal .tx-dd__item.is-current {
+  color: var(--tx-green);
+}
+
+#dialogs .tx-modal .tx-dd__item.is-current::before {
+  content: "●";
+  font-size: 0.6em;
+  color: var(--tx-green);
+}
+
+#dialogs .tx-modal .tx-dd__item:hover {
+  color: var(--tx-ink);
+}
+
+/* 按钮：主 CTA 点绿，其余安静（#dialogs button 是 ID 级规则，这里要带 #dialogs 前缀） */
+#dialogs .tx-modal button.tx-grow__all {
+  height: var(--tx-h-ctl);
+  padding: 0 var(--tx-3);
+}
+
+#dialogs .tx-modal #tx-townplan-roll {
+  margin-left: auto;
+}
+
+#dialogs .tx-modal .is-primary {
+  background: var(--tx-green-wash);
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
+#dialogs .tx-modal .is-primary:hover {
+  background: var(--tx-green);
+  color: var(--tx-on-green);
+}
+
+/* 画布：正方形，居中 */
+#dialogs .tx-modal__view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tx-3);
+  background: var(--tx-canvas-sunken);
+  color: var(--tx-mute);
+}
+
+#dialogs .tx-modal__view > svg {
+  display: block;
+  width: min(100%, 70vh);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 9. 城镇编辑器里的「城镇预览」格                                                */
+/*    上游这里塞的是一个指向外站城市生成器的 iframe（离线就是一片空白）；         */
+/*    现在放的是我们自绘的城镇平面，内联进 DOM，所以明暗档跟着页面走。            */
+/*    边框加在上游自己的容器上（ID 选择器），比加在我们插进去的那个 div 上稳。      */
+/* -------------------------------------------------------------------------- */
+
+#burgEditor #burgPreviewObject {
+  background: var(--tx-canvas-sunken, #0d0c0b);
+  border: 1px solid var(--tx-hairline, #2c2a27);
+  border-radius: var(--tx-r-sm, 4px);
+}
+
+#burgEditor #burgPreviewObject > .tx-burgplan {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#burgEditor #burgPreviewObject > .tx-burgplan > svg {
+  display: block;
+}

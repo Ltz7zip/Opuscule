@@ -3,5 +3,14 @@ __pycache__/
 .venv/
 db.sqlite3
 media/
-.vvd_research/
+# 本地数据库/代码备份（迁移或重构前的安全副本，不入库）
+.backups/
+# 文件缓存（限流计数等）运行时产物，不入库
+.cache/
+.opuscule_research/
 .DS_Store
+# tools/shots.py 与 tools/shots_ui.py 的截图产物（视觉验收用，不入库）
+.shots/
+# 上游地图库的依赖与中间产物（构建结果已落到 static/map/vendor，入库的是那个）
+third_party/fantasy-map-generator/node_modules/
+third_party/fantasy-map-generator/dist/

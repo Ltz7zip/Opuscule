@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Django admin：换框架后白捡一个可视化后台，不写代码也能改数据。
+"""把时间轴模型注册进 Django 自带的 admin，不写代码也能可视化改数据。
 
     python manage.py createsuperuser
     python manage.py runserver   ->  http://127.0.0.1:8000/admin/

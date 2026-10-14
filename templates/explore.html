@@ -1,0 +1,70 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公开世界 · Opuscule</title>
+  <meta name="description" content="浏览已经发布出来的世界，直接走进它们的只读站点。" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  {% comment %}
+    公开世界展示页（/explore）：游客访问 /world 被送到这里。
+    样式与只读站点（site/base.html）同源——纸感浅色 + 衬线标题，读者点进去就是
+    /s/<slug>/。加载顺序沿用站点页契约：site → apple → terminal → polish → experience。
+  {% endcomment %}
+  <link rel="stylesheet" href="{% static 'site.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+</head>
+<body class="site" data-surface="explore">
+  <a class="skip-link" href="#exploreMain">跳到正文</a>
+  <header class="nav">
+    <a class="nav-brand" href="/explore">Opuscule</a>
+    <nav class="nav-links">
+      <a href="/explore">公开世界</a>
+    </nav>
+    <nav class="nav-links" style="margin-left:auto">
+      <a href="/login">登录</a>
+      <a href="/register">注册</a>
+    </nav>
+  </header>
+
+  <main class="wrap" id="exploreMain" tabindex="-1">
+    <section class="hero">
+      <h1>公开世界</h1>
+      <p class="hero-sub">这里陈列着已经发布出来的世界。点进去就是它们各自的只读站点——不用账号就能读。</p>
+      <p class="hero-stats">{{ count }} 个世界正在公开</p>
+    </section>
+
+    {% if worlds %}
+      <div class="grid" style="margin-top:24px">
+        {% for item in worlds %}
+          <a class="tile" href="{{ item.url }}" style="--site-primary: {{ item.color }}">
+            <span class="tile-kind">v{{ item.version }}{% if item.genres %} · {{ item.genres|join:"、" }}{% endif %}</span>
+            <span class="tile-name">{{ item.name }}</span>
+            {% if item.description %}<span class="tile-era">{{ item.description|truncatechars:72 }}</span>{% endif %}
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty" style="margin-top:24px">
+        还没有公开的世界。
+        {% if users_exist %}
+          <a href="/login">登录</a>之后可以把你的世界发布出来。
+        {% else %}
+          <a href="/register">创建第一个世界</a>。
+        {% endif %}
+      </p>
+    {% endif %}
+  </main>
+
+  <footer class="foot">
+    <div>{{ app.display }} · 世界观共建工作台</div>
+    <div class="foot-meta"><a href="/login">登录</a> · <a href="/register">注册</a></div>
+  </footer>
+
+  <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
+</body>
+</html>

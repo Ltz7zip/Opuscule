@@ -161,9 +161,12 @@ def main() -> int:
                     problems.append(f"评论列表高 {full['list']['h']}px 超预算 {MAX_LIST_H:.0f}px")
 
         # 3) 贴底的块：浮层必须翻到上方（或至少整块留在视口内）
+        #    收掉浮层用 Esc —— 别用固定坐标点空白：卡片头部有"＋ 属性"这类按钮，
+        #    盲点会误开"类型与属性"弹窗，把后面的 hover 全挡住（探针自己踩过这个坑）。
         page.keyboard.press("Escape")
-        page.mouse.click(600, 400)
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(250)
+        if page.locator(".comment-pop").count():
+            problems.append("Esc 没能收掉块评论浮层")
         open_popover(page, last=True)
         page.screenshot(path=str(SHOTS / "comment-pop-bottom.png"))
         bottom = page.evaluate(MEASURE)

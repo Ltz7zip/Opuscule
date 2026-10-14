@@ -1,7 +1,7 @@
 /* ==========================================================================
    Minimal 设计语言  —  工作区外观层
    --------------------------------------------------------------------------
-   依据桌面上 Minimalist 设计系统的权威 token（css.json / colors_and_type.css）：
+   这一层给工作区定下外观基调，几条规则：
 
      · 主色是**灰阶**：primary #18181b（浅色）/ #fafafa（深色），不靠彩色抢注意力
      · 圆角只有一档语言：sm 6px / md 12px / lg 16px（大面片用 24px 的柔化变体）
@@ -490,7 +490,7 @@ body {
 }
 .fb-wrap[hidden] { display: none; }
 .fb-wrap .fb-actions, .fb-wrap .format-bar { display: flex; align-items: center; }
-/* 旧样式把 .format-bar 定成了 fixed，放进容器里会脱层叠在一起，这里让它回到文档流 */
+/* 放进 .fb-wrap 容器时，.format-bar 要回到文档流，否则它自带的 fixed 定位会让两者脱层叠在一起 */
 .fb-wrap .format-bar { position: static; z-index: auto; }
 .fb-wrap .format-bar { justify-content: flex-start; }
 .fb-color { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px; }
@@ -539,7 +539,7 @@ body {
 /* ==========================================================================
    控件一致性：所有按钮/徽章共用一套尺寸、圆角、内边距与对齐
    --------------------------------------------------------------------------
-   之前的问题：圆形按钮里塞文字会把「显示」「删除」折成两行、内边距不一致、
+   要解决的问题：圆形按钮里塞文字会把「显示」「删除」折成两行、内边距不一致、
    图标与文字基线不齐。这里统一成"药丸 / 圆角方块"两种形状，文字一律不换行。
    ========================================================================== */
 .mini-btn, .tb-btn, .sb-new, .insert-btn, .icon-btn, .link-btn,
@@ -778,7 +778,7 @@ body {
 .block-menu .fb-sep { height: 1px; background: var(--mn-border); margin: 4px 6px; }
 
 /* 评论浮层：贴在块旁边的一张小便签——宁可小一点、密一点，
-   也别在正文上压出一大块空白（320px 宽 + 240px 列表那一版太占地方了）。 */
+   也别在正文上压出一大块空白（宽 320px、内含 240px 列表的话就太占地方了）。 */
 .comment-pop {
   position: fixed; z-index: 74; width: 264px;
   background: var(--mn-surface); border: 1px solid var(--mn-border);

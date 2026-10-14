@@ -1,6 +1,10 @@
 /* ==========================================================================
    关系树（/relationship）
-   三屏一条线：选模版 → 看模版关系 → 进画布编辑。
+   --------------------------------------------------------------------------
+   这是「关系树」页的前端逻辑：把人物之间的关系画成一张能缩放、拖动的卡片图，
+   并支持在图上直接新建人物、拉线、改关系。
+
+   页面是一条三屏流程：选模版 → 看模版关系 → 进画布编辑。
 
    画布上有两条铁律，其余都好商量：
    1. **人物卡片的边框严格贴网格**。卡宽高都是整数格（5 × 8），落点也永远吸附到
@@ -8,7 +12,7 @@
    2. **关系线不贴网格**。线怎么走由几何算（正交 + 圆角），只在需要时经过中点，
       不为了对齐网格把线拗成奇怪的形状。
 
-   关系连线的两种手势都会落到同一个"关系菜单"（图6）上：
+   关系连线的两种手势都会落到同一个"关系菜单"上：
    点加号 = 在那个方向新建一个人；按住加号拖到另一张卡 = 连到那个人。
    ========================================================================== */
 (function () {
@@ -31,7 +35,7 @@
     templates: [],
     trees: [],
     pickTemplate: 'family',
-    draftRelations: [],       // 图2 左侧那份（还没落库）
+    draftRelations: [],       // 模版自带的关系清单（还没落库）
     docId: parseInt(app.dataset.doc, 10) || 0,
     pendingDoc: 0,            // 已经建好、但还没选模版的那棵树（面板里选完就地配置它）
     doc: null,
@@ -86,10 +90,137 @@
     box._timer = setTimeout(function () { box.hidden = true; }, ms || 2200);
   }
 
+  /** 把裸错误翻成人话：网络层的 "Failed to fetch" 不原样丢给用户。 */
+  function friendly(err, fallback) {
+    var raw = (err && err.message) || '';
+    if (/failed to fetch|networkerror|load failed|fetch failed/i.test(raw)) {
+      return '连不上服务器——检查一下网络，然后刷新这一页';
+    }
+    return raw || fallback;
+  }
+
   function saveState(text, mode) {
     var el = $('rtSaveState');
     el.textContent = text;
     el.className = 'rt-save' + (mode ? ' is-' + mode : '');
+  }
+
+  /* ---------------------------------------------------------------- 输入浮层 */
+  /* window.prompt 在内嵌 WebView（预览面板的 Electron）里直接抛
+     "prompt() is not supported"，改名 / 命名这类动作整条失效。改用自建浮层，
+     观感与工作区的卡片选择器一致（minimal.css 两页都加载了 .picker 这套样式）。
+     askText 返回 Promise<string|null>；askChoice 返回选中项或 null。 */
+  function overlayBox() {
+    var overlay = document.createElement('div');
+    overlay.className = 'picker';
+    var box = document.createElement('div');
+    box.className = 'picker-box';
+    overlay.appendChild(box);
+    return { overlay: overlay, box: box };
+  }
+
+  function askText(options) {
+    options = options || {};
+    return new Promise(function (resolve) {
+      var built = overlayBox();
+      var head = document.createElement('div');
+      head.className = 'picker-head';
+      head.innerHTML = iconHtml('pen-line', 15);
+      var input = document.createElement(options.multiline ? 'textarea' : 'input');
+      if (options.multiline) { input.rows = 5; input.style.resize = 'vertical'; }
+      else { input.type = 'text'; }
+      input.value = options.value == null ? '' : options.value;
+      input.placeholder = options.label || '';
+      head.appendChild(input);
+      built.box.appendChild(head);
+
+      var foot = document.createElement('div');
+      foot.className = 'picker-foot';
+      var cancel = document.createElement('button');
+      cancel.type = 'button'; cancel.className = 'mini-btn'; cancel.textContent = '取消';
+      var ok = document.createElement('button');
+      ok.type = 'button'; ok.className = 'mini-btn is-primary';
+      ok.textContent = options.okLabel || '确定';
+      foot.appendChild(cancel); foot.appendChild(ok);
+      built.box.appendChild(foot);
+      document.body.appendChild(built.overlay);
+
+      var done = false;
+      function finish(value) {
+        if (done) return;
+        done = true;
+        built.overlay.remove();
+        resolve(value);
+      }
+      cancel.addEventListener('click', function () { finish(null); });
+      ok.addEventListener('click', function () { finish(input.value); });
+      built.overlay.addEventListener('mousedown', function (event) {
+        if (event.target === built.overlay) finish(null);
+      });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { event.preventDefault(); finish(null); }
+        else if (event.key === 'Enter' && (!options.multiline || event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          finish(input.value);
+        }
+      });
+      setTimeout(function () { try { input.focus(); input.select(); } catch (err) { /* 忽略 */ } }, 30);
+    });
+  }
+
+  function askChoice(options) {
+    options = options || {};
+    var items = options.options || [];
+    return new Promise(function (resolve) {
+      var built = overlayBox();
+      var head = document.createElement('div');
+      head.className = 'picker-head';
+      var title = document.createElement('b');
+      title.textContent = options.title || '选择';
+      head.appendChild(title);
+      built.box.appendChild(head);
+      var list = document.createElement('div');
+      list.className = 'picker-list';
+      built.box.appendChild(list);
+      var active = Math.max(0, Math.min(options.index || 0, items.length - 1));
+
+      function finish(value) {
+        built.overlay.remove();
+        document.removeEventListener('keydown', onKey, true);
+        resolve(value);
+      }
+      function render() {
+        list.innerHTML = '';
+        items.forEach(function (item, i) {
+          var row = document.createElement('div');
+          row.className = 'picker-row' + (i === active ? ' is-active' : '');
+          var label = document.createElement('b');
+          label.textContent = item.label;
+          row.appendChild(label);
+          row.addEventListener('mousedown', function (event) { event.preventDefault(); finish(item); });
+          list.appendChild(row);
+        });
+      }
+      function onKey(event) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          active = Math.max(0, Math.min(active + (event.key === 'ArrowDown' ? 1 : -1), items.length - 1));
+          render();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          if (items[active]) finish(items[active]);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          finish(null);
+        }
+      }
+      document.addEventListener('keydown', onKey, true);
+      built.overlay.addEventListener('mousedown', function (event) {
+        if (event.target === built.overlay) finish(null);
+      });
+      render();
+      document.body.appendChild(built.overlay);
+    });
   }
 
   /* ================================================================== 图标 */
@@ -204,6 +335,10 @@
   /* ================================================================= 首屏 */
   function boot() {
     hydrateIcons(document);
+    // 触屏捏合缩放：experience.js 在本文件**之后**加载，
+    // 所以 Opus 还没就绪时要等 load 再挂（否则这一行是空操作）。
+    if (window.Opus && window.Opus.pinch) wirePinch();
+    else window.addEventListener('load', wirePinch, { once: true });
     // 宿主/链接指名要的那篇文档打不开（被删了、在回收站里、不是关系树）：
     // 先明说，别掉回模版选择
     if (S.docId && app.dataset.docMissing === '1') {
@@ -217,11 +352,18 @@
       S.templates = results[0].templates || [];
       if (results[0].grid) S.grid = results[0].grid;
       S.trees = results[1].trees || [];
-      if (S.docId) { openEditor(S.docId); return; }
+      if (S.docId) {
+        // 直接进编辑区：模版列（在另一屏）的骨架先撤掉，等真的回到选模版那一屏再画。
+        // 不撤的话，用户点「返回」会看到一片永远在闪的占位。
+        dropSkeletons();
+        openEditor(S.docId);
+        return;
+      }
       renderPicker();
       showScreen('picker');
     }).catch(function (err) {
-      toast(err.message || '载入失败', 4000);
+      console.error(err);
+      toast(friendly(err, '模版没载入出来，刷新这一页再试'), 4000);
     });
   }
 
@@ -229,9 +371,20 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-screen]'), function (el) {
       el.hidden = el.dataset.screen !== name;
     });
+    // 回到选模版那一屏：如果骨架还在（boot 直接进了编辑区），这时候补画
+    if (name === 'picker' && S.templates.length && document.querySelector('[data-skeleton]')) {
+      renderPicker();
+    }
   }
 
-  /* --------------------------------------------------- 图1：模版列表 */
+  /** 撤掉所有骨架占位（替换成真内容时由各自的渲染函数负责，这里只管"不画了"）。 */
+  function dropSkeletons() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-skeleton]'), function (node) {
+      node.remove();
+    });
+  }
+
+  /* --------------------------------------------------- 模版列表      */
   function renderPicker() {
     var host = $('rtTemplateList');
     host.innerHTML = '';
@@ -276,7 +429,7 @@
     });
   }
 
-  /* ------------------------------------------- 图2：模版自带的关系清单 */
+  /* ------------------------------------------- 模版自带的关系清单      */
   function openTemplateScreen(templateId) {
     var item = S.templates.filter(function (t) { return t.id === templateId; })[0] || S.templates[0];
     if (!item) return;
@@ -321,25 +474,27 @@
       });
       // 双击改名：模版给的是通用叫法，用户想叫"生父"也正常
       row.querySelector('b').addEventListener('dblclick', function () {
-        var value = window.prompt('这条关系叫什么？', relation.label);
-        if (value === null) return;
-        relation.label = value.trim() || relation.label;
-        renderRelationList();
+        askText({ label: '这条关系叫什么？', value: relation.label }).then(function (value) {
+          if (value === null) return;
+          relation.label = value.trim() || relation.label;
+          renderRelationList();
+        });
       });
       host.appendChild(row);
     });
   }
 
   $('rtAddRelation').addEventListener('click', function () {
-    var value = window.prompt('新关系的名字（例如：教父、世仇、债主）', '');
-    if (value === null) return;
-    var label = value.trim();
-    if (!label) return;
-    S.draftRelations.push({
-      kind: 'custom_' + Date.now().toString(36),
-      label: label, hint: '', style: '', enabled: true
+    askText({ label: '新关系的名字（例如：教父、世仇、债主）', value: '' }).then(function (value) {
+      if (value === null) return;
+      var label = value.trim();
+      if (!label) return;
+      S.draftRelations.push({
+        kind: 'custom_' + Date.now().toString(36),
+        label: label, hint: '', style: '', enabled: true
+      });
+      renderRelationList();
     });
-    renderRelationList();
   });
 
   $('rtBack').addEventListener('click', function () { showScreen('picker'); });
@@ -361,7 +516,7 @@
         return openEditor(S.pendingDoc);
       }).catch(function (err) {
         button.disabled = false;
-        toast(err.message || '配置失败', 4000);
+        toast(friendly(err, '配置失败'), 4000);
       });
       return;
     }
@@ -382,7 +537,7 @@
       location.href = '/relationship?doc=' + data.document.id;
     }).catch(function (err) {
       button.disabled = false;
-      toast(err.message || '创建失败', 4000);
+      toast(friendly(err, '创建失败'), 4000);
     });
   });
 
@@ -534,7 +689,7 @@
 
   /* 文档不在（被删 / 进了回收站 / 根本没这个 id）时的那一屏 */
   function showLoadError(err) {
-    $('rtErrorText').textContent = (err && err.message) || '它可能已经被删掉了。';
+    $('rtErrorText').textContent = friendly(err, '它可能已经被删掉了。');
     showScreen('error');
   }
 
@@ -564,6 +719,10 @@
     var wrap = $('rtCanvasWrap');
     wrap.style.backgroundSize = (grid() * S.view.z) + 'px ' + (grid() * S.view.z) + 'px';
     wrap.style.backgroundPosition = S.view.x + 'px ' + S.view.y + 'px';
+    // 缩得太小时按层级减负：< 0.6 收起名字与加号，< 0.3 只留轮廓。
+    // 只切类、不动布局，所以"适应视野"的坐标与拖动命中区都不受影响。
+    wrap.classList.toggle('is-zoom-far', S.view.z < 0.6);
+    wrap.classList.toggle('is-zoom-far-out', S.view.z < 0.3);
   }
 
   function render() {
@@ -657,7 +816,7 @@
         '<div class="rt-name">备注</div></div>';
     } else {
       if (node.name || node.image) {
-        // 有名字（或有头像）才画"人像"，否则留空 —— 空卡就该是图4 那张虚线框加号卡
+        // 有名字（或有头像）才画"人像"，否则留空 —— 空卡就该是那张虚线框加号卡
         var portrait = node.image
           ? '<img src="' + esc(node.image) + '" alt="" draggable="false" />'
           : esc(initial(node.name));
@@ -910,6 +1069,23 @@
     return { x: node.x, y: node.y - h - S.grid.gap_y * grid() };
   }
 
+  /* 捏合缩放：两指拉开 = 放大整棵树（和滚轮走同一个 S.view.z） */
+  function wirePinch() {
+    if (!window.Opus || !window.Opus.pinch) return;
+    var host = $('rtCanvasWrap');
+    var start = S.view.z;
+    window.Opus.pinch(host, {
+      getScale: function () { return start; },
+      limit: function (value) { return Math.max(0.25, Math.min(2.5, value)); },
+      onScale: function (value) {
+        S.view.z = value;
+        applyView();
+      },
+    });
+    host.addEventListener('pointerdown', function () { start = S.view.z; }, { capture: true, passive: true });
+    host.addEventListener('pointerup', function () { start = S.view.z; }, { capture: true, passive: true });
+  }
+
   function highlightTarget(id) {
     Array.prototype.forEach.call(document.querySelectorAll('.rt-node'), function (el) {
       el.classList.toggle('is-drop-target', id != null && Number(el.dataset.node) === id);
@@ -956,7 +1132,7 @@
     return false;
   }
 
-  /* ================================================ 图5：右键菜单 */
+  /* ================================================ 右键菜单      */
   function canvasPoint(event) {
     var rect = $('rtCanvasWrap').getBoundingClientRect();
     return {
@@ -992,7 +1168,7 @@
   });
 
   function createCard(body) {
-    // 新人物**不带名字**（服务端会保留空名字）：落地就是图4 那张虚线空卡，
+    // 新人物**不带名字**（服务端会保留空名字）：落地就是那张虚线空卡，
     // 紧接着就弹输入框让你起名，而不是先塞一个"新成员"再让你改。
     if (body.kind !== 'note' && body.name === undefined) body.name = '';
     return api(API + '/tree-variants/' + S.variant.id + '/nodes', { method: 'POST', body: body })
@@ -1005,10 +1181,10 @@
         if (node.kind === 'note') editNote(node, el); else editName(node, el);
         return node;
       })
-      .catch(function (err) { toast(err.message || '添加失败'); });
+      .catch(function (err) { toast(friendly(err, '添加失败')); });
   }
 
-  /* ================================================ 图6：关系菜单 */
+  /* ================================================ 关系菜单      */
   function relationMenuItems() {
     return S.relations.filter(function (relation) { return relation.enabled !== false; });
   }
@@ -1088,7 +1264,7 @@
     };
 
     if (anchor.target) {
-      afterNode(nodeById(anchor.target)).catch(function (err) { toast(err.message || '连线失败'); });
+      afterNode(nodeById(anchor.target)).catch(function (err) { toast(friendly(err, '连线失败')); });
       return;
     }
     var place = anchor.place;
@@ -1097,7 +1273,7 @@
         if (!node) return null;
         return afterNode(node);
       })
-      .catch(function (err) { toast(err.message || '连线失败'); });
+      .catch(function (err) { toast(friendly(err, '连线失败')); });
   }
 
   $('rtRelationsPop').addEventListener('click', function (event) {
@@ -1114,12 +1290,13 @@
       return;
     }
     if (action === 'custom') {
-      var value = window.prompt('这条关系叫什么？', '');
-      if (value === null) return;
-      var label = value.trim();
-      if (!label) return;
-      var kind = 'custom_' + Date.now().toString(36);
-      ensureRelation(kind, label).then(function (relation) { applyRelation(relation); });
+      askText({ label: '这条关系叫什么？', value: '' }).then(function (value) {
+        if (value === null) return;
+        var label = value.trim();
+        if (!label) return;
+        var kind = 'custom_' + Date.now().toString(36);
+        ensureRelation(kind, label).then(function (relation) { applyRelation(relation); });
+      });
       return;
     }
     if (action === 'link') { openLinkPicker(); }
@@ -1148,29 +1325,41 @@
           render();
           toast('已链接「' + node.name + '」');
         });
-      }).catch(function (err) { toast(err.message || '链接失败'); });
+      }).catch(function (err) { toast(friendly(err, '链接失败')); });
     }).catch(function (err) { toast(err.message || '搜索失败'); });
   }
 
   /* 从世界里的卡片中挑一张（先按名字搜，再按序号选） */
   function pickDocument(question) {
-    var name = window.prompt(question, '');
-    if (name === null) return Promise.resolve(null);
-    return api(API + '/documents?type=card&q=' + encodeURIComponent(name.trim()))
-      .then(function (data) {
-        var documents = data.documents || [];
-        if (!documents.length) { toast('没找到匹配的卡片'); return null; }
-        var list = documents.slice(0, 12)
-          .map(function (item, index) { return (index + 1) + '. ' + item.name; }).join('\n');
-        var answer = window.prompt('选一个序号：\n' + list, '1');
-        if (answer === null) return null;
-        return documents[parseInt(answer, 10) - 1] || null;
-      });
+    return askText({ label: question, value: '' }).then(function (name) {
+      if (name === null) return null;
+      return api(API + '/documents?type=card&q=' + encodeURIComponent(name.trim()))
+        .then(function (data) {
+          var documents = data.documents || [];
+          if (!documents.length) { toast('没找到匹配的卡片'); return null; }
+          return askChoice({
+            title: question,
+            options: documents.slice(0, 12).map(function (item) {
+              return { value: item.id, label: item.name, doc: item };
+            })
+          }).then(function (picked) { return picked ? picked.doc : null; });
+        });
+    });
   }
 
   function hideMenus() {
-    $('rtContextMenu').hidden = true;
-    $('rtRelationsPop').hidden = true;
+    // 缩回：先放一段缩小动画再藏（减少动效时直接藏）
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    ['rtContextMenu', 'rtRelationsPop'].forEach(function (id) {
+      var node = $(id);
+      if (!node || node.hidden) return;
+      if (reduce) { node.hidden = true; return; }
+      node.classList.add('is-closing');
+      setTimeout(function () {
+        node.classList.remove('is-closing');
+        node.hidden = true;
+      }, 130);
+    });
   }
 
   /* ---------------------------------------------------- 就地编辑名字 / 备注 */
@@ -1243,7 +1432,7 @@
     area.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
   }
 
-  /* -------------------------------------------------------- 卡片工具条（图6 顶部） */
+  /* -------------------------------------------------------- 卡片工具条（关系菜单顶部） */
   function renderCardTools() {
     var bar = $('rtCardTools');
     if (READONLY) { bar.hidden = true; return; }
@@ -1286,12 +1475,13 @@
     }
     if (tool === 'assign') { assignCard(node); return; }
     if (tool === 'image') {
-      var url = window.prompt('图片地址（留空则用姓名首字）', node.image || '');
-      if (url === null) return;
-      node.image = url.trim();
-      saveNode(node, { image: node.image });
-      renderNodes();
-      renderCardTools();
+      askText({ label: '图片地址（留空则用姓名首字）', value: node.image || '' }).then(function (url) {
+        if (url === null) return;
+        node.image = url.trim();
+        saveNode(node, { image: node.image });
+        renderNodes();
+        renderCardTools();
+      });
       return;
     }
     if (tool === 'deceased') {
@@ -1378,23 +1568,24 @@
 
   function editEdge(edge) {
     var current = labelOf(edge.kind, edge.label);
-    var value = window.prompt('这条关系叫什么？（留空即删除这条关系）', current);
-    if (value === null) return;
-    var label = value.trim();
-    if (!label) {
-      if (!window.confirm('删除这条关系？')) return;
-      api(API + '/tree-edges/' + edge.id, { method: 'DELETE' }).then(function () {
-        S.edges = S.edges.filter(function (item) { return item.id !== edge.id; });
-        render();
-      }).catch(function (err) { toast(err.message || '删除失败'); });
-      return;
-    }
-    api(API + '/tree-edges/' + edge.id, { method: 'PUT', body: { label: label } })
-      .then(function (data) {
-        edge.label = data.label;
-        render();
-      })
-      .catch(function (err) { toast(err.message || '改名失败'); });
+    askText({ label: '这条关系叫什么？（留空即删除这条关系）', value: current }).then(function (value) {
+      if (value === null) return;
+      var label = value.trim();
+      if (!label) {
+        if (!window.confirm('删除这条关系？')) return;
+        api(API + '/tree-edges/' + edge.id, { method: 'DELETE' }).then(function () {
+          S.edges = S.edges.filter(function (item) { return item.id !== edge.id; });
+          render();
+        }).catch(function (err) { toast(err.message || '删除失败'); });
+        return;
+      }
+      api(API + '/tree-edges/' + edge.id, { method: 'PUT', body: { label: label } })
+        .then(function (data) {
+          edge.label = data.label;
+          render();
+        })
+        .catch(function (err) { toast(err.message || '改名失败'); });
+    });
   }
 
   /* ------------------------------------------------------------ 顶栏动作 */
@@ -1438,25 +1629,29 @@
 
   /* 关系清单编辑器：和第二步那个左栏是同一套数据，只是搬到了编辑区里 */
   function openRelationEditor() {
-    var label = window.prompt(
-      '当前可用关系：\n' + S.relations.map(function (r, i) {
-        return (i + 1) + '. ' + r.label + (r.enabled === false ? '（已停用）' : '');
-      }).join('\n') + '\n\n输入序号改名或停用/启用；输入新名字则新增一条。',
-      ''
-    );
-    if (label === null) return;
-    var text = label.trim();
-    if (!text) return;
-    var index = parseInt(text, 10) - 1;
-    if (String(index + 1) === text && S.relations[index]) {
-      var relation = S.relations[index];
-      var next = window.prompt('怎么改？', relation.label);
-      if (next === null) return;
-      relation.label = next.trim() || relation.label;
-    } else {
-      S.relations.push({ kind: 'custom_' + Date.now().toString(36), label: text, style: '', enabled: true });
-    }
-    api(API + '/relationship/trees/' + S.docId + '/relations', {
+    var choices = S.relations.map(function (r) {
+      return { value: r.kind, label: r.label + (r.enabled === false ? '（已停用）' : ''), relation: r };
+    });
+    choices.push({ value: '', label: '＋ 新增一条关系', relation: null });
+    askChoice({ title: '关系清单：选一条改名，或新增', options: choices }).then(function (picked) {
+      if (!picked) return null;
+      if (!picked.relation) {
+        return askText({ label: '新关系的名字（例如：教父、世仇、债主）', value: '' }).then(function (name) {
+          if (name === null || !name.trim()) return null;
+          S.relations.push({ kind: 'custom_' + Date.now().toString(36), label: name.trim(), style: '', enabled: true });
+          return saveRelations();
+        });
+      }
+      return askText({ label: '改叫什么？', value: picked.relation.label }).then(function (next) {
+        if (next === null) return null;
+        picked.relation.label = next.trim() || picked.relation.label;
+        return saveRelations();
+      });
+    });
+  }
+
+  function saveRelations() {
+    return api(API + '/relationship/trees/' + S.docId + '/relations', {
       method: 'PUT', body: { relations: S.relations }
     }).then(function (data) { S.relations = data.relations || S.relations; toast('关系清单已更新'); })
       .catch(function (err) { toast(err.message || '更新失败'); });

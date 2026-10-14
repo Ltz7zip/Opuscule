@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
 """时间轴的持久化模型。
 
-Flask 版本把所有内容塞在一个 data.json 里，这里改成 Django ORM + SQLite：
+这个 app 是「经典单时间轴」视图：一条横向的轴，上面既有时间点（事件），
+也有时间段（纪元）。它把前端传来的 JSON 存进 Django ORM + SQLite：
 
-* 一条「事件 / 纪元」    -> TimelineItem 的一行
+* 一条「事件 / 纪元」    -> TimelineItem 的一行（``kind="event"`` 或 ``"era"``）
 * 用户最后浏览的时间范围 -> TimelineView 单例（主键固定为 1）
 
 字段的取值规则全部收在 ``timeline.normalize`` 里，模型本身只负责存储，
 所以写入路径（接口 / admin / 导入脚本）拿到的规范化结果始终一致。
+
+在整个项目里它是 ``world`` 主工作区之外的次应用：world 才是主战场，timeline
+只提供 ``/legacy`` 经典时间轴页面；它的数据可以用 world 的 ``import_timeline``
+命令迁进 world 的时间线文档。
 """
 
 from django.db import models
@@ -22,7 +27,7 @@ KIND_CHOICES = [
 # 纪元可用的配色，和 timeline.normalize.THEMES、前端 script.js 的 THEMES 一一对应
 THEMES = ("blue", "sky", "violet", "red", "teal", "gold")
 
-# 全新数据库的默认视野（与 Flask 版 DEFAULT_DATA["view"] 一致）
+# 全新数据库的默认视野（首次打开时间轴时显示的年份范围）
 DEFAULT_VIEW = {"start": 1500.0, "end": 1900.0}
 
 
@@ -43,7 +48,7 @@ class TimelineItem(models.Model):
     cards = models.JSONField("卡片", default=list, blank=True)
 
     class Meta:
-        # 时间轴按添加顺序展示，对应 Flask 版 data.json 里的数组顺序
+        # 时间轴按添加顺序展示（先添加的排前面）
         ordering = ["id"]
         verbose_name = "时间轴条目"
         verbose_name_plural = "时间轴条目"
@@ -52,9 +57,9 @@ class TimelineItem(models.Model):
         return self.title or "未命名"
 
     def to_payload(self):
-        """转成前端认识的结构，字段与 Flask 版 ``normalize()`` 的输出逐一对齐。
+        """转成前端认识的结构，供接口直接返回。
 
-        事件不带 ``theme`` 键（和 Flask 版一致），纪元才带。
+        事件不带 ``theme`` 键，纪元才带 ``theme``（认不出来的配色落回 ``blue``）。
         """
         payload = {
             "id": self.id,
