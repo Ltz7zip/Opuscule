@@ -1,6 +1,6 @@
 # 更新日志（CHANGELOG）
 
-> **文档版本：Dev 1.0**
+> **文档版本：0.4.0-dev**
 > **用途**：记录 Opuscule（世界观共建工作台）每个**程序版本**的显著变更。
 > **格式**：参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)；**版本号规范**见 [`推进计划.md` §8](推进计划.md)。
 > **单一来源**：程序和页脚显示的版本号来自 `settings.APP_VERSION` + `APP_CHANNEL` 一处，
