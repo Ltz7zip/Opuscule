@@ -173,11 +173,11 @@ from .common import (
 )
 
 from .site import (
-    _safe_primary_color,
     explore,
     healthz,
     meta,
     robots_txt,
+    safe_primary_color,
     service_worker,
     state,
     workspace,

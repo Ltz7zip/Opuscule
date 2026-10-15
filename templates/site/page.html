@@ -18,7 +18,7 @@
           <p class="page-aka">亦称为：{{ card.aliases|join:"、" }}</p>
         {% endif %}
       </div>
-      {% if document.cover %}<div class="page-cover" style="background-image:url('{{ document.cover }}')"></div>{% endif %}
+      {% if document.cover_safe %}<div class="page-cover" style="background-image:url('{{ document.cover_safe }}')"></div>{% endif %}
     </header>
 
     {% if canvas_embed %}

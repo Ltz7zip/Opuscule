@@ -13,7 +13,7 @@ import re
 from datetime import timedelta
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from .services import publish
@@ -551,6 +551,173 @@ class GraphTests(BaseWorldCase):
         centered = self.client.get(f"/api/world/graph?center={self.hero.id}").json()
         self.assertEqual(centered["center"], self.hero.id)
         self.assertEqual(centered["center_name"], "Isarra")
+
+
+class DocumentSlugTests(BaseWorldCase):
+    """同世界内 slug 唯一：重名文档在站点上各自有一条可达 URL（体检 F1）。
+
+    站点 URL 就是 slug，重复时 ``document_by_slug()`` 只命中一份，另一份
+    永远打不开——2026-10-15 的真实库里就抓到两篇「未命名」共用同一个 slug。
+    """
+
+    def test_duplicate_names_get_distinct_slugs(self):
+        first = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        second = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        self.assertEqual(first.slug, "未命名")
+        self.assertEqual(second.slug, "未命名-2")     # 序号从 2 开始，不撞已占用的
+        third = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        self.assertEqual(third.slug, "未命名-3")
+
+    def test_explicit_slug_collision_is_renamed(self):
+        """导入 / 手工设过 slug 的路径同样去重——不能只靠"名称生成"那一处。"""
+        Document.objects.create(world=self.world, document_type=DOC_CARD, name="A", slug="same")
+        second = Document.objects.create(world=self.world, document_type=DOC_CARD, name="B", slug="same")
+        self.assertEqual(second.slug, "same-2")
+
+    def test_other_world_may_reuse_the_same_slug(self):
+        other = World.objects.create(name="另一个世界")
+        mine = Document.objects.create(world=self.world, document_type=DOC_CARD, name="城门")
+        theirs = Document.objects.create(world=other, document_type=DOC_CARD, name="城门")
+        self.assertEqual(mine.slug, "城门")
+        self.assertEqual(theirs.slug, "城门")        # 跨世界互不影响
+
+    def test_renaming_keeps_the_original_slug(self):
+        doc = Document.objects.create(world=self.world, document_type=DOC_CARD, name="旧名")
+        doc.name = "换成新名"
+        doc.save()
+        self.assertEqual(doc.slug, "旧名")           # 地址一旦发出去就不随名字漂移
+
+    def test_both_duplicates_are_reachable_on_the_site(self):
+        from apps.world.services.publish import publish
+
+        first = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        second = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        publish(self.world, audience="public")
+        self.world.refresh_from_db()
+        slug = self.world.published_slug
+
+        one = self.client.get(f"/s/{slug}/{first.slug}/")
+        two = self.client.get(f"/s/{slug}/{second.slug}/")
+        self.assertEqual(one.status_code, 200)
+        self.assertEqual(two.status_code, 200)
+        # 两份都到得了，而且确实是两份不同的文档
+        self.assertNotEqual(first.slug, second.slug)
+        self.assertEqual(one.context["document"].id, first.id)
+        self.assertEqual(two.context["document"].id, second.id)
+
+    def test_document_by_slug_finds_the_suffixed_one(self):
+        from apps.world.services.publish import document_by_slug, publish
+
+        first = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        second = Document.objects.create(world=self.world, document_type=DOC_CARD, name="未命名")
+        publish(self.world, audience="public")
+        self.assertEqual(document_by_slug(self.world, first.slug).id, first.id)
+        self.assertEqual(document_by_slug(self.world, second.slug).id, second.id)
+
+
+class SiteInlineStyleSafetyTests(BaseWorldCase):
+    """站点的内联样式取值全部过白名单（体检 F3）。
+
+    主题与封面都是用户可控值，会被写进 ``style="--site-primary: …"`` 与
+    ``style="background-image:url('…')"``。HTML 转义挡不住 CSS——属性值交给 CSS
+    解析前会被 HTML 解码，``&#x27;`` 会变回真引号，于是 ``';…`` 能改写后面的声明。
+    """
+
+    #: 能逃出 url('…') 并往页面里塞任意 CSS 的典型载荷
+    ESCAPE_PAYLOAD = "x');position:fixed;inset:0;background:url(//evil.example/p)"
+
+    def setUp(self):
+        super().setUp()
+        from apps.world.services.publish import publish
+
+        self.document = Document.objects.create(world=self.world, document_type=DOC_CARD, name="封面卡")
+        publish(self.world, audience="public", password="")
+        self.world.refresh_from_db()
+        self.slug = self.world.published_slug
+
+    def test_cover_payload_does_not_reach_inline_style(self):
+        self.document.cover = self.ESCAPE_PAYLOAD
+        self.document.save(update_fields=["cover"])
+        page = self.client.get(f"/s/{self.slug}/{self.document.slug}/")
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, "position:fixed")
+        self.assertNotContains(page, "evil.example")
+        self.assertNotContains(page, "page-cover")      # 地址不可信 -> 干脆不画封面
+
+    def test_legit_cover_values_still_work(self):
+        for value in ("/media/docs/1/cover.png", "https://example.com/c.jpg"):
+            self.document.cover = value
+            self.document.save(update_fields=["cover"])
+            page = self.client.get(f"/s/{self.slug}/{self.document.slug}/")
+            self.assertContains(page, f"url('{value}')")
+            self.assertEqual(self.document.cover_safe, value)
+
+    def test_theme_payload_is_dropped_color_and_font(self):
+        self.world.theme_config = {
+            "primaryColor": "#3ddc97;position:fixed;inset:0",
+            "headingFont": "X';}body{display:none",
+        }
+        self.world.save(update_fields=["theme_config"])
+        home = self.client.get(f"/s/{self.slug}/")
+        self.assertEqual(home.status_code, 200)
+        self.assertNotContains(home, "position:fixed")
+        self.assertNotContains(home, "display:none")
+        self.assertContains(home, "--site-primary: #3ddc97")        # 回退到电光绿
+
+    def test_theme_light_mode_and_legit_fonts_still_apply(self):
+        self.world.theme_config = {
+            "mode": "light", "primaryColor": "#123456", "headingFont": "EB Garamond",
+        }
+        self.world.save(update_fields=["theme_config"])
+        home = self.client.get(f"/s/{self.slug}/")
+        self.assertContains(home, 'data-theme="light"')
+        self.assertContains(home, "--site-primary: #123456")
+        self.assertContains(home, "'EB Garamond'")                  # 空格字体名要放行
+
+    def test_password_page_carries_sanitized_theme(self):
+        """密码页也把主题色写进内联 style，且之前连主题都没传进去（主色恒为空）。"""
+        from apps.world.services.publish import publish
+
+        self.world.theme_config = {"primaryColor": "#123456"}
+        self.world.save(update_fields=["theme_config"])
+        publish(self.world, audience="password", password="tower-42")
+        self.world.refresh_from_db()
+
+        gate = self.client.get(f"/s/{self.world.published_slug}/")
+        self.assertEqual(gate.status_code, 200)
+        self.assertContains(gate, "需要密码")
+        self.assertContains(gate, "--site-primary: #123456")
+
+
+class SanitizeHelpersTests(SimpleTestCase):
+    """白名单本身的行为（不碰数据库）。"""
+
+    def test_safe_primary_color(self):
+        from apps.world.models.constants import safe_primary_color
+
+        self.assertEqual(safe_primary_color("#abcdef"), "#abcdef")
+        self.assertEqual(safe_primary_color("#abc"), "#abc")
+        self.assertEqual(safe_primary_color("#12345678"), "#12345678")
+        for bad in ("#3ddc97;position:fixed", "red", "", None, "#xyz", "url(x)"):
+            self.assertEqual(safe_primary_color(bad), "#3ddc97", bad)
+
+    def test_safe_font_family(self):
+        from apps.world.models.constants import safe_font_family
+
+        self.assertEqual(safe_font_family("EB Garamond", "d"), "EB Garamond")
+        self.assertEqual(safe_font_family("思源宋体", "d"), "思源宋体")
+        for bad in ("X';}body{", "a;b", "a(b)", "x" * 41, None):
+            self.assertEqual(safe_font_family(bad, "d"), "d", bad)
+
+    def test_safe_image_url(self):
+        from apps.world.models.constants import safe_image_url
+
+        self.assertEqual(safe_image_url("/media/a.png"), "/media/a.png")
+        self.assertEqual(safe_image_url("https://e.com/a.jpg"), "https://e.com/a.jpg")
+        self.assertEqual(safe_image_url("data:image/png;base64,AAAA="), "data:image/png;base64,AAAA=")
+        for bad in ("x');background:red", "//evil.example/a.png", "javascript:alert(1)",
+                    "/media/a.png';background:red", "a b.png", ""):
+            self.assertEqual(safe_image_url(bad), "", bad)
 
 
 class PublishTests(BaseWorldCase):

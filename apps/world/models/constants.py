@@ -295,6 +295,58 @@ def slugify_name(name: str, fallback: str = "untitled") -> str:
     return normalized or fallback
 
 
+# --------------------------------------------------------------------------- #
+# 内联样式取值：世界主题与封面都是用户可控的，写进 style 之前必须过这一关
+# --------------------------------------------------------------------------- #
+# 为什么不能只靠模板自动转义：HTML 转义确实会把 `'` 写成 `&#x27;`，但那只是挡住了
+# 属性边界——属性值在交给 CSS 解析之前会被 HTML **解码**，`&#x27;` 会变回真引号。
+# 于是 `style="background-image:url('{{ cover }}')"` 照样能被 `';…` 逃出去，
+# 把后面的任意 CSS 声明写进页面（2026-10-15 体检 F3）。
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{3,8}$")
+_FONT_RE = re.compile(r"^[A-Za-z0-9\u4e00-\u9fff \-]{1,40}$")
+_URL_RE = re.compile(
+    r"^(?:https?://[^\s'\"()\\<>;]+"          # 外部图片
+    r"|/(?!/)[^\s'\"()\\<>;]*"                # 站内路径（//host 属于协议相对外链，不算站内）
+    r"|data:image/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+)$",   # 内联图片
+    re.IGNORECASE,
+)
+
+#: 主色兜底（与站点分享卡片 / 探索页保持一致）
+DEFAULT_PRIMARY_COLOR = "#3ddc97"
+
+
+def safe_primary_color(value) -> str:
+    """主题主色：只放行 ``#rgb``／``#rrggbb``／``#rrggbbaa``，其余回电光绿。"""
+    text = str(value or "")
+    return text if _COLOR_RE.fullmatch(text) else DEFAULT_PRIMARY_COLOR
+
+
+def safe_font_family(value, fallback: str) -> str:
+    """字体名：只放行字母 / 数字 / 中日文 / 空格 / 连字符，其余回默认字体。"""
+    text = str(value or "")
+    return text if _FONT_RE.fullmatch(text) else fallback
+
+
+def safe_image_url(value) -> str:
+    """封面一类的图片地址：只放行"站内路径 / http(s) / base64 图片"，其余回空串。
+
+    ``url('…')`` 里的引号、括号、分号都能改写后面的 CSS 声明，所以整串做白名单匹配。
+    """
+    text = str(value or "").strip()
+    return text if _URL_RE.fullmatch(text) else ""
+
+
+def sanitize_theme(theme) -> dict:
+    """把世界主题里"会被写进内联样式"的三个值过一遍（mode / grain 等原样保留）。"""
+    source = theme if isinstance(theme, dict) else {}
+    return {
+        **source,
+        "primaryColor": safe_primary_color(source.get("primaryColor")),
+        "headingFont": safe_font_family(source.get("headingFont"), DEFAULT_THEME["headingFont"]),
+        "bodyFont": safe_font_family(source.get("bodyFont"), DEFAULT_THEME["bodyFont"]),
+    }
+
+
 def publish_state(document) -> str:
     """算出某份文档相对当前站点的状态（五态发布状态机）。
 

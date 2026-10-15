@@ -23,9 +23,11 @@ PROTECTED_PREFIXES = (
 )
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 READ_METHODS = {"GET", "HEAD"}
-#: 读守门人只守工作区自己的接口；``/api/items``、``/api/view`` 是经典时间线 demo
-#: 模型（与任何世界数据无关），不在此列。
-READ_PROTECTED_PREFIX = "/api/world/"
+#: 读守门人守哪些路径：工作区自己的接口 + 经典时间轴的全量数据接口。
+#: ``/api/items``、``/api/view`` 是纯写接口（GET 一律 405），所以只用写守门人管；
+#: ``/api/timeline`` 是读接口，漏在读守门外头过——它返回的是全场共用的那份时间轴
+#: 数据，匿名访客能整份读走（2026-10-15 体检 F2），所以收进来一起要求登录。
+READ_PROTECTED_PREFIXES = ("/api/world/", "/api/timeline")
 
 
 class ActiveWorldMiddleware:
@@ -42,7 +44,7 @@ class ActiveWorldMiddleware:
 
 
 class ReadPermissionMiddleware:
-    """读守门人：``/api/world/`` 下的 GET/HEAD 要登录且在那个世界里。
+    """读守门人：``/api/world/`` 与 ``/api/timeline`` 下的 GET/HEAD 要登录且在那个世界里。
 
     例外只有一处——发布站点的只读嵌入：游客带着 ``?embed=<已发布文档>`` 能读那一篇
     （见 ``permissions.allow_public_read``），其余一律拦下。未登录回 401（带
@@ -53,7 +55,7 @@ class ReadPermissionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.method in READ_METHODS and request.path.startswith(READ_PROTECTED_PREFIX):
+        if request.method in READ_METHODS and request.path.startswith(READ_PROTECTED_PREFIXES):
             world = permissions.current_world_or_none()
             if not permissions.can_read(request.user, world) and not permissions.allow_public_read(request):
                 if not request.user or not request.user.is_authenticated:

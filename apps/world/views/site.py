@@ -14,10 +14,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_safe
 import logging
 import pathlib
-import re
 
 from .. import permissions, version as app_version
 from ..models import AUDIENCE_PUBLIC, DOC_TYPES, MAX_OWNED_WORLDS, World
+from ..models.constants import safe_primary_color
 from ..normalize import as_int, as_text
 from apps.documents.models import Card, Presence
 
@@ -115,15 +115,6 @@ def healthz(request):
     return JsonResponse({"status": "ok"})
 
 
-def _safe_primary_color(value) -> str:
-    """主题主色的安全取值：只放行 ``#rgb..rrggbb(aa)``，其余一律回电光绿。
-
-    探索页把主色写进内联 ``style``，世界主题是用户可控的，不校验就等于开了注入口。
-    """
-    text = str(value or "")
-    return text if re.fullmatch(r"#[0-9a-fA-F]{3,8}", text) else "#3ddc97"
-
-
 @require_safe
 def explore(request):
     """公开世界展示页（``/explore``）：游客从工作区被送到这里。
@@ -142,7 +133,7 @@ def explore(request):
             "name": world.name,
             "description": (world.description or "").strip(),
             "url": world.site_url,
-            "color": _safe_primary_color(world.theme.get("primaryColor")),
+            "color": safe_primary_color(world.theme.get("primaryColor")),
             "version": world.publish_version,
             "genres": world.genres if isinstance(world.genres, list) else [],
         })

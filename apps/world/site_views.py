@@ -26,6 +26,7 @@ from django.views.decorators.http import require_http_methods, require_safe
 
 from .services import publish as publish_service
 from .models import AUDIENCE_PASSWORD, DOC_CARD, DOC_TIMELINE, DOC_TREE, REPORT_REASONS, Report, World
+from .models.constants import safe_primary_color, sanitize_theme
 from .normalize import as_int, as_text
 
 
@@ -117,9 +118,7 @@ def og_card(request, slug: str):
     if not template:
         raise Http404("卡片模板缺失")
     theme = world.theme or {}
-    color = str(theme.get("primaryColor") or "#3ddc97")
-    if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", color):     # 别让主题值变成注入点
-        color = "#3ddc97"
+    color = safe_primary_color(theme.get("primaryColor"))    # 别让主题值变成注入点
     subtitle = world.description or f"{world.published_slug} · 只读站点"
     body = (template
             .replace("__TITLE__", _xml_escape((world.name or "")[:26]))
@@ -130,20 +129,33 @@ def og_card(request, slug: str):
     return response
 
 
+def _password_context(world: World, error: bool = False) -> dict:
+    """密码页的上下文（``_gate`` 与 ``unlock`` 失败时共用一份）。
+
+    这一页也把主题色写进内联 ``style``，所以主题同样要过一遍清洗。
+    """
+    theme = sanitize_theme(world.theme)
+    return {
+        "world": world,
+        "theme": theme,
+        "theme_mode": "light" if theme.get("mode") == "light" else "dark",
+        "audience_label": publish_service.AUDIENCE_LABELS.get(world.audience, ""),
+        "error": error,
+    }
+
+
 def _gate(request, world: World):
     """返回密码页（如果需要），否则返回 None。"""
     if publish_service.can_view(world, request.session):
         return None
-    return render(request, "site/password.html", {
-        "world": world,
-        "audience_label": publish_service.AUDIENCE_LABELS.get(world.audience, ""),
-        "error": False,
-    })
+    return render(request, "site/password.html", _password_context(world))
 
 
 def _site_base(world: World, sections=None, request=None) -> dict:
     filters = publish_service.site_filters(world)
-    theme = world.theme
+    # 主题值会被写进 <body style> 与内联 style：这里是站点唯一的出口，统一清洗一遍
+    # （主色只放行 #rgb..rrggbbaa，字体名只放行安全字符）。见 2026-10-15 体检 F3。
+    theme = sanitize_theme(world.theme)
     return {
         "world": world,
         "theme": theme,
@@ -311,11 +323,7 @@ def unlock(request, slug):
     password = request.POST.get("password", "")
     if publish_service.unlock(world, request.session, password):
         return redirect("site:home", slug=slug)
-    return render(request, "site/password.html", {
-        "world": world,
-        "audience_label": publish_service.AUDIENCE_LABELS.get(world.audience, ""),
-        "error": True,
-    }, status=403)
+    return render(request, "site/password.html", _password_context(world, error=True), status=403)
 
 
 @csrf_exempt
