@@ -215,6 +215,7 @@ html.js .auth-boot { display: grid; }
   flex-direction: column;
   gap: 16px;
 }
+.auth-boot-head { display: flex; flex-direction: column; gap: 6px; }
 .auth-boot-mark {
   font-family: var(--tx-mono);
   font-size: 12px;
@@ -223,6 +224,12 @@ html.js .auth-boot { display: grid; }
   color: var(--g-ink);
 }
 .auth-boot-mark i { font-style: normal; color: var(--g-accent); margin-inline-start: 6px; }
+.auth-boot-ver {
+  font-family: var(--tx-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--g-dim);
+}
 .auth-boot-lines {
   margin: 0; padding: 0; list-style: none;
   display: flex; flex-direction: column; gap: 5px;
@@ -266,6 +273,7 @@ html.js .auth-boot { display: grid; }
   padding-inline: var(--g-pad);
   border-block-end: 1px solid var(--g-line);
 }
+.auth-top-mark { display: flex; flex-direction: column; gap: 2px; line-height: 1; }
 .auth-top-brand {
   font-size: 12.5px;
   font-weight: 600;
@@ -273,6 +281,12 @@ html.js .auth-boot { display: grid; }
   color: var(--g-ink);
 }
 .auth-top-brand i { font-style: normal; color: var(--g-accent); margin-inline-start: 4px; }
+.auth-top-ver {
+  font-family: var(--tx-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--g-dim);
+}
 .auth-top-rule { inline-size: 1px; block-size: 14px; background: var(--g-line-2); }
 .auth-top-world {
   font-family: var(--tx-mono);

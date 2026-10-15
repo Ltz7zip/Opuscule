@@ -87,7 +87,10 @@
   {# 开机序列：仅 JS 可见，播完自动退场 #}
   <div class="auth-boot" id="authBoot" aria-hidden="true">
     <div class="auth-boot-in">
-      <div class="auth-boot-mark">OPUSCULE<i>∞</i></div>
+      <div class="auth-boot-head">
+        <div class="auth-boot-mark">OPUSCULE<i>∞</i></div>
+        <div class="auth-boot-ver">{{ app.version_string }}</div>
+      </div>
       <ol class="auth-boot-lines" id="authBootLines"></ol>
       <div class="auth-boot-bar"><i></i></div>
     </div>
@@ -95,7 +98,10 @@
 
   <!-- ================= 顶栏：字标 / 世界 / 状态芯片 / 时钟 ================= -->
   <header class="auth-top">
-    <span class="auth-top-brand">OPUSCULE<i>∞</i></span>
+    <span class="auth-top-mark">
+      <span class="auth-top-brand">OPUSCULE<i>∞</i></span>
+      <span class="auth-top-ver">{{ app.version_string }}</span>
+    </span>
     <span class="auth-top-rule" aria-hidden="true"></span>
     <span class="auth-top-world">{{ world_name }}</span>
     <span class="auth-top-spacer"></span>
