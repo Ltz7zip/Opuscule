@@ -289,7 +289,14 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 # 正式环境走 HTTPS，Session / CSRF Cookie 只允许加密传输。
 # 用 not DEBUG 门控，本地 http 开发不受影响。
-if not DEBUG:
+#
+# 过渡例外（OPUSCULE_INSECURE_HTTP=1）：域名与证书还没就绪、只能拿公网 IP 明文
+# HTTP 对外时的临时出口，用来跳过下面全部 HTTPS 硬性要求。**仅限证书就绪前的
+# 窗口期**——这期间口令与会话 Cookie 在公网是明文传输的，证书签好后必须删掉这个
+# 变量；把它当成"生产配置"长期留着，等于自愿放弃 HTTPS 的全部保护。
+_INSECURE_HTTP = os.environ.get('OPUSCULE_INSECURE_HTTP', '') == '1'
+
+if not DEBUG and not _INSECURE_HTTP:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
