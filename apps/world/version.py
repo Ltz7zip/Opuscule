@@ -5,10 +5,10 @@
 （环境渠道）+ ``settings.APP_BUILD``（CI 构建号，可空），这里只做派生，不另存副本。
 约定见「推进计划.md §8」——
 
-    Dev     -> 0.4.0-dev
-    Alpha   -> 0.4.0-alpha.N
-    Beta    -> 0.4.0-beta.N
-    Release -> 0.4.0（无后缀）
+    Dev     -> 0.5.0-dev
+    Alpha   -> 0.5.0-alpha.N
+    Beta    -> 0.5.0-beta.N
+    Release -> 0.5.0（无后缀）
 
 构建号（若设了 ``OPUSCULE_BUILD``）作为 semver 构建元数据附在末尾，
 如 ``0.5.0-dev+build.42``，展示串尾部追加 ``· build 42``。注意
@@ -52,8 +52,8 @@ def version_string(version: str, channel: str, seq: str = "", build: str = "") -
 def app_info() -> dict:
     """当前程序的版本信息（页脚 / ``/meta`` / CHANGELOG 共用）。
 
-    ``display`` 是给人看的一行字，如 ``Opuscule 0.4.0 · Dev``（设了构建号则
-    追加 ``· build 42``）；``version_string`` 是给机器读的完整串，如 ``0.4.0-dev``。
+    ``display`` 是给人看的一行字，如 ``Opuscule 0.5.0 · Dev``（设了构建号则
+    追加 ``· build 42``）；``version_string`` 是给机器读的完整串，如 ``0.5.0-dev``。
     """
     name = getattr(settings, "APP_NAME", "Opuscule")
     version = getattr(settings, "APP_VERSION", "0.0.0")

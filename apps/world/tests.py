@@ -4692,7 +4692,7 @@ class AppVersionTests(TestCase):
     """版本号的唯一来源是 ``settings.APP_VERSION`` + ``APP_CHANNEL``（推进计划.md §8）。
 
     页脚、``/meta`` 接口、CHANGELOG 都必须引用同一处，不能在别处再写死版本串。
-    出口条件：页脚（与 ``/meta``）可见 ``Opuscule 0.4.0 · Dev``（当前 settings 值）。
+    出口条件：页脚（与 ``/meta``）可见 ``Opuscule 0.5.0 · Dev``（当前 settings 值）。
     """
 
     def test_app_info_derives_from_settings(self):
@@ -4733,15 +4733,15 @@ class AppVersionTests(TestCase):
         # 同 test_app_info_derives_from_settings：设了构建号时 `/meta` 也要带上。
         build = getattr(settings, "APP_BUILD", "")
         suffix = f"+build.{build}" if build else ""
-        self.assertEqual(payload["version_string"], f"0.4.0-dev{suffix}")
+        self.assertEqual(payload["version_string"], f"0.5.0-dev{suffix}")
         self.assertEqual(payload["channel_label"], "Dev")
-        display = "Opuscule 0.4.0 · Dev"
+        display = "Opuscule 0.5.0 · Dev"
         self.assertEqual(payload["display"], f"{display} · build {build}" if build else display)
 
     def test_explore_footer_shows_version(self):
         response = self.client.get("/explore")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Opuscule 0.4.0 · Dev")
+        self.assertContains(response, "Opuscule 0.5.0 · Dev")
 
     def test_auth_footer_shows_version(self):
         # 库里一个用户都没有时 /login 会跳去 /register（首次安装要先建号），
@@ -4751,7 +4751,7 @@ class AppVersionTests(TestCase):
         User.objects.create_user("founder", password="pw-Str0ng!23")
         response = self.client.get("/login")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Powered by Opuscule 0.4.0 · Dev")
+        self.assertContains(response, "Powered by Opuscule 0.5.0 · Dev")
 
     def test_build_number_is_optional(self):
         # 没设 OPUSCULE_BUILD 时，展示串与完整串都不带 build（本地开发/测试不应被影响）。
@@ -4762,8 +4762,8 @@ class AppVersionTests(TestCase):
         with override_settings(APP_BUILD=""):
             info = version.app_info()
             self.assertEqual(info["build"], "")
-            self.assertEqual(info["version_string"], "0.4.0-dev")
-            self.assertEqual(info["display"], "Opuscule 0.4.0 · Dev")
+            self.assertEqual(info["version_string"], "0.5.0-dev")
+            self.assertEqual(info["display"], "Opuscule 0.5.0 · Dev")
 
     def test_build_number_attaches_metadata(self):
         # 设了构建号：完整串按 semver 构建元数据 `+build.N`，展示串尾部追加 `· build N`。
