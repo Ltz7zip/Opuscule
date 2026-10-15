@@ -1438,6 +1438,10 @@
     function mount() {
       const host = $('.tb-right');
       if (!host || $('#noticeBtn')) return false;
+      // 只读嵌入（发布站点里嵌的画布）里顶栏整块是 display:none —— 挂上也看不见，
+      // 却会在公开页面上打一次 401 的 /api/world/activity，还每 90 秒再来一次
+      // （2026-10-15 体检实测：匿名嵌入页唯一的控制台报错就是它）。所以直接不挂。
+      if (document.body.classList.contains('is-embed')) return false;
       button = el('button', 'tb-btn is-icon notice-btn');
       button.id = 'noticeBtn';
       button.type = 'button';

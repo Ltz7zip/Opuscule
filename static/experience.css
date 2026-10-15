@@ -246,6 +246,15 @@ html.xp-splash .osplash {
   to   { opacity: 1; scale: 1; }
 }
 
+/* 窄屏：上面那块装饰网格左右各外扩 10vw，390px 下就是 39px，再把页面顶出横向滚动
+   （2026-10-15 体检实测：站点首页 scrollWidth 401 vs clientWidth 390）。
+   收窄外扩量，网格照样铺开，但不再把文档顶宽。 */
+@media (max-width: 720px) {
+  .site .hero::before,
+  .site .era-head::before,
+  .site .page-head::before { inset: -40px -3vw auto; }
+}
+
 /* 遮罩揭开：整页从顶部向下退出（只做一次，不动布局） */
 .site.xp-page-enter::before {
   content: '';

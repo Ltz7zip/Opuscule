@@ -977,7 +977,6 @@ function closeTab(panelIndex, id) {
 }
 
 function renderPanels() {
-  setTimeout(tagEmbedControls, 0);      // 面板画完再标记嵌入时要藏的控件
   const host = $('#panels');
   // 面板要重建了：先把现有正文/标题节点标记为"退休"，再清空并重画。
   // 这样它们接下来触发的 input / blur 保存不会再拿旧内容覆盖掉新结构
@@ -7356,16 +7355,18 @@ function bindEvents() {
   }
 
   $('#userChip').addEventListener('click', () => userMenu());
-  // 手机底部导航
+  // 手机底部导航：只有「世界」（侧栏开合）对应真实状态，
+  // 搜索 / 新建 / 建议 / 我的 都是弹一下就走的浮层，不该留下高亮——
+  // 留着等于对用户谎报"你现在在搜索这一区"（2026-10-15 体检 F6）。
   $$('.bottom-nav button').forEach((node) => {
     node.addEventListener('click', () => {
       const action = node.dataset.mobile;
-      $$('.bottom-nav button').forEach((other) => other.classList.toggle('is-on', other === node));
       if (action === 'world') { closeSidebarDrawer(); toggleSidebar(); }
       else if (action === 'search') openPalette('');
       else if (action === 'new') guidedTemplatesDialog();
       else if (action === 'suggest') suggestionsDialog();
       else if (action === 'user') userMenu();
+      syncBottomNav();
     });
   });
 
@@ -9346,20 +9347,14 @@ const WRITE_CONTROLS = [
   '#cardEraBtn', '#coverBtn', '#memberInviteBtn', '#publishBtn', '#tableAddRowBtn',
 ];
 
-/* 发布站点里嵌的画布：按按钮文字认出"改内容"的入口并藏掉。
-   比逐个加类名稳 —— 三个工具条（关系树 / 地图 / 图谱）都能覆盖。 */
-const EMBED_HIDE_WORDS = ['成员', '选择', '平移', '图钉', '区域', '文字', '底图', '上传',
-                          '关系名', '变体', '新建', '添加', '删除', '清空'];
-
-function tagEmbedControls() {
-  if (!isEmbedded()) return;
-  $$('.is-embed-bar button, .is-embed-bar select').forEach((node) => {
-    const text = (node.textContent || '').trim();
-    const shouldHide = EMBED_HIDE_WORDS.some((word) => text.includes(word));
-    node.classList.toggle('embed-hide', shouldHide);
-  });
-}
-
+/* 只读嵌入里"写入口"的三种关法，各有适用范围（2026-10-15 体检 F4 核对过）：
+   1. 工作区外壳：上面这张 WRITE_CONTROLS 表 + revealWriteControls(viewer.can_edit)；
+   2. 关系树页：模板里给写控件标 `rt-write`，由 `.rt-app[data-readonly="1"] .rt-write{display:none}` 关；
+   3. 地图页：服务端 `{% if shell.can_edit %}` 直接不渲染写面板。
+   曾经这里还有一套"按按钮中文释义（成员 / 添加 / 删除…）识别写入口"的兜底，
+   写在 `.is-embed-bar` 里——那套从来没生效过：全仓没有任何元素带这个类，
+   于是选择器恒不命中（死代码）。真正管住只读边界的是上面三种机制 + 服务端守门人，
+   所以那套兜底已删除，别再照着它的样子加回来。 */
 function revealWriteControls(show) {
   // `[hidden]` 只是 UA 的 display:none —— 作者样式里 `.tb-btn { display:flex }` 之类一句就把它盖掉了
   // （导入导出 / 撤销 / 重做 之前就是这么漏在游客眼前的）。所以藏的时候补一条内联 display 兜底，
@@ -10277,6 +10272,7 @@ function openSidebarDrawer() {
   const sidebar = $('#sidebar');
   if (!sidebar) return;
   sidebar.classList.add('is-open');
+  syncBottomNav();
   if (!$('.sb-backdrop')) {
     const backdrop = el('div', 'sb-backdrop');
     backdrop.addEventListener('click', () => {
@@ -10291,6 +10287,16 @@ function closeSidebarDrawer() {
   const sidebar = $('#sidebar');
   if (sidebar) sidebar.classList.remove('is-open');
   removeSidebarBackdrop();
+  syncBottomNav();
+}
+
+/** 底部导航的高亮跟着真实状态走：「世界」= 侧栏（抽屉）开着，其余一律不亮。 */
+function syncBottomNav() {
+  const sidebar = $('#sidebar');
+  const open = Boolean(sidebar && sidebar.classList.contains('is-open'));
+  $$('.bottom-nav button').forEach((node) => {
+    node.classList.toggle('is-on', node.dataset.mobile === 'world' && open);
+  });
 }
 
 /** 侧栏收起 / 展开（⌘B）。 */

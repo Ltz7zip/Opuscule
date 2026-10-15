@@ -794,7 +794,8 @@ body.is-embed .tree-frame-body, body.is-embed .map-canvas, body.is-embed .graph-
   flex: 1 1 auto; min-height: 0;
 }
 
-/* 只读：工具条里"改内容"的按钮藏掉，留下缩放 / 适应 / 关系名显示方式 */
-body.is-embed .is-embed-bar .map-tool-edit,
-body.is-embed .is-embed-bar .graph-tool-edit,
-body.is-embed .embed-hide { display: none !important; }
+/* 只读：工具条里"改内容"的按钮怎么藏，不靠样式表猜。
+   工作区外壳走 workspace.js 的 WRITE_CONTROLS（按 viewer.can_edit 关，带内联 display 兜底）、
+   关系树页走 `.rt-app[data-readonly="1"] .rt-write`、地图页由服务端 `{% if shell.can_edit %}`
+   直接不渲染。原先这里还有 `.is-embed-bar` / `.embed-hide` 两条规则，但全仓没有任何元素
+   带这两个类（对应的 JS 选择器也恒不命中），已随那套死代码一并删除（2026-10-15 体检 F4）。 */

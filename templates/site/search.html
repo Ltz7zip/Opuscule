@@ -5,7 +5,7 @@
   <h1 class="page-title">搜索</h1>
 
   <form class="search-inline" method="get" action="{% url 'site:search' world.published_slug %}">
-    <input type="search" name="q" placeholder="搜名称、正文、属性、事件…" value="{{ query }}" autofocus />
+    <input type="search" name="q" placeholder="搜名称、正文、属性、事件…" value="{{ query }}" autofocus aria-label="搜索这个世界" />
     {% if active_filter.type_slug %}<input type="hidden" name="type" value="{{ active_filter.type_slug }}" />{% endif %}
     {% if active_filter.era_id %}<input type="hidden" name="era" value="{{ active_filter.era_id }}" />{% endif %}
     <button type="submit">搜索</button>

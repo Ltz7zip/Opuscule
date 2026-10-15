@@ -720,6 +720,33 @@ class SanitizeHelpersTests(SimpleTestCase):
             self.assertEqual(safe_image_url(bad), "", bad)
 
 
+class SiteFormAccessibilityTests(BaseWorldCase):
+    """站点页的表单控件要有可访问名称、密码页要能把错误报给读屏（体检 F6–F9 的 F7）。"""
+
+    def _publish(self, **kwargs):
+        from apps.world.services.publish import publish
+
+        publish(self.world, **kwargs)
+        self.world.refresh_from_db()
+        return self.world.published_slug
+
+    def test_search_inputs_have_accessible_names(self):
+        slug = self._publish(audience="public")
+        for url in (f"/s/{slug}/", f"/s/{slug}/search?q=x"):
+            resp = self.client.get(url)
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, 'aria-label="搜索这个世界"')
+
+    def test_password_page_labels_and_error_alert(self):
+        slug = self._publish(audience="password", password="tower-42")
+        gate = self.client.get(f"/s/{slug}/")
+        self.assertContains(gate, 'aria-label="访问密码"')
+        self.assertContains(gate, 'autocomplete="current-password"')
+        wrong = self.client.post(f"/s/{slug}/unlock", {"password": "nope"})
+        self.assertEqual(wrong.status_code, 403)
+        self.assertContains(wrong, 'role="alert"', status_code=403)
+
+
 class PublishTests(BaseWorldCase):
     """发布：状态机 + 站点三档可见性。"""
 
@@ -4859,7 +4886,8 @@ class AppVersionTests(TestCase):
     """版本号的唯一来源是 ``settings.APP_VERSION`` + ``APP_CHANNEL``（推进计划.md §8）。
 
     页脚、``/meta`` 接口、CHANGELOG 都必须引用同一处，不能在别处再写死版本串。
-    出口条件：页脚（与 ``/meta``）可见 ``Opuscule 0.5.0 · Dev``（当前 settings 值）。
+    出口条件：页脚（与 ``/meta``）可见 ``Opuscule <当前 APP_VERSION> · Dev``；期望值一律
+    按 ``settings`` 现算，**不在断言里写死版本串**——否则每次升版本都要回来改测试。
     """
 
     def test_app_info_derives_from_settings(self):
@@ -4900,28 +4928,32 @@ class AppVersionTests(TestCase):
         # 同 test_app_info_derives_from_settings：设了构建号时 `/meta` 也要带上。
         build = getattr(settings, "APP_BUILD", "")
         suffix = f"+build.{build}" if build else ""
-        self.assertEqual(payload["version_string"], f"0.5.0-dev{suffix}")
+        self.assertEqual(payload["version_string"], f"{settings.APP_VERSION}-dev{suffix}")
         self.assertEqual(payload["channel_label"], "Dev")
-        display = "Opuscule 0.5.0 · Dev"
+        display = f"Opuscule {settings.APP_VERSION} · Dev"
         self.assertEqual(payload["display"], f"{display} · build {build}" if build else display)
 
     def test_explore_footer_shows_version(self):
+        from django.conf import settings
+
         response = self.client.get("/explore")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Opuscule 0.5.0 · Dev")
+        self.assertContains(response, f"Opuscule {settings.APP_VERSION} · Dev")
 
     def test_auth_footer_shows_version(self):
         # 库里一个用户都没有时 /login 会跳去 /register（首次安装要先建号），
         # 所以先建一个用户，让 /login 正常渲染登录页。
+        from django.conf import settings
         from django.contrib.auth.models import User
 
         User.objects.create_user("founder", password="pw-Str0ng!23")
         response = self.client.get("/login")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Powered by Opuscule 0.5.0 · Dev")
+        self.assertContains(response, f"Powered by Opuscule {settings.APP_VERSION} · Dev")
 
     def test_build_number_is_optional(self):
         # 没设 OPUSCULE_BUILD 时，展示串与完整串都不带 build（本地开发/测试不应被影响）。
+        from django.conf import settings
         from django.test import override_settings
 
         from . import version
@@ -4929,8 +4961,8 @@ class AppVersionTests(TestCase):
         with override_settings(APP_BUILD=""):
             info = version.app_info()
             self.assertEqual(info["build"], "")
-            self.assertEqual(info["version_string"], "0.5.0-dev")
-            self.assertEqual(info["display"], "Opuscule 0.5.0 · Dev")
+            self.assertEqual(info["version_string"], f"{settings.APP_VERSION}-dev")
+            self.assertEqual(info["display"], f"Opuscule {settings.APP_VERSION} · Dev")
 
     def test_build_number_attaches_metadata(self):
         # 设了构建号：完整串按 semver 构建元数据 `+build.N`，展示串尾部追加 `· build N`。

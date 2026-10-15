@@ -56,6 +56,18 @@ a:hover { text-decoration: underline; }
 }
 .nav-search input:focus, .search-inline input:focus { border-color: var(--site-primary); }
 
+/* 窄屏：导航一排挤不下（品牌 + 分区链接 + 筛选 chip + 搜索框），390px 下会横向溢出
+   近一个屏幕宽（2026-10-15 体检实测：scrollWidth 779 vs clientWidth 390）。
+   这里让它换行：第一行品牌 + 分区 + 筛选，搜索框单独占满一行。 */
+@media (max-width: 720px) {
+  .nav { flex-wrap: wrap; gap: 10px 12px; padding: 12px 16px; }
+  .nav-brand { order: 1; margin-right: auto; font-size: 18px; }
+  .nav-links { order: 3; flex-wrap: wrap; gap: 10px 14px; font-size: 13px; }
+  .filter-chip { order: 2; margin-right: 0; }
+  .nav-search { order: 4; flex: 1 1 100%; margin-left: 0; }
+  .nav-search input { min-width: 0; width: 100%; }
+}
+
 .wrap { max-width: 1040px; margin: 0 auto; padding: 34px 28px 60px; }
 
 /* ------------------------------------------------------------------- 首页 */
