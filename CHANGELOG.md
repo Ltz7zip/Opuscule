@@ -1,6 +1,6 @@
 # 更新日志（CHANGELOG）
 
-> **文档版本：0.5.0-dev**
+> **文档版本：0.5.1-dev**
 > **用途**：记录 Opuscule（世界观共建工作台）每个**程序版本**的显著变更。
 > **格式**：参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)；**版本号规范**见 [`推进计划.md` §8](推进计划.md)。
 > **单一来源**：程序和页脚显示的版本号来自 `settings.APP_VERSION` + `APP_CHANNEL` 一处，
@@ -11,7 +11,60 @@
 
 ---
 
-## [未发布] — 0.5.0-dev
+## [未发布] — 0.5.1-dev
+
+> **范围说明**：本版是 **2026-10-15 前端体检轮**（`review-frontend-production` 技能 · quick 模式）：
+> 修掉体检确认的问题，并把体检里标"未验证"的视觉 / 键盘项补成浏览器实测。
+> 不含新功能；AI 接入（AI2 · AI 横切层 + BYOK）仍顺延至 `0.6.0-dev`。逐条证据与复验见
+> [`quick-review.md`](quick-review.md)。
+
+### 部署提示
+
+- **本版含数据库迁移**（`documents.0002_document_slug_unique_per_world`）：上线前先备份数据库、
+  再跑 `manage.py migrate`。迁移会把同一世界内重复的文档 slug 去重（保留 id 最小的那条原名，
+  其余追加 `-2`、`-3`…），并加 `(world, slug)` 唯一约束与 slug 索引。
+
+### 修复
+
+- **站内 slug 冲突（体检 F1 · P1）**：`Document.save()` 统一给 slug 去重（同世界内重名追加
+  `-2`、`-3`…，**含回收站里的文档**——避免新文档接手一篇已删文档在站点上失效的旧 URL）；
+  新增 `UniqueConstraint(world, slug)` 与 slug 索引。此前两份已发布文档共用同一个 slug 时，
+  `document_by_slug()` 只命中一份，另一份在站点上永远打不开（真库里已有两篇「未命名」）。
+- **经典时间轴访问口径（体检 F2 · P1）**：`/api/timeline` 收进读守门人；`/legacy` 对匿名访客
+  重定向 `/login`（库里一个账号都没有时按"首次安装例外"放行）。工作区内嵌与发布站点的只读嵌入
+  走 `/api/world/timelines/<id>/classic`，不受影响。
+- **内联样式注入面（体检 F3 · P2）**：主色只放行 `#rgb`/`#rrggbb(aa)`、字体名只放行安全字符、
+  封面只放行站内路径 / `http(s)` / base64 图片（新增 `Document.cover_safe`）；清洗集中在
+  `apps/world/models/constants.py`，站点首页 / 卡片页 / 纪元页 / 密码页 / 探索页与分享卡片统一套用。
+  顺带修掉密码页：它此前连 `theme` 都没进上下文，主色一直是空的。
+- **只读嵌入里的死代码（体检 F4 · P2）**：删掉"按按钮中文释义（成员 / 添加 / 删除…）识别写入口"
+  那一套——它写在 `.is-embed-bar` 作用域里，而全仓没有任何元素带这个类，选择器恒不命中，
+  **从来没生效过**；`responsive.css` 里对应的两条规则一并删除。真正管住只读边界的是
+  `WRITE_CONTROLS`（按 `viewer.can_edit` 关，带内联 `display` 兜底）、关系树页的 `rt-write` +
+  `.rt-app[data-readonly="1"]`、地图页服务端 `{% if shell.can_edit %}` 直接不渲染，以及服务端守门人。
+- **窄屏横向溢出（体检新增 · P2）**：发布站点的导航一排挤不下（品牌 + 分区 + 筛选 chip + 搜索框），
+  390px 下把页面顶出 **389px** 横向滚动（实测 `scrollWidth 779` vs `clientWidth 390`，每页都中）。
+  导航改为窄屏换行 + 搜索框独占一行；装饰网格背景（`.site .hero::before` 的 `-10vw` 外扩）
+  在窄屏收窄到 `-3vw`。修复后 360 / 390 / 1280px **溢出 0px**。
+- **公开页面上的 401 噪音**：只读嵌入页会挂通知中心并请求 `/api/world/activity`（匿名 401，
+  且每 90 秒重试一次）。嵌入态不再挂它——匿名嵌入页控制台报错从 1 条降到 **0 条**。
+- **无障碍细节（体检 F6–F9 · P3）**：站点搜索框 / 访问密码框 / 工作区搜索框补可访问名称，
+  密码框补 `autocomplete="current-password"`，密码页错误提示改 `role="alert"`；
+  筛选浮层按 Esc 关闭后把焦点还给触发按钮（此前会掉到文档流开头）；
+  登录页两颗装饰按钮（Hibernate / Reboot）移出 Tab 序列并从无障碍树隐藏；
+  手机底部导航不再把"搜索 / 新建 / 建议 / 我的"点亮成当前分区——只有「世界」（侧栏开合）对应真实状态。
+
+### 变更
+
+- **响应压缩**：`MIDDLEWARE` 加 `django.middleware.gzip.GZipMiddleware`。地图数据接口实测
+  **2.79 MB → 488 KB**（同一份数据，`Content-Encoding: gzip`）；项目没有流式响应，不受影响。
+- **版本号**：`settings.APP_VERSION` 默认值 `0.5.0` → `0.5.1`；`version.py` 与活跃文档头部同步到
+  `0.5.1-dev`。`AppVersionTests` 的期望值改为按 `settings` 现算，**不再写死版本串**——
+  否则每次升版本都要回来改测试。
+
+---
+
+## [0.5.0] — 0.5.0-dev
 
 > **范围说明**：本版收口「安全底线 + 账号/分级 + 版本管理 + 体验优化 + 运维」五大块与架构重构
 > （R1/R2/R3）。**AI 接入（AI2 · AI 横切层 + BYOK 代理转发）不在本版**，顺延至 `0.6.0-dev`。
