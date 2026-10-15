@@ -63,7 +63,7 @@
     </nav>
     {% include "site/_filter.html" %}
     <form class="nav-search" action="{% url 'site:search' world.published_slug %}" method="get">
-      <input type="search" name="q" placeholder="搜索这个世界…" value="{{ query }}" />
+      <input type="search" name="q" placeholder="搜索这个世界…" value="{{ query }}" aria-label="搜索这个世界" />
       {% if active_filter.type_slug %}<input type="hidden" name="type" value="{{ active_filter.type_slug }}" />{% endif %}
       {% if active_filter.era_id %}<input type="hidden" name="era" value="{{ active_filter.era_id }}" />{% endif %}
     </form>
@@ -117,14 +117,20 @@
       if (!chip) return;
       var btn = chip.querySelector('.fc-btn');
       var menu = chip.querySelector('.fc-menu');
-      function close() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+      // 键盘用户按 Esc 关掉时，焦点要还给触发按钮——不还的话焦点会掉到文档流开头，
+      // 得从头 Tab 回来（2026-10-15 体检 F9）。鼠标点外面关掉则不抢焦点。
+      function close(e) {
+        menu.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+        if (e && e.type === 'keydown') { try { btn.focus(); } catch (error) { /* 忽略 */ } }
+      }
       btn.addEventListener('click', function (event) {
         event.stopPropagation();
         menu.hidden = !menu.hidden;
         btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
       });
       document.addEventListener('click', close);
-      document.addEventListener('keydown', function (event) { if (event.key === 'Escape') close(); });
+      document.addEventListener('keydown', function (event) { if (event.key === 'Escape') close(event); });
     })();
 
     // 让时间线区块铺满浏览器宽度：量出当前左边距，直接拉负值（窗口变化时重算）

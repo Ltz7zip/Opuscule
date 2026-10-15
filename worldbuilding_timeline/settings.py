@@ -106,6 +106,10 @@ INSTALLED_APPS = [
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 MIDDLEWARE = [
+    # 压缩：地图数据这类 JSON 很大（实测一份地图 2.8 MB 未压缩），走一次 gzip 能砍掉
+    # 九成以上。放最前面，好让它包住后面所有中间件产生的响应。项目里没有流式响应
+    # （Django 的 GZipMiddleware 对流式响应会自动跳过），所以不存在"压了 SSE"的坑。
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -368,16 +372,16 @@ LOGGING = {
 # --------------------------------------------------------------------------- #
 # 页脚、`/meta` 接口、CHANGELOG 都从这里取，别在别处再写死版本号。
 # 约定见「推进计划.md §8」：**环境渠道 + 三段式 X.Y.Z**，组合写法——
-#   Dev     -> 0.5.0-dev
-#   Alpha   -> 0.5.0-alpha.N
-#   Beta    -> 0.5.0-beta.N
-#   Release -> 0.5.0（无后缀）
+#   Dev     -> 0.5.1-dev
+#   Alpha   -> 0.5.1-alpha.N
+#   Beta    -> 0.5.1-beta.N
+#   Release -> 0.5.1（无后缀）
 # 构建号（OPUSCULE_BUILD）由 CI 注入，同一个 X.Y.Z 下每次构建递增：
 # 例如 GitHub Actions 用 `OPUSCULE_BUILD=${{ github.run_number }}`（见 .github/workflows/ci.yml）。
 # 不设则不显示——本地开发与测试不受影响。派生展示串见 world/version.py 的 app_info()。
 # 注意：``World.publish_version`` 是"内容发布次数"，是数据，**不是**程序版本。
 APP_NAME = "Opuscule"
-APP_VERSION = os.environ.get("OPUSCULE_VERSION", "0.5.0")        # 三段式基础号
+APP_VERSION = os.environ.get("OPUSCULE_VERSION", "0.5.1")        # 三段式基础号
 APP_CHANNEL = os.environ.get("OPUSCULE_CHANNEL", "dev")          # dev/alpha/beta/release
 APP_CHANNEL_SEQ = os.environ.get("OPUSCULE_CHANNEL_SEQ", "")     # alpha/beta 的轮次 N（默认 1）
 APP_BUILD = os.environ.get("OPUSCULE_BUILD", "").strip()         # CI 构建号（不设则不显示）
