@@ -1,10 +1,10 @@
 # Gunicorn 常驻服务（systemd）。
 #
 # 安装：
-#   sudo useradd --system --group --home /srv/opuscule opuscule
 #   sudo cp deploy/opuscule.service /etc/systemd/system/
 #   sudo cp deploy/opuscule.env.example /etc/opuscule.env
-#   sudo chmod 600 /etc/opuscule.env        # 里面有 SECRET_KEY，别放开
+#   sudo chown root:ubuntu /etc/opuscule.env
+#   sudo chmod 640 /etc/opuscule.env        # 里面有 SECRET_KEY，别放开
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now opuscule
 #   systemctl status opuscule               # 看状态
@@ -15,8 +15,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=opuscule
-Group=opuscule
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/srv/opuscule
 EnvironmentFile=/etc/opuscule.env
 # 只监听 127.0.0.1：外部一律经 Nginx，别把 8000 直接暴露到公网
