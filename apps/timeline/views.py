@@ -22,9 +22,11 @@
 import json
 
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_safe
+
+from apps.world import permissions
 
 from .models import TimelineItem, TimelineView
 from .normalize import apply_values, as_float, normalize
@@ -58,6 +60,15 @@ def parse_json(request):
 # --------------------------------------------------------------------------- #
 @require_safe
 def index(request):
+    """经典时间轴的独立页。
+
+    这里的数据是全场共用的那一份（不挂在任何世界上），所以**要求登录**：
+    匿名访客打开这一页等于把整份时间轴读走（2026-10-15 体检 F2）。库里一个用户
+    都没有时照旧放行——那是"首次安装"，得让人进得来把世界建起来，口径与
+    ``world.views.workspace`` 的读守门人一致。
+    """
+    if permissions.users_exist() and not (request.user and request.user.is_authenticated):
+        return redirect("/login")
     return render(request, "index.html")
 
 

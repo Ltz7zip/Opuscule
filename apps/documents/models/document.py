@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from django.db import models
 
 from apps.world.models.constants import (
@@ -30,6 +32,7 @@ from apps.world.models.constants import (
     PRECISION_TIME,
     PRECISION_YEAR,
     publish_state,
+    safe_image_url,
     slugify_name,
 )
 from apps.world.models.entity import EntityType
@@ -89,7 +92,7 @@ class Document(models.Model):
     world = models.ForeignKey(World, on_delete=models.CASCADE, related_name="documents")
     document_type = models.CharField("文档类型", max_length=16, choices=DOC_TYPES, default=DOC_CARD)
     name = models.CharField("名称", max_length=160, default="未命名")
-    slug = models.CharField("slug", max_length=80, blank=True, default="")
+    slug = models.CharField("slug", max_length=80, blank=True, default="", db_index=True)
     parent = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.CASCADE, related_name="children"
     )
@@ -129,9 +132,23 @@ class Document(models.Model):
         ordering = ["position", "id"]
         verbose_name = "文档"
         verbose_name_plural = "文档"
+        # 同世界内 slug 唯一：站点 URL 就是 slug，重名会让其中一份文档在站点上打不开
+        # （见 Document._unique_slug 与 0002 迁移）。
+        constraints = [
+            models.UniqueConstraint(fields=["world", "slug"], name="uniq_document_slug_per_world"),
+        ]
 
     def __str__(self):
         return f"{self.get_document_type_display()}：{self.name}"
+
+    @property
+    def cover_safe(self) -> str:
+        """能安全写进内联 ``style="background-image:url('…')"`` 的封面地址。
+
+        不合法（含引号 / 括号 / 分号等能改写 CSS 的字符）就回空串，模板据此不画封面
+        ——站点是公开页面，封面是用户可控值（2026-10-15 体检 F3）。
+        """
+        return safe_image_url(self.cover)
 
     # -- 树 ---------------------------------------------------------------- #
     @property
@@ -166,7 +183,33 @@ class Document(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify_name(self.name)
+        if not kwargs.get("raw"):        # loaddata 等按原样灌数据时不去重
+            self.slug = self._unique_slug()
         super().save(*args, **kwargs)
+
+    def _unique_slug(self) -> str:
+        """保证同一世界内 slug 唯一：重名时追加 ``-2``、``-3``…
+
+        站点 URL 就是 slug，同世界内两份已发布文档共用同一个 slug 时，
+        ``document_by_slug()`` 只会命中其中一份，另一份在站点上永远打不开
+        （2026-10-15 体检 F1：库里已出现两篇「未命名」）。
+
+        连回收站里的文档也一起避开，是**故意**的：一篇文档被删掉后它在站点上的
+        URL 就失效了，若让新文档原地接手同一个 slug，读者手里的旧链接会悄悄打开
+        另一篇内容。宁可让新文档多一个序号，也不复用已经释放出去的地址。
+
+        DB 层另有 ``UniqueConstraint(world, slug)`` 兜底（见 0002 迁移），
+        这里查一次是常态、只在真的撞名时才继续往下找。
+        """
+        base = slugify_name(self.slug or self.name)
+        candidate = base
+        index = 2
+        while Document.objects.filter(world_id=self.world_id, slug=candidate).exclude(pk=self.pk).exists():
+            if index > 200:              # 理论上到不了：真是这种数据，交给随机后缀收尾
+                return f"{base[:70]}-{uuid.uuid4().hex[:6]}"
+            candidate = f"{base}-{index}"
+            index += 1
+        return candidate
 
     # -- 输出 -------------------------------------------------------------- #
     def to_payload(self, with_children: bool = False, with_card: bool = False) -> dict:

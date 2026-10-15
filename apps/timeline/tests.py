@@ -12,14 +12,17 @@ import tempfile
 from io import StringIO
 from pathlib import Path
 
+from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from apps.documents.models import Document
 from apps.timeline.legacy import DEFAULT_ITEMS, parse_legacy
 from apps.timeline.models import TimelineItem, TimelineView
 from apps.timeline.normalize import as_float, normalize
+from apps.world.models import DOC_TIMELINE, Membership, ROLE_OWNER, World
 
 
 class TimelineApiTests(TestCase):
@@ -221,6 +224,72 @@ class TimelineApiTests(TestCase):
         values = normalize({"end": 9}, fallback=base)
         self.assertEqual([values["kind"], values["title"], values["start"], values["end"], values["theme"]],
                          ["era", "原", 1.0, 9.0, "red"])
+
+
+class LegacyTimelineAccessTests(TestCase):
+    """经典时间轴的访问口径：库里已有账号时，匿名访客读不走这一份数据。
+
+    这份数据是全场共用的（不挂在任何世界上），所以口径是"登录才能看"——
+    匿名 `GET /api/timeline` 曾经能整份读走（2026-10-15 体检 F2）。
+    库里一个用户都没有时按"首次安装例外"放行，与 /world 的读守门人一致。
+    """
+
+    def setUp(self):
+        TimelineItem.objects.all().delete()
+        TimelineView.objects.update_or_create(pk=1, defaults={"start": 1500.0, "end": 1900.0})
+        TimelineItem.objects.create(kind="event", title="不该被匿名读到", start=1600)
+        self.anonymous = Client()
+        # 默认就处在"库里已有账号"的状态——这正是登录口径生效的前提
+        self.founder = self._founder()
+        self.world = World.objects.get(owner=self.founder)
+
+    def _founder(self):
+        """建一个"有自己世界"的账号——注册即得一个世界（方案 A）。"""
+        user = User.objects.create_user("founder", password="pw-Str0ng!23")
+        world = World.objects.create(name="创始世界", owner=user)
+        Membership.objects.create(world=world, user=user, role=ROLE_OWNER)
+        return user
+
+    def _logged_in(self):
+        client = Client()
+        client.force_login(self.founder)
+        return client
+
+    def test_timeline_data_requires_login(self):
+        resp = self.anonymous.get("/api/timeline")
+        self.assertEqual(resp.status_code, 401)
+        self.assertTrue(resp.json()["need_login"])
+        self.assertNotIn("不该被匿名读到", resp.content.decode())
+
+    def test_legacy_page_redirects_anonymous_to_login(self):
+        resp = self.anonymous.get("/legacy")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp["Location"], "/login")
+
+    def test_logged_in_user_can_read(self):
+        client = self._logged_in()
+        page = client.get("/legacy")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "/static/style.css")
+        self.assertEqual(client.get("/api/timeline").status_code, 200)
+
+    def test_first_install_without_users_still_open(self):
+        """库里一个账号都没有时照旧放行：否则首次安装的人连演示数据都看不见。"""
+        User.objects.all().delete()
+        self.assertFalse(User.objects.exists())
+        self.assertEqual(self.anonymous.get("/legacy").status_code, 200)
+        self.assertEqual(self.anonymous.get("/api/timeline").status_code, 200)
+
+    def test_embedded_timeline_still_readable_for_published_doc(self):
+        """发布站点里嵌的只读时间线不受影响：它走 /api/world/timelines/<id>/classic。"""
+        self.world.is_published = True
+        self.world.published_slug = "site1"
+        self.world.save(update_fields=["is_published", "published_slug"])
+        doc = Document.objects.create(
+            world=self.world, document_type=DOC_TIMELINE, name="站点时间线", is_published=True,
+        )
+        resp = self.anonymous.get(f"/api/world/timelines/{doc.id}/classic")
+        self.assertEqual(resp.status_code, 200)
 
 
 class LegacyImportTests(TestCase):

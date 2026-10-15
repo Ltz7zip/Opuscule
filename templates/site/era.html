@@ -51,7 +51,7 @@
       <div class="grid">
         {% for doc in documents %}
           <a class="tile" href="{% url 'site:page' world.published_slug doc.slug %}">
-            {% if doc.cover %}<span class="tile-cover" style="background-image:url('{{ doc.cover }}')"></span>{% endif %}
+            {% if doc.cover_safe %}<span class="tile-cover" style="background-image:url('{{ doc.cover_safe }}')"></span>{% endif %}
             <span class="tile-kind">{{ doc.get_document_type_display }}{% if doc.entity_type %} · {{ doc.entity_type.name }}{% endif %}</span>
             <span class="tile-name">{{ doc.name }}</span>
           </a>
