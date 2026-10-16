@@ -875,10 +875,7 @@ body { background-image: none; }
   background: var(--tx-canvas);
   box-shadow: none;
 }
-.panel + .panel { border-left: 1px solid var(--tx-hairline); }
 .panel-tabs { border-bottom: 1px solid var(--tx-hairline); background: var(--tx-canvas); }
-.panel-grip::before { background: var(--tx-hairline); }
-.panel-grip:hover::before { background: var(--tx-green); }
 
 /* 侧栏：搜索 + 树 + 底部动作，行是 26px 的紧凑块 */
 .row {
@@ -1667,9 +1664,6 @@ body { background-image: none; }
 .sidebar { background: var(--tx-canvas-soft); }
 .workspace { border-left: 0; }
 .panels { border-radius: 0; }
-.panel + .panel { border-left: 1px solid var(--tx-hairline); }
-.panel-grip::before { background: var(--tx-hairline); }
-.panel-grip:hover::before { width: 1px; background: var(--tx-green); }
 
 /* 顶栏：贴边 + 一道底边（shell.css 的 padding 与负边距一起归零） */
 .topbar {

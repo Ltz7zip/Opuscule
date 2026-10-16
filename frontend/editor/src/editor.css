@@ -1,0 +1,127 @@
+/* 孤岛自定义块的样式。
+ *
+ * 这是独立打包的一份 CSS（产物 → static/editor/dist/assets/editor.css），全局生效，
+ * 所以自定义类名统一挂 `.opus-` 前缀，避免撞上工作区或 BlockNote 自己的选择器。
+ * 颜色优先复用工区定义的 CSS 变量（static/workspace.css 的 :root），取不到时回落暗色调。
+ *
+ * 例外：本文件末尾有一组"正文对齐"规则，**唯一的**直接覆盖 `.bn-*` 的地方——
+ * BlockNote 自带一套编辑器皮肤（底色、圆角、左右 54px 缩进、16px/Inter 排版），
+ * 孤岛要看起来像接入前的正文，就得把这层皮肤压掉。作用域限定在 `.opuscule-editor-island`，
+ * 且本文件在 `<head>` 末尾动态加载、同特异性时最后发言，所以无需 `!important`。
+ */
+
+/* callout：观感对齐工作区 `.block-kind-callout`（左侧强调条 + 极淡底色）。 */
+.opus-callout {
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.07));
+  border-left: 3px solid var(--accent, #e0a83c);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 10px 12px;
+  /* 空 callout 也要有落光标的高度，否则点不进去。 */
+  min-height: 1.62em;
+  line-height: 1.62;
+}
+
+/* 重块嵌入（图片 / 书签 / 嵌入卡 / 集合）：孤岛里只有一个容器，真正的 DOM 由工作区
+ * 的渲染器画进来（旧类名 block-image / block-bookmark / embed-card / collection-block
+ * 都定义在 static/terminal.css）。一期只读，所以只做"套壳"的排布，不干预内部。 */
+.opus-heavy { margin: 2px 0; }
+/* 容器自己不再重复上下留白，交给外层块。 */
+.opus-heavy .block-image,
+.opus-heavy .collection-block { margin: 0; }
+/* 只读重块里的"控件"只剩展示语义：不复用 hover 反馈，指针也别变。 */
+.opus-heavy .blk-img-cap.is-static { pointer-events: none; }
+.opus-heavy .mini-select:disabled,
+.opus-heavy .cb-tab:disabled { cursor: default; }
+.opus-heavy .cb-tab[disabled]:hover { background: transparent; color: var(--tx-mute, #8a8f98); }
+
+/* ==========================================================================
+   正文对齐：把 BlockNote 自带的编辑器皮肤换成工作区的正文排版
+   --------------------------------------------------------------------------
+   目标值全部取自接入前的 vanilla 正文：
+     · 外壳 / 行内标记  → static/workspace.css（.block-text 体系，:460 / :1015-1026）
+     · 字号 / 行高 / 代码块 → static/terminal.css（:486-503 / :1897-1906）
+   作用域 `.opuscule-editor-island`，只压孤岛这一棵子树。
+   ========================================================================== */
+
+/* 外壳：抹掉 BlockNote 自带的底色(暗色 #1f1f1f) + 8px 圆角 + 左右 54px 缩进，
+   换成 vanilla 的 15px / 1.6 / var(--tx-sans) / #d8d3cb。
+   （54px 是为侧边菜单预留的沟槽；卡片自身有 52px 内边距，菜单会落在那里，
+     与 vanilla `.block-tools { right:100% }` 的表现一致，不会溢出卡片。） */
+.opuscule-editor-island .bn-editor {
+  background-color: transparent;
+  border-radius: 0;
+  padding-inline: 0;
+  font-family: var(--tx-sans, inherit);
+  font-size: var(--tx-fs-body, 15px);
+  line-height: 1.6;
+  color: #d8d3cb;
+}
+/* BlockNote 给每一行块定了 1.5，这里压回 1.6。 */
+.opuscule-editor-island .bn-block-outer { line-height: 1.6; }
+
+/* 行内标记：镜像 workspace.css 的 .block-text 规则。 */
+.opuscule-editor-island .bn-editor strong { color: #fff; font-weight: 600; }
+.opuscule-editor-island .bn-editor em { color: #efe9df; }
+.opuscule-editor-island .bn-editor a { color: var(--accent, #e0a83c); }
+/* 只挑行内 code，避开代码块里的 <code>。 */
+.opuscule-editor-island .bn-editor .bn-inline-content code {
+  font-family: var(--tx-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* 标题：vanilla 只给 h1..h3 定字体与字重，字号走浏览器默认（相对 15px）。
+   BlockNote 的默认字号是 3em/2em/1.3em，且自带 18px 上留白，这里一并对齐。 */
+.opuscule-editor-island .bn-editor [data-content-type="heading"] { padding-top: 4px; }
+.opuscule-editor-island .bn-editor [data-content-type="heading"][data-level="1"] { --level: 2em; }
+.opuscule-editor-island .bn-editor [data-content-type="heading"][data-level="2"] { --level: 1.5em; }
+.opuscule-editor-island .bn-editor [data-content-type="heading"][data-level="3"] { --level: 1.17em; }
+.opuscule-editor-island .bn-editor .bn-block-content[data-content-type="heading"] {
+  font-family: var(--heading-font);
+  font-weight: 400;
+}
+
+/* 引用：vanilla `.block-quote`（左侧强调条 + 斜体 + 次级墨色）。 */
+.opuscule-editor-island .bn-editor [data-content-type="quote"] blockquote {
+  border-left: 2px solid var(--line-strong, rgba(255, 255, 255, 0.16));
+  padding-left: 12px;
+  font-style: italic;
+  color: var(--ink-soft, #c9c5be);
+}
+
+/* 分割线：vanilla `.block-divider`。 */
+.opuscule-editor-island .bn-editor [data-content-type="divider"] hr {
+  border: none;
+  border-top: 1px solid var(--line-strong, rgba(255, 255, 255, 0.16));
+  margin: 10px 0;
+}
+
+/* 代码块：vanilla `.block-code`（sunken 底 + 细边框 + 等宽字）。 */
+.opuscule-editor-island .bn-editor .bn-block-content[data-content-type="codeBlock"] {
+  background-color: var(--tx-canvas-sunken, rgba(255, 255, 255, 0.03));
+  color: inherit;
+  border: 1px solid var(--tx-hairline, rgba(255, 255, 255, 0.09));
+  border-radius: 6px;
+}
+.opuscule-editor-island .bn-editor .bn-block-content[data-content-type="codeBlock"] > pre {
+  padding: 12px 14px;
+  font-family: var(--tx-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* 聚焦态：正文一获得光标就浮出一个 2px 强调色方框。
+   来源是 terminal.css 的 `[tabindex]:focus-visible { box-shadow: var(--tx-focus-ring) }`——
+   `.bn-editor` 是 ProseMirror 的 contenteditable 根、带 tabindex="0"，因此恰好命中；
+   外加 responsive/apple/polish/experience 四张表里全局 `:focus-visible` 的 2px outline。
+   接入前的 vanilla 正文聚焦时这两层都没有，这里一并归零。
+   本文件在所有 vanilla 表之后加载，特异性(0,3,0) 也高于它们，故无需 !important。 */
+.opuscule-editor-island .bn-editor:focus,
+.opuscule-editor-island .bn-editor:focus-visible,
+.opuscule-editor-island .bn-editor:focus-within {
+  outline: none;
+  box-shadow: none;
+}

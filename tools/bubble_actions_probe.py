@@ -1,5 +1,18 @@
 # -*- coding: utf-8 -*-
-"""验证选区气泡的两个动作：创建卡片 / 链接卡片（以及浅色下的极简外观截图）。"""
+"""选区气泡的接班人验证：名字自动识别（以及浅色下的极简外观截图）。
+
+0.5.2 的 P3 拆链把旧的选区气泡（``.fb-actions``，两个动作「创建卡片 / 链接卡片」）
+整条下架了——正文改由 React + BlockNote 的编辑器孤岛渲染，选区上不再浮动作条。
+它的接班人**不是**气泡，而是**自动名字识别**：正文里出现已有卡片名时，装饰层会把它
+贴上 ``.mentions-inline`` 链接（点击跳转）。
+
+所以这支探针现在改测：写一段含已有卡片名的正文 → 等孤岛取名字 → 确认名字成链接、
+点得动；并如实记录选区气泡已下架。
+
+    跑法（先起好 dev server）：
+
+        .venv/bin/python tools/bubble_actions_probe.py
+"""
 
 from __future__ import annotations
 
@@ -13,6 +26,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
+import _island as isl  # noqa: E402
 
 BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/ux_shots")
@@ -38,22 +52,34 @@ def flat(nodes, out=None):
     return out
 
 
+def para(bid, text):
+    """一个段落块（BlockNote 原生 JSON 形状）。"""
+    return {"id": bid, "type": "paragraph", "props": {}, "children": [],
+            "content": [{"type": "text", "text": text, "styles": {}}]}
+
+
 def main() -> int:
     state = api("/api/world/state")
     docs = flat(state["documents"])
+    cards = [d for d in docs if d["type"] == "card"]
     problems: list[str] = []
+    removed: list[str] = []
+
+    # 找一张有名字的卡当作被识别 / 跳转的目标
+    named = [d for d in cards if (d.get("name") or "").strip()]
+    if not named:
+        print("没有可用的具名卡片，跳过")
+        return 0
+    target = named[0]
 
     # 用一张一次性的草稿卡，别去动演示世界里的内容（探针要能反复跑）
     card = api("/api/world/documents", "POST", {"type": "card", "name": "选区气泡探针草稿"})
-    api(f"/api/world/cards/{card['id']}", "PUT", {"blocks": [
-        {"id": "b1", "type": "text", "title": "第一段",
-         "text": "Harrowdeep 的城门在夜里会发光，守夜人都记下来了。"},
-        {"id": "b2", "type": "text", "title": "第二段",
-         "text": "Isarra 曾经在这里停留过三天，然后往北去了。"},
-        {"id": "b3", "type": "text", "title": "第三段",
-         "text": "矿带的铁脉一直延伸到 Redwake Harbor。"},
+    # 正文权威存储是 blocks_doc（旧的 {"blocks": ...} 已无效，且会把 blocks_doc 清空）
+    api(f"/api/world/cards/{card['id']}", "PUT", {"blocks_doc": [
+        para("b1", f"{target['name']} 的城门在夜里会发光，守夜人都记下来了。"),
+        para("b2", "Isarra 曾经在这里停留过三天，然后往北去了。"),
+        para("b3", "矿带的铁脉一直延伸到 Redwake Harbor。"),
     ]})
-    before = len([d for d in flat(api("/api/world/state")["documents"]) if d["type"] == "card"])
 
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
@@ -65,67 +91,52 @@ def main() -> int:
         page.on("dialog", lambda dialog: dialog.accept())
 
         page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
-        page.wait_for_timeout(1200)
+        page.wait_for_timeout(2400)     # 等孤岛挂载 + autolink 往返
 
-        def select_block(index=0, chars=18):
-            page.evaluate("""([i, n]) => {
-              const node = document.querySelectorAll('.block-text')[i];
-              const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-              const textNode = walker.nextNode();
-              const range = document.createRange();
-              range.setStart(textNode, 0);
-              range.setEnd(textNode, Math.min(n, textNode.length));
-              const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-            }""", [index, chars])
-            page.wait_for_timeout(600)
+        # 1) 旧的选区气泡（.fb-actions）应已下架
+        if page.query_selector(".fb-actions"):
+            problems.append("旧的选区气泡（.fb-actions）不该还在")
+        removed.append("选区气泡「创建卡片 / 链接卡片」（.fb-actions）："
+                       "该功能已随 P3 拆链下架")
 
-        # 1) 创建卡片
-        select_block(0, 16)
-        text = page.evaluate("() => window.getSelection().toString()")
-        page.locator(".fb-actions button").first.click()
-        page.wait_for_timeout(1400)
-        after_state = api("/api/world/state")
-        cards_now = len([d for d in flat(after_state["documents"]) if d["type"] == "card"])
-        mentions = page.evaluate("() => document.querySelectorAll('.mentions-inline[data-target]').length")
-        print(f"选中「{text}」-> 创建卡片：卡片数 {before} -> {cards_now}，正文里的提及 {mentions} 个")
-        if cards_now != before + 1:
-            problems.append("创建卡片没有真的建卡")
-        if mentions < 1:
-            problems.append("创建卡片后没有把选区变成提及")
-        page.screenshot(path=str(SHOTS / "bubble_create.png"))
+        # 2) 接班人：名字自动识别
+        print("孤岛挂载:", isl.has_editor(page), "· 块数:", isl.block_count(page))
+        found = isl.mentions(page)
+        print(f"正文里的卡片名「{target['name']}」→ 识别出 {len(found)} 处：", found)
+        if not any(m.get("target") for m in found):
+            problems.append(f"正文里的卡片名「{target['name']}」没有被识别成链接")
+        page.screenshot(path=str(SHOTS / "name_link.png"))
 
-        # 2) 链接卡片（选一段别的文字，链到已有卡片）
-        #    上一步"创建卡片"会把新卡打开，先回到草稿卡
-        page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
-        page.wait_for_timeout(1400)
-        select_block(1, 12)
-        page.locator(".fb-actions button").nth(1).click()
-        page.wait_for_timeout(600)
-        print("选择器出现:", page.evaluate("() => !!document.querySelector('.picker')"))
-        page.fill(".picker-head input", "Harrowdeep")
-        page.wait_for_timeout(700)
-        page.screenshot(path=str(SHOTS / "picker.png"))
-        page.locator(".picker-row").first.click()
-        page.wait_for_timeout(1400)
-        mentions2 = page.evaluate("() => document.querySelectorAll('.mentions-inline[data-target]').length")
-        print(f"链接卡片后，正文里的提及 {mentions2} 个")
-        if mentions2 <= mentions:
-            problems.append("链接卡片没有插入提及")
-        page.screenshot(path=str(SHOTS / "bubble_link.png"))
+        # 3) 点击识别出的名字应跳到目标卡片（原「链接卡片」的接班人）
+        if found:
+            page.locator(isl.MENTION).first.click()
+            page.wait_for_timeout(1200)
+            hash_now = page.evaluate("() => location.hash")
+            print("点名字后的 hash：", hash_now)
+            if str(target["id"]) not in hash_now:
+                problems.append(f"点名字没有跳到目标卡片（hash={hash_now!r}）")
 
-        # 3) 浅色下的极简外观
+        # 4) 浅色下的极简外观
         api("/api/world/world", "PUT", {"theme_config": {"mode": "light"}})
         page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
-        page.wait_for_timeout(1200)
+        page.wait_for_timeout(2200)
         page.screenshot(path=str(SHOTS / "minimal_light.png"))
         api("/api/world/world", "PUT", {"theme_config": {"mode": "dark"}})
 
         browser.close()
 
-    print("\n报错：", errors or "（无）")
+    print("\n报错：", errors[:2] or "（无）")
     api(f"/api/world/documents/{card['id']}?hard=1", "DELETE")
 
-    print("问题：", problems or "（无）")
+    print("已下架：")
+    for item in removed:
+        print("  ·", item)
+    print("问题：")
+    if problems:
+        for item in problems:
+            print("  ✗", item)
+        return 1
+    print("  （无）")
     return 0
 
 

@@ -107,8 +107,14 @@ def ensure_login_page(page, *, username: str = DEV_USER, password: str = DEV_PAS
     from django.contrib.auth import get_user_model
     from django.contrib.sessions.backends.db import SessionStore
 
-    ensure_login(username=username, password=password)      # 保证账号存在
+    # 账号只要在库里，就直接造会话——**不要**再打一次登录接口。这里用不到
+    # HTTP 登录发的那个 cookie（见上文），而 ``ensure_login_page`` 在探针里有
+    # 几十处调用，每处都登录会把 ``login-ip`` 限流（30 次 / 300s）烧光，一支
+    # 脚本就能打爆它。只有账号还不存在（首次注册）时才需要 HTTP 那条路建号。
     user = get_user_model().objects.filter(username=username).first()
+    if user is None:
+        ensure_login(username=username, password=password)
+        user = get_user_model().objects.filter(username=username).first()
     if user is None:
         raise RuntimeError(f"账号 {username!r} 不存在")
 

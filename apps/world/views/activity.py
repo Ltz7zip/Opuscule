@@ -17,7 +17,7 @@ from ..models import (
     MemberEvent,
     Membership,
 )
-from ..normalize import as_alias_list, as_int, as_text, blocks_to_text, normalize_blocks
+from ..normalize import as_alias_list, as_int, as_text, blocks_to_text, normalize_blocks, normalize_doc
 from apps.documents.models import Card, DocumentVersion, Presence
 from apps.publishing.models import PublishLog
 
@@ -210,6 +210,9 @@ def document_version_detail(request, doc_id, index):
         card.aliases = as_alias_list(card_payload.get("aliases"))
         card.blocks = normalize_blocks(card_payload.get("blocks") or [])
         card.body = blocks_to_text(card.blocks)
+        # 快照里存的是派生的 blocks，通常没有编辑器文档。不一起回滚的话，孤岛会继续
+        # 显示"回滚之前"的正文（editor_doc() 优先用 blocks_doc）。
+        card.blocks_doc = normalize_doc(card_payload.get("blocks_doc")) if card_payload.get("blocks_doc") else []
         card.values = card_payload.get("values") or {}
         card.era_mode = card_payload.get("era_mode") or card.era_mode
         card.era_ids = card_payload.get("era_ids") or card.era_ids

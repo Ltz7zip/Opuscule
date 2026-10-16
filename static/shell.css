@@ -190,22 +190,6 @@ body {
 }
 .panels { border-radius: inherit; }
 .panel { border-right: 0; border-left: 0; }
-.panel + .panel { border-left: 1px solid var(--shell-line); }
-
-/* 分割条：视觉上是一条 1px 细线，命中区仍然是 7px（拖得动） */
-.panel-grip {
-  position: relative;
-  flex: 0 0 7px;
-  background: transparent;
-}
-.panel-grip::before {
-  content: '';
-  position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
-  transform: translateX(-50%);
-  background: var(--mn-border);
-  transition: background-color var(--mn-dur-fast, 140ms) ease, width var(--mn-dur-fast, 140ms) ease;
-}
-.panel-grip:hover::before { width: 3px; background: var(--mn-accent); }
 
 /* ------------------------------------------------------------ 面板与标签 */
 /* 标签条不再横贯整屏：它是卡片自己的页眉，标签本身是圆角小片 */

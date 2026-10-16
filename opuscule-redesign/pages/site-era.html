@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>站点时代页</title>
+    <style id="theme-vars">
+/* Source: structured-spec — monochrome minimalist palette (black/white/gray) */
+/* ============================================================
+   PRIMITIVES (theme-independent)
+   Six families: brand / background / text / icon are 10-step
+   scales; state-success / state-error are functional sets.
+   The system is monochrome — `brand` is a refined cool-neutral
+   scale used for primary surfaces/actions; the other neutrals
+   share the pure-gray ramp. Never consume primitives directly
+   in product code — use the semantic role tokens or the
+   --color-* alias layer below.
+   ============================================================ */
+:root {
+  
+  /* solo-design consumption aliases: explicit prefix for fill-html-head.mjs */
+  --minimal-background: var(--background, #ffffff);
+  --minimal-foreground: var(--foreground, #0f172a);
+  --minimal-card: var(--card, var(--background));
+  --minimal-card-foreground: var(--card-foreground, var(--foreground));
+  --minimal-popover: var(--popover, var(--card));
+  --minimal-popover-foreground: var(--popover-foreground, var(--card-foreground, var(--foreground)));
+  --minimal-primary: var(--primary, #111827);
+  --minimal-primary-foreground: var(--primary-foreground, #ffffff);
+  --minimal-secondary: var(--secondary, var(--muted, var(--card)));
+  --minimal-secondary-foreground: var(--secondary-foreground, var(--foreground));
+  --minimal-muted: var(--muted, var(--card));
+  --minimal-muted-foreground: var(--muted-foreground, var(--foreground));
+  --minimal-accent: var(--accent, var(--secondary, var(--muted, var(--card))));
+  --minimal-accent-foreground: var(--accent-foreground, var(--foreground));
+  --minimal-destructive: var(--destructive, #ef4444);
+  --minimal-destructive-foreground: var(--destructive-foreground, #ffffff);
+  --minimal-border: var(--border, currentColor);
+  --minimal-input: var(--input, var(--border));
+  --minimal-ring: var(--ring, var(--primary));
+  --minimal-chart-1: var(--chart-1, var(--primary));
+  --minimal-chart-2: var(--chart-2, var(--secondary, var(--primary)));
+  --minimal-chart-3: var(--chart-3, var(--accent, var(--primary)));
+  --minimal-chart-4: var(--chart-4, var(--muted-foreground, var(--foreground)));
+  --minimal-chart-5: var(--chart-5, var(--foreground));
+  --minimal-sidebar: var(--sidebar, var(--background));
+  --minimal-sidebar-foreground: var(--sidebar-foreground, var(--foreground));
+  --minimal-sidebar-primary: var(--sidebar-primary, var(--primary));
+  --minimal-sidebar-primary-foreground: var(--sidebar-primary-foreground, var(--primary-foreground));
+  --minimal-sidebar-accent: var(--sidebar-accent, var(--accent, var(--muted, var(--card))));
+  --minimal-sidebar-accent-foreground: var(--sidebar-accent-foreground, var(--accent-foreground, var(--foreground)));
+
+/* brand — refined cool-neutral identity (primary, ring, charts) */
+  --brand-50: #fafafa;
+  --brand-100: #f4f4f5;
+  --brand-200: #e4e4e7;
+  --brand-300: #d4d4d8;
+  --brand-400: #a1a1aa;
+  --brand-500: #71717a;
+  --brand-600: #52525b;
+  --brand-700: #3f3f46;
+  --brand-800: #27272a;
+  --brand-900: #18181b; /* @primary */
+
+  /* background — pure-neutral surface ramp (page, card, muted, dark surfaces) */
+  --background-50: #ffffff; /* @primary */
+  --background-100: #fafafa;
+  --background-200: #f5f5f5;
+  --background-300: #e5e5e5;
+  --background-400: #d4d4d4;
+  --background-500: #a3a3a3;
+  --background-600: #404040;
+  --background-700: #262626;
+  --background-800: #171717;
+  --background-900: #0a0a0a;
+
+  /* text — pure-neutral ink ramp (foreground, secondary, muted, inverse) */
+  --text-50: #fafafa;
+  --text-100: #ededed;
+  --text-200: #d4d4d4;
+  --text-300: #a1a1a1;
+  --text-400: #858585;
+  --text-500: #6e6e6e;
+  --text-600: #525252;
+  --text-700: #404040;
+  --text-800: #171717;
+  --text-900: #0a0a0a;
+
+  /* icon — pure-neutral icon ramp (default, muted, disabled, inverse) */
+  --icon-50: #fafafa;
+  --icon-100: #e5e5e5;
+  --icon-200: #d4d4d4;
+  --icon-300: #b0b0b0;
+  --icon-400: #8f8f8f;
+  --icon-500: #6e6e6e;
+  --icon-600: #525252;
+  --icon-700: #404040;
+  --icon-800: #262626; /* @primary */
+  --icon-900: #0a0a0a;
+
+  /* ============================================================
+     SEMANTIC ROLE TOKENS — light theme
+     ============================================================ */
+
+  /* surfaces */
+  --background: var(--background-50);
+  --card: var(--background-50);
+  --popover: var(--background-50);
+  --muted: var(--background-100);
+
+  /* foregrounds */
+  --foreground: var(--brand-900);
+  --card-foreground: var(--brand-900);
+  --popover-foreground: var(--brand-900);
+  --primary-foreground: var(--brand-50);
+  --secondary-foreground: var(--brand-900);
+  --muted-foreground: var(--brand-500);
+  --accent-foreground: var(--brand-900);
+  --destructive-foreground: var(--background-50);
+  --sidebar-foreground: var(--brand-900);
+  --sidebar-primary-foreground: var(--brand-50);
+  --sidebar-accent-foreground: var(--brand-900);
+
+  /* roles */
+  --primary: var(--brand-900);
+  --secondary: var(--brand-100);
+  --accent: var(--brand-100);
+  --input: var(--brand-200);
+  --ring: var(--brand-900);
+
+  /* border */
+  --border: var(--brand-200);
+  --border-strong: var(--brand-300);
+
+  /* state-success */
+  --success: #16a34a;
+  --success-foreground: var(--background-50);
+  --success-subtle: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #15803d;
+
+  /* state-error (exposed as destructive for component compatibility) */
+  --destructive: #dc2626;
+  --destructive-subtle: #fef2f2;
+  --destructive-border: #fecaca;
+  --destructive-text: #b91c1c;
+
+  /* brand surfaces (tints for badges, selected/active backgrounds) */
+  --brand-subtle: var(--brand-100);
+  --brand-border: var(--brand-300);
+
+  /* chart — monochrome ramp from light to near-black for quiet fancy data */
+  --chart-1: var(--brand-200);
+  --chart-2: var(--brand-400);
+  --chart-3: var(--brand-600);
+  --chart-4: var(--brand-800);
+  --chart-5: var(--brand-900);
+
+  /* sidebar — first-class tonal sub-system */
+  --sidebar: var(--brand-50);
+  --sidebar-primary: var(--brand-900);
+  --sidebar-accent: var(--brand-100);
+  --sidebar-border: var(--brand-200);
+  --sidebar-ring: var(--brand-400);
+
+  /* typography */
+  --font-sans: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-serif: DM Serif Display, ui-serif, serif;
+  --font-mono: Geist Mono, ui-monospace, monospace;
+  --tracking-normal: 0em;
+  --tracking-tight: -0.012em;
+
+  /* radius — modern minimal (12px base) */
+  --radius: 0.75rem;
+  --radius-sm: 0.375rem;
+  --radius-lg: 1rem;
+
+  /* shadow — subtle, layered for fancy depth */
+  --shadow-2xs: 0 1px 0 0 rgba(0, 0, 0, 0.04);
+  --shadow-xs: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 1px 1px 0 rgba(0, 0, 0, 0.03);
+  --shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 20px -6px rgba(0, 0, 0, 0.08), 0 4px 8px -2px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 24px 40px -10px rgba(0, 0, 0, 0.10), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+  --shadow-2xl: 0 32px 56px -14px rgba(0, 0, 0, 0.14);
+
+  /* layout */
+  --spacing: 0.25rem;
+
+  /* ============================================================
+     ALIAS LAYER — preferred names for component authoring.
+     Resolves lazily, so it inherits the .dark overrides below.
+     ============================================================ */
+  --color-surface: var(--background);
+  --color-surface-muted: var(--muted);
+  --color-text: var(--foreground); /* @primary */
+  --color-text-muted: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--primary);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-border: var(--brand-border);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-success-50: var(--success-subtle);
+  --color-success-200: var(--success-border);
+  --color-success-600: var(--success);
+  --color-success-700: var(--success-text);
+  --color-danger-50: var(--destructive-subtle);
+  --color-danger-200: var(--destructive-border);
+  --color-danger-600: var(--destructive);
+  --color-danger-700: var(--destructive-text);
+  --space-4: var(--spacing);
+  --radius-md: var(--radius);
+}
+
+/* ============================================================
+   SEMANTIC ROLE TOKENS — dark theme overrides only.
+   Primitives, charts, alias layer, type, radius, shadow and
+   spacing are inherited from :root unchanged.
+   ============================================================ */
+.dark {
+  /* surfaces */
+  --background: var(--brand-900);
+  --card: var(--brand-800);
+  --popover: var(--brand-800);
+  --muted: var(--brand-800);
+
+  /* foregrounds */
+  --foreground: var(--brand-50);
+  --card-foreground: var(--brand-50);
+  --popover-foreground: var(--brand-50);
+  --primary-foreground: var(--brand-900);
+  --secondary-foreground: var(--brand-50);
+  --muted-foreground: var(--brand-400);
+  --accent-foreground: var(--brand-50);
+  --destructive-foreground: var(--brand-50);
+  --sidebar-foreground: var(--brand-50);
+  --sidebar-primary-foreground: var(--brand-900);
+  --sidebar-accent-foreground: var(--brand-50);
+
+  /* roles */
+  --primary: var(--brand-50);
+  --secondary: var(--brand-800);
+  --accent: var(--brand-700);
+  --input: var(--brand-700);
+  --ring: var(--brand-300);
+
+  /* border */
+  --border: var(--brand-700);
+  --border-strong: var(--brand-600);
+
+  /* state-success */
+  --success: #22c55e;
+  --success-foreground: #052e16;
+  --success-subtle: #0f2417;
+  --success-border: #166534;
+  --success-text: #4ade80;
+
+  /* state-error */
+  --destructive: #ef4444;
+  --destructive-subtle: #2a1416;
+  --destructive-border: #7f1d1d;
+  --destructive-text: #fca5a5;
+
+  /* brand surfaces */
+  --brand-subtle: var(--brand-800);
+  --brand-border: var(--brand-700);
+
+  /* chart — flipped monochrome ramp for dark surfaces */
+  --chart-1: var(--brand-700);
+  --chart-2: var(--brand-500);
+  --chart-3: var(--brand-300);
+  --chart-4: var(--brand-200);
+  --chart-5: var(--brand-50);
+
+  /* sidebar */
+  --sidebar: var(--brand-800);
+  --sidebar-primary: var(--brand-50);
+  --sidebar-accent: var(--brand-700);
+  --sidebar-border: var(--brand-700);
+  --sidebar-ring: var(--brand-400);
+}
+
+    </style>
+    <style id="component-vars">
+/* ═══════════════════════════════════════════════════════════════
+   components.css — Design System Component Definitions
+   Auto-extracted from preview/component-*.html
+   DO NOT EDIT MANUALLY — regenerate via extract-components-css.mjs
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Button ────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="row"><span class="label">Filled md</span><button class="btn primary">Overview</button><button class="btn primary" disabled>Revenue</button><button class="btn secondary">Active Users</button><button class="btn secondary" disabled>Team</button></div>
+   <hr class="divider">
+   <div class="row"><span class="label">Quiet mix</span><button class="btn ghost">Settings</button><button class="btn ghost" disabled>Overview</button><button class="btn danger">Revenue</button><button class="btn danger" disabled>Team</button></div>
+*/
+body{margin:0;padding:12px;background:var(--color-surface);color:var(--color-text);font:500 14px/1.4 var(--font-sans);} .row{display:flex;align-items:center;gap:calc(var(--space-4)*2);flex-wrap:wrap;} .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-muted);min-width:88px;} .divider{margin:12px 0;border:0;border-top:1px solid var(--color-border);} .btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-4);min-width:0;border:1px solid transparent;border-radius:var(--radius-md);padding:var(--space-4) calc(var(--space-4)*3);font:600 14px/1 var(--font-sans);cursor:pointer;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease;} .btn:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px;} .btn:disabled{cursor:not-allowed;opacity:.5;box-shadow:none;} .primary{background:var(--color-primary);color:var(--color-primary-foreground);box-shadow:var(--shadow-sm);} .primary:hover:not(:disabled),.primary:active:not(:disabled){filter:brightness(.96);} .secondary{background:var(--color-surface);color:var(--color-text);border-color:var(--color-border);} .secondary:hover:not(:disabled),.secondary:active:not(:disabled){background:var(--color-surface-muted);} .ghost{background:transparent;color:var(--color-text);padding:calc(var(--space-4)*.75) calc(var(--space-4)*2.5);} .ghost:hover:not(:disabled),.ghost:active:not(:disabled){background:var(--color-surface-muted);} .danger{background:var(--color-danger-600);color:var(--color-primary-foreground);padding:calc(var(--space-4)*1.25) calc(var(--space-4)*3.5);} .danger:hover:not(:disabled),.danger:active:not(:disabled){filter:brightness(.94);}
+
+/* ── Card ──────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="row"><span class="label">METRIC</span><article class="card metric"><span class="eyebrow">Overview</span><strong class="value">98.2%</strong><span class="meta">System health across all dashboards</span></article><article class="card metric"><span class="eyebrow">Revenue</span><strong class="value">$128.4K</strong><span class="meta">Up 12.8% from last month</span></article><article class="card metric" aria-disabled="true"><span class="eyebrow">Active Users</span><strong class="value">24,819</strong><span class="meta">Live sync paused for maintenance</span></article></div>
+   <hr class="divider">
+   <div class="row"><span class="label">DETAIL</span><article class="card detail"><span class="title">Team</span><span class="meta">8 product squads, 3 regions, weekly delivery on track.</span><span class="pill">Overview</span></article><article class="card detail" aria-disabled="true"><span class="title">Settings</span><span class="meta">Permission updates are locked until admin review is complete.</span><span class="pill">Review</span></article></div>
+*/
+body{margin:0;padding:12px;background:var(--color-surface);font:14px/1.4 var(--font-sans);color:var(--color-text)}.row{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}.label{display:flex;align-items:center;padding:0 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--color-text-muted)}.card{display:flex;flex-direction:column;gap:6px;min-width:154px;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)}.metric{flex:1 1 154px}.detail{flex:1 1 220px;background:var(--color-surface-muted)}.eyebrow,.meta{font-size:12px;color:var(--color-text-muted)}.title{font-size:14px;font-weight:600}.value{font-size:26px;font-weight:700;letter-spacing:-.03em}.divider{margin:8px 0;border:0;border-top:1px solid var(--color-border)}[aria-disabled="true"]{opacity:.56;background:var(--color-surface-muted);color:var(--color-text-muted)}[aria-disabled="true"] .value,[aria-disabled="true"] .title{color:var(--color-text-muted)}.pill{display:inline-flex;align-self:flex-start;padding:3px 8px;border-radius:999px;background:var(--color-primary);color:var(--color-primary-foreground);font-size:11px;font-weight:600}
+
+/* ── Chart ─────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="r"><span class="l">Bar default</span><article class="p"><div class="h"><span class="t">Revenue</span><span>Overview</span></div><div class="b"><i></i><i></i><i></i><i></i></div><div class="f"><span>Active Users</span><span>+18%</span></div></article><article class="p" aria-disabled="true"><div class="h"><span class="t">Revenue</span><span>Paused</span></div><div class="b"><i></i><i></i><i></i><i></i></div><div class="f"><span>Settings</span><span>Offline</span></div></article></div>
+   <hr>
+   <div class="r"><span class="l">Line highlighted</span><article class="p"><div class="h"><span class="t">Active Users</span><span>Team</span></div><div class="n"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline class="up" points="8,68 42,46 60,28"></polyline><polyline class="down" points="52,36 74,52 92,68"></polyline></svg><i></i><i></i><i></i></div><div class="f"><span>Overview</span><span>Thu peak</span></div></article><article class="p"><div class="h"><span class="t">Team</span><span>Settings</span></div><div class="x"><div class="d"></div><div class="s"><span><i></i>Overview 18%</span><span><i></i>Revenue 32%</span><span><i></i>Settings 50%</span></div></div></article></div>
+*/
+body{margin:0;padding:12px;background:var(--color-surface);color:var(--color-text);font:13px/1.4 var(--font-sans)}.r{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}.l{width:100%;font:600 10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-muted)}hr{margin:8px 0;border:0;border-top:1px solid var(--color-border)}.p{flex:1 1 260px;min-width:min(100%,260px);overflow:hidden;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)}[aria-disabled=true]{opacity:.45;background:var(--color-surface-muted)}.h,.f,.w{display:flex;justify-content:space-between;gap:var(--space-4);font-size:11px;color:var(--color-text-muted)}.t{font-size:13px;font-weight:600;color:var(--color-text)}.b{display:flex;align-items:flex-end;gap:var(--space-4);height:112px;margin-top:12px;padding-top:8px;border-top:1px solid var(--color-border)}.b i{flex:1;border-radius:var(--radius-md) var(--radius-md) 0 0}.b i:nth-child(1){height:44%;background:var(--chart-2)}.b i:nth-child(2){height:72%;background:var(--chart-3)}.b i:nth-child(3){height:58%;background:var(--chart-4)}.b i:nth-child(4){height:86%;background:var(--chart-5)}.n{position:relative;height:112px;margin-top:12px;overflow:hidden;border-top:1px solid var(--color-border)}.n svg{position:absolute;inset:10px 0 8px;width:100%;height:calc(100% - 18px);display:block}.n polyline{fill:none;stroke:var(--chart-3);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.n .down{stroke:var(--chart-5)}.n i{position:absolute;width:8px;height:8px;border:2px solid var(--color-surface);border-radius:50%;background:var(--chart-2)}.n i:nth-of-type(1){left:12%;bottom:28px}.n i:nth-of-type(2){left:42%;bottom:58px;background:var(--chart-3)}.n i:nth-of-type(3){left:76%;bottom:82px;background:var(--chart-5)}.x{display:flex;align-items:center;gap:12px;margin-top:12px}.d{width:88px;height:88px;border-radius:50%;background:conic-gradient(var(--chart-5) 0 32%,var(--chart-3) 32% 64%,var(--chart-1) 64% 100%);position:relative;flex:none}.d:after{content:"";position:absolute;inset:18px;border-radius:50%;background:var(--color-surface)}.s{display:grid;gap:6px}.s span{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-text-muted)}.s i{width:10px;height:10px;border-radius:50%;background:var(--chart-1)}.s span:nth-child(2) i{background:var(--chart-3)}.s span:nth-child(3) i{background:var(--chart-5)}
+
+/* ── Navigation ────────────────────────────────────────────── */
+/* @anatomy
+   <div class="row"><span class="label">Topbar</span><nav class="topbar" aria-label="Primary"><a class="active" href="#">Overview</a><a href="#">Revenue</a><a href="#">Active Users</a><a href="#">Team</a><a href="#">Settings</a></nav><nav class="topbar is-disabled" aria-label="Primary disabled"><a class="active" href="#" aria-disabled="true">Overview</a><a href="#" aria-disabled="true">Revenue</a><a href="#" aria-disabled="true">Active Users</a><a href="#" aria-disabled="true">Team</a><a href="#" aria-disabled="true">Settings</a></nav></div>
+   <hr class="divider">
+   <div class="row"><span class="label">Tabs</span><nav class="tabs" aria-label="Section tabs"><a href="#">Overview</a><a class="active" href="#">Revenue</a><a href="#">Active Users</a></nav><nav class="tabs is-disabled" aria-label="Section tabs disabled"><a href="#" aria-disabled="true">Overview</a><a class="active" href="#" aria-disabled="true">Revenue</a><a href="#" aria-disabled="true">Active Users</a></nav></div>
+   <div class="row"><span class="label">Breadcrumb</span><nav class="crumbs" aria-label="Breadcrumb"><a href="#">Overview</a><span class="sep">/</span><a href="#">Revenue</a><span class="sep">/</span><a class="current" href="#">Active Users</a></nav></div>
+*/
+body{margin:0;padding:12px;background:var(--color-surface);color:var(--color-text);font-family:var(--font-sans)}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.label{width:76px;font-size:10px;line-height:1;letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-muted)}.topbar,.tabs,.crumbs{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--background)}.topbar a,.tabs a,.crumbs a{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 12px;border-radius:var(--radius-md);color:var(--color-text-muted);text-decoration:none;white-space:nowrap}.topbar a:hover,.tabs a:hover,.crumbs a:hover{background:var(--muted);color:var(--color-text)}.topbar .active,.tabs .active{background:var(--color-primary);color:var(--color-primary-foreground)}.topbar.is-disabled a,.tabs.is-disabled a{opacity:.45;pointer-events:none}.tabs{padding:2px;background:var(--muted)}.divider{margin:10px 0;border:0;border-top:1px solid var(--color-border)}.crumbs{gap:0;padding:0;border:none;background:transparent}.crumbs a{padding:0 8px 0 0;min-height:auto}.crumbs .current{color:var(--color-text)}.sep{padding:0 8px 0 0;color:var(--color-text-muted)}
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+/* @anatomy
+   <div class="row"><span class="label">Default</span><aside class="sidebar"><div class="brand">Minimal Dashboard</div><div class="section">Workspace</div><nav class="nav"><button class="item active"><span class="dot"></span><span>Overview</span></button><button class="item"><span class="dot"></span><span>Revenue</span></button><button class="item"><span class="dot"></span><span>Users</span></button><button class="item"><span class="dot"></span><span>Team</span></button></nav><div class="foot"><button class="item"><span class="dot"></span><span>Settings</span></button></div></aside><aside class="sidebar" aria-disabled="true"><div class="brand">Minimal Dashboard</div><div class="section">Workspace</div><nav class="nav"><button class="item active" aria-disabled="true"><span class="dot"></span><span>Overview</span></button><button class="item" aria-disabled="true"><span class="dot"></span><span>Revenue</span></button><button class="item" aria-disabled="true"><span class="dot"></span><span>Users</span></button></nav><div class="foot"><button class="item" aria-disabled="true"><span class="dot"></span><span>Settings</span></button></div></aside></div><hr class="divider"><div class="row"><span class="label">Compact</span><aside class="sidebar compact"><div class="brand">MD</div><nav class="nav"><button class="item active" aria-label="Overview"><span class="dot"></span></button><button class="item" aria-label="Revenue"><span class="dot"></span></button><button class="item" aria-label="Active Users"><span class="dot"></span></button><button class="item" aria-label="Team"><span class="dot"></span></button></nav><div class="foot"><button class="item" aria-label="Settings"><span class="dot"></span></button></div></aside><aside class="sidebar compact" aria-disabled="true"><div class="brand">MD</div><nav class="nav"><button class="item active" aria-disabled="true" aria-label="Overview"><span class="dot"></span></button><button class="item" aria-disabled="true" aria-label="Revenue"><span class="dot"></span></button><button class="item" aria-disabled="true" aria-label="Team"><span class="dot"></span></button></nav><div class="foot"><button class="item" aria-disabled="true" aria-label="Settings"><span class="dot"></span></button></div></aside></div>
+*/
+body{margin:0;padding:12px;background:var(--color-surface);color:var(--color-text);font:500 14px/1.4 var(--font-sans)}.row{display:flex;align-items:flex-start;gap:var(--space-4);flex-wrap:wrap;margin-bottom:8px}.label{width:72px;padding-top:8px;color:var(--color-text-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.sidebar{width:224px;min-height:248px;display:flex;flex-direction:column;gap:12px;padding:14px;background:var(--sidebar);color:var(--sidebar-foreground);border:1px solid var(--sidebar-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm)}.compact{width:86px;padding-inline:10px}.brand{font-weight:700;color:var(--sidebar-primary)}.section{color:var(--color-text-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.nav,.foot{display:flex;flex-direction:column;gap:6px}.item{display:flex;align-items:center;gap:10px;min-height:34px;padding:0 10px;border:0;border-radius:var(--radius-md);background:transparent;color:inherit;font:inherit;text-align:left}.compact .item{justify-content:center;padding:0}.dot{width:8px;height:8px;border-radius:999px;background:currentColor;opacity:.72}.active{background:var(--sidebar-primary);color:var(--sidebar-primary-foreground);box-shadow:var(--shadow-xs)}.item:hover{background:var(--sidebar-accent);color:var(--sidebar-accent-foreground)}.item[aria-disabled=true],.sidebar[aria-disabled=true] .item{opacity:.46;cursor:not-allowed}.foot{margin-top:auto;padding-top:8px;border-top:1px solid var(--sidebar-border)}.divider{margin:10px 0;border:0;border-top:1px solid var(--color-border)}
+
+/* ── Table ─────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="row">
+   <span class="label">Comfortable</span>
+   <div class="table-card"><table class="table" aria-label="Overview revenue table"><thead><tr><th>View</th><th>Owner</th><th>Status</th></tr></thead><tbody><tr><td>Overview</td><td>Team</td><td><span class="pill">Live</span></td></tr><tr><td>Revenue</td><td>Settings</td><td>Updated</td></tr><tr><td>Active Users</td><td>Team</td><td>Stable</td></tr></tbody></table></div>
+   <div class="table-card is-disabled"><table class="table" aria-label="Disabled overview revenue table"><thead><tr><th>View</th><th>Owner</th><th>Status</th></tr></thead><tbody><tr><td>Overview</td><td>Team</td><td><span class="pill">Live</span></td></tr><tr><td>Revenue</td><td>Settings</td><td>Updated</td></tr><tr><td>Active Users</td><td>Team</td><td>Stable</td></tr></tbody></table></div>
+   </div>
+   <hr class="divider">
+   <div class="row">
+   <span class="label">Compact</span>
+   <div class="table-card selected"><table class="table compact" aria-label="Compact selected table"><thead><tr><th>View</th><th>Owner</th><th>Status</th></tr></thead><tbody><tr><td>Revenue</td><td>Settings</td><td>Synced</td></tr><tr><td>Active Users</td><td>Team</td><td><span class="pill">Selected</span></td></tr><tr><td>Team</td><td>Overview</td><td>Ready</td></tr></tbody></table></div>
+   <div class="table-card empty">Settings has no rows to review.</div>
+   </div>
+*/
+body{margin:0;padding:12px;background:var(--color-surface);color:var(--color-text);font:13px/1.4 var(--font-sans)}.row{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}.label{width:100%;font:600 10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-muted)}.divider{margin:8px 0;border:0;border-top:1px solid var(--color-border)}.table-card{min-width:220px;flex:1;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden}.table-card.is-disabled{opacity:.45}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px;border-bottom:1px solid var(--color-border);text-align:left}.table th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-muted);background:var(--color-surface-muted)}.table td{color:var(--color-text)}.compact th,.compact td{padding:8px 12px}.selected tbody tr:nth-child(2){background:var(--color-surface-muted)}.pill{display:inline-flex;padding:4px 8px;border-radius:var(--radius-md);background:var(--color-primary);color:var(--color-primary-foreground);font-size:11px;line-height:1}.empty{display:grid;place-items:center;min-height:132px;padding:12px;color:var(--color-text-muted);background:var(--color-surface-muted)}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --radius-sm: var(--radius-sm);
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
+  }
+  @layer base {
+    body { background: var(--background); color: var(--foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--background); }
+      .text-background { color: var(--background); }
+      .border-background { border-color: var(--background); }
+      .ring-background { --tw-ring-color: var(--background); }
+      .bg-foreground { background-color: var(--foreground); }
+      .text-foreground { color: var(--foreground); }
+      .border-foreground { border-color: var(--foreground); }
+      .ring-foreground { --tw-ring-color: var(--foreground); }
+      .bg-card { background-color: var(--card); }
+      .text-card { color: var(--card); }
+      .border-card { border-color: var(--card); }
+      .ring-card { --tw-ring-color: var(--card); }
+      .bg-card-foreground { background-color: var(--card-foreground); }
+      .text-card-foreground { color: var(--card-foreground); }
+      .border-card-foreground { border-color: var(--card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--card-foreground); }
+      .bg-popover { background-color: var(--popover); }
+      .text-popover { color: var(--popover); }
+      .border-popover { border-color: var(--popover); }
+      .ring-popover { --tw-ring-color: var(--popover); }
+      .bg-popover-foreground { background-color: var(--popover-foreground); }
+      .text-popover-foreground { color: var(--popover-foreground); }
+      .border-popover-foreground { border-color: var(--popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--popover-foreground); }
+      .bg-primary { background-color: var(--primary); }
+      .text-primary { color: var(--primary); }
+      .border-primary { border-color: var(--primary); }
+      .ring-primary { --tw-ring-color: var(--primary); }
+      .bg-primary-foreground { background-color: var(--primary-foreground); }
+      .text-primary-foreground { color: var(--primary-foreground); }
+      .border-primary-foreground { border-color: var(--primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--primary-foreground); }
+      .bg-secondary { background-color: var(--secondary); }
+      .text-secondary { color: var(--secondary); }
+      .border-secondary { border-color: var(--secondary); }
+      .ring-secondary { --tw-ring-color: var(--secondary); }
+      .bg-secondary-foreground { background-color: var(--secondary-foreground); }
+      .text-secondary-foreground { color: var(--secondary-foreground); }
+      .border-secondary-foreground { border-color: var(--secondary-foreground); }
+      .ring-secondary-foreground { --tw-ring-color: var(--secondary-foreground); }
+      .bg-muted { background-color: var(--muted); }
+      .text-muted { color: var(--muted); }
+      .border-muted { border-color: var(--muted); }
+      .ring-muted { --tw-ring-color: var(--muted); }
+      .bg-muted-foreground { background-color: var(--muted-foreground); }
+      .text-muted-foreground { color: var(--muted-foreground); }
+      .border-muted-foreground { border-color: var(--muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--muted-foreground); }
+      .bg-accent { background-color: var(--accent); }
+      .text-accent { color: var(--accent); }
+      .border-accent { border-color: var(--accent); }
+      .ring-accent { --tw-ring-color: var(--accent); }
+      .bg-accent-foreground { background-color: var(--accent-foreground); }
+      .text-accent-foreground { color: var(--accent-foreground); }
+      .border-accent-foreground { border-color: var(--accent-foreground); }
+      .ring-accent-foreground { --tw-ring-color: var(--accent-foreground); }
+      .bg-destructive { background-color: var(--destructive); }
+      .text-destructive { color: var(--destructive); }
+      .border-destructive { border-color: var(--destructive); }
+      .ring-destructive { --tw-ring-color: var(--destructive); }
+      .bg-destructive-foreground { background-color: var(--destructive-foreground); }
+      .text-destructive-foreground { color: var(--destructive-foreground); }
+      .border-destructive-foreground { border-color: var(--destructive-foreground); }
+      .ring-destructive-foreground { --tw-ring-color: var(--destructive-foreground); }
+      .bg-border { background-color: var(--border); }
+      .text-border { color: var(--border); }
+      .border-border { border-color: var(--border); }
+      .ring-border { --tw-ring-color: var(--border); }
+      .bg-input { background-color: var(--input); }
+      .text-input { color: var(--input); }
+      .border-input { border-color: var(--input); }
+      .ring-input { --tw-ring-color: var(--input); }
+      .bg-ring { background-color: var(--ring); }
+      .text-ring { color: var(--ring); }
+      .border-ring { border-color: var(--ring); }
+      .ring-ring { --tw-ring-color: var(--ring); }
+      .bg-chart-1 { background-color: var(--chart-1); }
+      .text-chart-1 { color: var(--chart-1); }
+      .border-chart-1 { border-color: var(--chart-1); }
+      .ring-chart-1 { --tw-ring-color: var(--chart-1); }
+      .bg-chart-2 { background-color: var(--chart-2); }
+      .text-chart-2 { color: var(--chart-2); }
+      .border-chart-2 { border-color: var(--chart-2); }
+      .ring-chart-2 { --tw-ring-color: var(--chart-2); }
+      .bg-chart-3 { background-color: var(--chart-3); }
+      .text-chart-3 { color: var(--chart-3); }
+      .border-chart-3 { border-color: var(--chart-3); }
+      .ring-chart-3 { --tw-ring-color: var(--chart-3); }
+      .bg-chart-4 { background-color: var(--chart-4); }
+      .text-chart-4 { color: var(--chart-4); }
+      .border-chart-4 { border-color: var(--chart-4); }
+      .ring-chart-4 { --tw-ring-color: var(--chart-4); }
+      .bg-chart-5 { background-color: var(--chart-5); }
+      .text-chart-5 { color: var(--chart-5); }
+      .border-chart-5 { border-color: var(--chart-5); }
+      .ring-chart-5 { --tw-ring-color: var(--chart-5); }
+      .bg-sidebar { background-color: var(--sidebar); }
+      .text-sidebar { color: var(--sidebar); }
+      .border-sidebar { border-color: var(--sidebar); }
+      .ring-sidebar { --tw-ring-color: var(--sidebar); }
+      .bg-sidebar-foreground { background-color: var(--sidebar-foreground); }
+      .text-sidebar-foreground { color: var(--sidebar-foreground); }
+      .border-sidebar-foreground { border-color: var(--sidebar-foreground); }
+      .ring-sidebar-foreground { --tw-ring-color: var(--sidebar-foreground); }
+      .bg-sidebar-primary { background-color: var(--sidebar-primary); }
+      .text-sidebar-primary { color: var(--sidebar-primary); }
+      .border-sidebar-primary { border-color: var(--sidebar-primary); }
+      .ring-sidebar-primary { --tw-ring-color: var(--sidebar-primary); }
+      .bg-sidebar-primary-foreground { background-color: var(--sidebar-primary-foreground); }
+      .text-sidebar-primary-foreground { color: var(--sidebar-primary-foreground); }
+      .border-sidebar-primary-foreground { border-color: var(--sidebar-primary-foreground); }
+      .ring-sidebar-primary-foreground { --tw-ring-color: var(--sidebar-primary-foreground); }
+      .bg-sidebar-accent { background-color: var(--sidebar-accent); }
+      .text-sidebar-accent { color: var(--sidebar-accent); }
+      .border-sidebar-accent { border-color: var(--sidebar-accent); }
+      .ring-sidebar-accent { --tw-ring-color: var(--sidebar-accent); }
+      .bg-sidebar-accent-foreground { background-color: var(--sidebar-accent-foreground); }
+      .text-sidebar-accent-foreground { color: var(--sidebar-accent-foreground); }
+      .border-sidebar-accent-foreground { border-color: var(--sidebar-accent-foreground); }
+      .ring-sidebar-accent-foreground { --tw-ring-color: var(--sidebar-accent-foreground); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main id="siteEraMain" tabindex="-1" class="mx-auto max-w-[1100px] px-6 py-10">
+      <header class="mb-10 flex flex-col gap-5 border-b border-border pb-6">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <a href="site-home.html" class="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground">
+            <span data-icon aria-hidden="true" class="h-5 w-5 text-foreground" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/house.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/house.svg')"></span>
+            <span>雾隐纪事</span>
+          </a>
+          <nav class="topbar" aria-label="主导航">
+            <a href="site-home.html">首页</a>
+            <a class="active" href="site-era.html">纪元</a>
+            <a href="site-document.html">条目</a>
+            <a href="site-search.html">搜索</a>
+          </nav>
+        </div>
+        <form class="flex flex-wrap items-center gap-2" method="get" action="site-search.html" role="search">
+          <label class="sr-only" for="eraQuery">搜索这个世界</label>
+          <input id="eraQuery" type="search" name="q" placeholder="搜名称、正文、属性、事件…" aria-label="搜索这个世界" class="min-w-[220px] flex-1 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+          <button type="submit" class="btn primary">
+            <span data-icon aria-hidden="true" class="h-4 w-4 text-primary-foreground" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/funnel.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/funnel.svg')"></span>
+            搜索
+          </button>
+        </form>
+      </header>
+
+      <nav class="crumbs mb-6" aria-label="面包屑">
+        <a href="site-home.html">首页</a>
+        <span class="sep">/</span>
+        <a href="site-era.html">纪元</a>
+        <span class="sep">/</span>
+        <a class="current" href="site-era.html" aria-current="page">开雾纪元</a>
+      </nav>
+
+      <header class="mb-6" aria-labelledby="eraTitle">
+        <h1 id="eraTitle" class="text-3xl font-semibold tracking-tight text-foreground">开雾纪元</h1>
+        <p class="mt-2 text-sm text-muted-foreground">跨度 420 年</p>
+        <p class="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">浓雾第一次自碎钟诸岛升起，航路被彻底改写。灯塔与远航行会在此期间建立，无数名字沉入海图之外。</p>
+      </header>
+
+      <div class="mb-8 flex flex-wrap items-center gap-2">
+        <a class="btn secondary" href="site-home.html?era=1">只看这个纪元的内容（网格）</a>
+        <a class="btn ghost" href="site-home.html" data-dom-id="era-open-home">
+          <span data-icon aria-hidden="true" class="h-4 w-4 text-muted-foreground" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/arrow-left.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/arrow-left.svg')"></span>
+          返回站点首页
+        </a>
+      </div>
+
+      <section class="mb-8" aria-labelledby="eraSwitchTitle">
+        <h2 id="eraSwitchTitle" class="sr-only">切换纪元</h2>
+        <nav class="flex flex-wrap gap-2" aria-label="切换纪元">
+          <a class="btn primary" href="site-era.html" aria-current="page">开雾纪元</a>
+          <a class="btn secondary" href="site-era.html">白银王朝</a>
+          <a class="btn secondary" href="site-era.html">大航海纪</a>
+          <a class="btn secondary" href="site-era.html">雾锁至今</a>
+        </nav>
+      </section>
+
+      <div class="mb-10 flex flex-wrap items-center justify-between gap-3">
+        <a class="btn ghost" href="site-era.html">
+          <span data-icon aria-hidden="true" class="h-4 w-4 text-muted-foreground" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/chevron-left.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/chevron-left.svg')"></span>
+          上一个纪元 · 已至最早
+        </a>
+        <a class="btn ghost" href="site-era.html">
+          下一个纪元 · 白银王朝
+          <span data-icon aria-hidden="true" class="h-4 w-4 text-muted-foreground" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/chevron-right.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/chevron-right.svg')"></span>
+        </a>
+      </div>
+
+      <section class="mb-10" aria-labelledby="eraEventsTitle">
+        <h2 id="eraEventsTitle" class="mb-4 text-base font-semibold text-foreground">这个纪元里发生的事</h2>
+        <ol class="flex flex-col gap-6 border-l border-border pl-6">
+          <li class="relative flex flex-col gap-1">
+            <span aria-hidden="true" class="absolute -left-[1.8rem] top-1.5 h-2.5 w-2.5 rounded-full bg-primary"></span>
+            <span class="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">雾历 0 年 · 春</span>
+            <a class="text-sm font-semibold text-foreground hover:text-primary" href="site-document.html">第一次环岛远航</a>
+            <span class="text-sm text-muted-foreground">塞恩·灰鳍率三艘帆船驶入外海，首次确认群岛之外的洋流与雾墙边界。</span>
+            <span class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span data-icon aria-hidden="true" class="h-3.5 w-3.5" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/tag.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/tag.svg')"></span>
+              <a class="text-muted-foreground hover:text-foreground" href="site-document.html">环岛远航</a>
+              <span aria-hidden="true">·</span>
+              <a class="text-muted-foreground hover:text-foreground" href="site-document.html">碎钟诸岛</a>
+            </span>
+          </li>
+          <li class="relative flex flex-col gap-1">
+            <span aria-hidden="true" class="absolute -left-[1.8rem] top-1.5 h-2.5 w-2.5 rounded-full bg-primary"></span>
+            <span class="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">雾历 128 年 · 冬</span>
+            <a class="text-sm font-semibold text-foreground hover:text-primary" href="site-document.html">大退潮</a>
+            <span class="text-sm text-muted-foreground">一夜之间海平面后退数里，露出成群沉船与刻满未知文字的礁盘，成因至今未解。</span>
+            <span class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span data-icon aria-hidden="true" class="h-3.5 w-3.5" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/tag.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/tag.svg')"></span>
+              <a class="text-muted-foreground hover:text-foreground" href="site-document.html">沉钟塔</a>
+              <span aria-hidden="true">·</span>
+              <a class="text-muted-foreground hover:text-foreground" href="site-document.html">灰港</a>
+            </span>
+          </li>
+          <li class="relative flex flex-col gap-1">
+            <span aria-hidden="true" class="absolute -left-[1.8rem] top-1.5 h-2.5 w-2.5 rounded-full bg-primary"></span>
+            <span class="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">雾历 401 年 · 秋</span>
+            <a class="text-sm font-semibold text-foreground hover:text-primary" href="site-document.html">灯塔公约</a>
+            <span class="text-sm text-muted-foreground">沿海诸港订立合约，共用灯塔信号与航线图，开雾纪元由此进入尾声。</span>
+          </li>
+        </ol>
+      </section>
+
+      <section class="mb-10" aria-labelledby="eraDocsTitle">
+        <h2 id="eraDocsTitle" class="mb-3 text-base font-semibold text-foreground">属于这个纪元的内容</h2>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <a class="card" href="site-document.html">
+            <span class="eyebrow">角色 · 潮裔</span>
+            <span class="title">塞恩·灰鳍</span>
+            <span class="meta">私掠者 · 第一次环岛远航的领航人</span>
+            <span class="pill">纪元</span>
+          </a>
+          <a class="card" href="site-document.html">
+            <span class="eyebrow">地点 · 遗迹</span>
+            <span class="title">沉钟塔</span>
+            <span class="meta">废弃灯塔 · 大退潮后露出水面</span>
+            <span class="pill">纪元</span>
+          </a>
+          <a class="card" href="site-document.html">
+            <span class="eyebrow">地点 · 城市</span>
+            <span class="title">灰港</span>
+            <span class="meta">自由港 · 灯塔公约签署地</span>
+            <span class="pill">纪元</span>
+          </a>
+          <a class="card" href="site-document.html">
+            <span class="eyebrow">事件 · 航海</span>
+            <span class="title">第一次环岛远航</span>
+            <span class="meta">雾历 0 年 · 纪元开端</span>
+            <span class="pill">纪元</span>
+          </a>
+          <a class="card" href="site-document.html">
+            <span class="eyebrow">事件 · 灾变</span>
+            <span class="title">大退潮</span>
+            <span class="meta">雾历 128 年 · 未解之谜</span>
+            <span class="pill">纪元</span>
+          </a>
+          <a class="card" href="site-document.html">
+            <span class="eyebrow">条目 · 制度</span>
+            <span class="title">灯塔公约</span>
+            <span class="meta">雾历 401 年 · 纪元终章</span>
+            <span class="pill">纪元</span>
+          </a>
+        </div>
+      </section>
+
+      <footer class="mt-12 border-t border-border pt-6 text-xs text-muted-foreground">
+        <div class="flex flex-col gap-2">
+          <div>雾隐纪事 · 开雾纪元</div>
+          <div>发布版本 v3 · 公开 · 2026-10-16</div>
+          <div class="flex items-center gap-1">
+            <span data-icon aria-hidden="true" class="h-3.5 w-3.5 text-muted-foreground" style="-webkit-mask-image:url('../assets/icons/dl_builtin_minimalist/house.svg');mask-image:url('../assets/icons/dl_builtin_minimalist/house.svg')"></span>
+            Powered by Opuscule
+          </div>
+        </div>
+      </footer>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

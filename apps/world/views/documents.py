@@ -27,8 +27,10 @@ from ..normalize import (
     blocks_to_text,
     coerce_property_value,
     default_values_for,
+    doc_to_blocks,
     normalize_block_comments,
     normalize_blocks,
+    normalize_doc,
 )
 from apps.documents.models import Card, Document, TimelineEvent
 from apps.graph.models import TreeVariant
@@ -287,10 +289,18 @@ def apply_card_payload(card: Card, world: World, payload: dict) -> None:
         if card.era_mode == "only" and not card.era_ids:
             card.era_mode = "hidden"      # "只在某些纪元出现"却一个都没选 = 哪儿都不出现
 
-    if "blocks" in payload:
+    if "blocks_doc" in payload:
+        # 编辑器孤岛的文档是权威：区块与正文都由它派生，三者从此保持一致。
+        card.blocks_doc = normalize_doc(payload.get("blocks_doc"))
+        card.blocks = normalize_blocks(doc_to_blocks(card.blocks_doc))
+        card.body = blocks_to_text(card.blocks)
+    elif "blocks" in payload:
+        # 旧的 vanilla 编辑器写入：区块变了，编辑器文档就作废，
+        # 不然下次读到的还是那份陈旧副本，等于把这次编辑吃掉。
         card.blocks = normalize_blocks(payload.get("blocks"))
-        card.body = blocks_to_text(card.blocks)      # 正文由区块推导，保证两者一致
-    if "body" in payload and "blocks" not in payload:
+        card.body = blocks_to_text(card.blocks)
+        card.blocks_doc = []
+    if "body" in payload and "blocks" not in payload and "blocks_doc" not in payload:
         card.body = as_text(payload.get("body"), 20000)
     if "comments" in payload:
         card.comments = normalize_block_comments(payload.get("comments"))
@@ -330,7 +340,7 @@ def card_detail(request, doc_id):
     if request.method == "GET":
         return json_response({
             "document": document.to_payload(),
-            "card": card.to_payload(),
+            "card": card.to_payload(with_doc=True),
             "entity_type": (card.effective_type().to_payload() if card.effective_type() else None),
             "revision": as_int((document.settings or {}).get("revision"), 0),
         })
@@ -345,7 +355,7 @@ def card_detail(request, doc_id):
             "conflict": True,
             "revision": current_revision,
             "document": document.to_payload(),
-            "card": card.to_payload(),
+            "card": card.to_payload(with_doc=True),
         }, status=409)
 
     try:
@@ -356,6 +366,6 @@ def card_detail(request, doc_id):
     touch_document(document, label="编辑卡片", author=request.user)
     return json_response({
         "document": document.to_payload(),
-        "card": card.to_payload(),
+        "card": card.to_payload(with_doc=True),
         "revision": as_int((document.settings or {}).get("revision"), 0),
     })

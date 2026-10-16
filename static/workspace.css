@@ -235,12 +235,14 @@ kbd {
 /* ---------- 「设置你的工作空间」进度卡 ---------- */
 .sb-setup {
   display: grid; gap: 7px; width: calc(100% - 18px); margin: 0 9px 8px;
-  padding: 10px 12px; text-align: left; font: inherit; cursor: pointer;
+  padding: 10px 12px; text-align: left; font: inherit;
   background: var(--nb-alpha-100, rgba(255, 255, 255, 0.03));
   border: 1px solid var(--line); border-radius: var(--radius-sm);
   color: var(--ink-soft);
 }
-.sb-setup:hover { background: var(--nb-alpha-200, rgba(255, 255, 255, 0.055)); }
+/* 四步都做完后 JS 会把它 hidden —— 作者样式的 display:grid 会盖掉 UA 的
+   [hidden]{display:none}，不显式归零就"收不回去"（和 .sb-menu 同一个坑）。 */
+.sb-setup[hidden] { display: none; }
 .sb-setup .su-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sb-setup .su-line b { font-weight: 500; font-size: 12.5px; color: var(--ink); }
 .sb-setup .su-count { font-size: 11px; color: var(--ink-dim); }
@@ -253,9 +255,20 @@ kbd {
   background: var(--tx-green); transition: width 200ms ease;
 }
 .sb-setup .su-list { display: grid; gap: 3px; font-size: 11.5px; color: var(--ink-dim); }
-.sb-setup .su-list span { display: flex; align-items: center; gap: 5px; }
-.sb-setup .su-list span.is-done { color: var(--ink-soft); }
-.sb-setup .su-list span.is-done::before { content: "✓"; color: var(--tx-green); }
+/* 没做完的项是可点的入口（点了就去建），做完的只是一个 ✓ 标签 */
+.sb-setup .su-item {
+  display: flex; align-items: center; gap: 5px; text-align: left;
+  font: inherit; font-size: 11.5px; color: var(--ink-dim);
+  background: transparent; border: 0; padding: 2px 4px; margin: -2px -4px;
+  border-radius: var(--radius-sm);
+}
+.sb-setup .su-item::before { content: "○"; color: var(--ink-dim); }
+.sb-setup button.su-item { cursor: pointer; }
+.sb-setup button.su-item:hover {
+  color: var(--ink); background: var(--nb-alpha-200, rgba(255, 255, 255, 0.055));
+}
+.sb-setup .su-item.is-done { color: var(--ink-soft); cursor: default; }
+.sb-setup .su-item.is-done::before { content: "✓"; color: var(--tx-green); }
 
 /* ---------- 侧栏底部的「更多」浮层（工具收进圆形按钮弹出的浮层里） ---------- */
 .sb-dock { position: relative; margin-top: auto; }
@@ -324,11 +337,6 @@ kbd {
 .tab .t-close { opacity: 0.45; font-size: 11px; }
 .tab .t-close:hover { opacity: 1; }
 .tab .t-name { overflow: hidden; text-overflow: ellipsis; }
-.panel-grip {
-  flex: 0 0 5px; cursor: col-resize;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
-}
-.panel-grip:hover { background: var(--accent-soft); }
 .panel-body { flex: 1 1 auto; overflow: auto; min-height: 0; }
 .panel-body::-webkit-scrollbar { width: 10px; }
 .panel-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.10); border-radius: 5px; }

@@ -1853,6 +1853,186 @@ class RichTextTests(BaseWorldCase):
         self.assertIn("好内容", block["text"])
 
 
+class EditorDocTests(BaseWorldCase):
+    """编辑器文档与旧区块的双向转换（一期只搬得动那 10 种块）。"""
+
+    def test_all_ten_block_types_survive_a_round_trip(self):
+        from apps.world.normalize import blocks_to_doc, doc_to_blocks, normalize_doc
+
+        doc = [
+            {"type": "paragraph", "content": [{"type": "text", "text": "正文", "styles": {}}]},
+            {"type": "heading", "props": {"level": 2}, "content": [{"type": "text", "text": "标题", "styles": {}}]},
+            {"type": "quote", "content": [{"type": "text", "text": "引用", "styles": {}}]},
+            {"type": "bulletListItem", "content": [{"type": "text", "text": "无序", "styles": {}}]},
+            {"type": "numberedListItem", "content": [{"type": "text", "text": "有序", "styles": {}}]},
+            {"type": "checkListItem", "props": {"checked": True},
+             "content": [{"type": "text", "text": "待办", "styles": {}}]},
+            {"type": "codeBlock", "props": {"language": "python"},
+             "content": [{"type": "text", "text": "x = 1", "styles": {}}]},
+            {"type": "divider"},
+            {"type": "toggleListItem", "content": [{"type": "text", "text": "折叠", "styles": {}}]},
+            {"type": "callout", "content": [{"type": "text", "text": "提示", "styles": {}}]},
+        ]
+        cleaned = normalize_doc(doc)
+        self.assertEqual([b["type"] for b in cleaned], [b["type"] for b in doc])
+
+        # 派生旧区块：发布站 / 搜索 / 自动识别只认这一层
+        legacy = doc_to_blocks(cleaned)
+        self.assertEqual([b["type"] for b in legacy],
+                         ["text", "heading", "quote", "bulleted", "numbered",
+                          "todo", "code", "divider", "toggle", "callout"])
+        by_type = {b["type"]: b for b in legacy}
+        self.assertEqual(by_type["heading"]["text"], "标题")
+        self.assertEqual(by_type["code"]["text"], "x = 1")
+        self.assertTrue(by_type["todo"]["checked"])
+
+        # 反向：旧区块再搬回孤岛，块序列不变
+        back = blocks_to_doc(legacy)
+        self.assertEqual([b["type"] for b in back], [b["type"] for b in doc])
+
+    def test_normalize_doc_drops_unmapped_types(self):
+        from apps.world.normalize import normalize_doc
+
+        doc = [{"type": "paragraph", "content": []},
+               {"type": "media"},     # 文档级类型，孤岛里没有块级承载，直接丢
+               {"type": "bogus"}]
+        self.assertEqual([b["type"] for b in normalize_doc(doc)], ["paragraph"])
+
+    def test_indent_becomes_children_and_comes_back_as_level(self):
+        from apps.world.normalize import blocks_to_doc, doc_to_blocks
+
+        blocks = [
+            {"id": "b1", "type": "text", "text": "父"},
+            {"id": "b2", "type": "text", "text": "子", "level": 1},
+            {"id": "b3", "type": "text", "text": "孙", "level": 2},
+            {"id": "b4", "type": "text", "text": "回到顶层"},
+        ]
+        doc = blocks_to_doc(blocks)
+        self.assertEqual([b["id"] for b in doc], ["b1", "b4"])
+        self.assertEqual(doc[0]["children"][0]["id"], "b2")
+        self.assertEqual(doc[0]["children"][0]["children"][0]["id"], "b3")
+
+        # 拍回旧结构：父在子前（派生正文不丢字），缩进回写成 level
+        legacy = doc_to_blocks(doc)
+        self.assertEqual([b["id"] for b in legacy], ["b1", "b2", "b3", "b4"])
+        self.assertNotIn("level", legacy[0])
+        self.assertEqual(legacy[1]["level"], 1)
+        self.assertEqual(legacy[2]["level"], 2)
+
+    def test_unsupported_cards_fall_back_to_vanilla(self):
+        from apps.world.normalize import blocks_to_doc
+
+        self.assertEqual(blocks_to_doc([]), [])                       # 空文档照旧
+        self.assertIsNone(blocks_to_doc([{"type": "text", "text": "好"},
+                                         {"type": "media", "settings": {"url": "x"}}]))
+        self.assertIsNone(blocks_to_doc([{"type": "text", "text": "藏", "hidden": True}]))
+        self.assertIsNone(blocks_to_doc([{"type": "text", "text": "评",
+                                          "comments": [{"text": "嗨"}]}]))
+        # 折叠是 toggle 的专属状态，别的块带 collapsed = 脏数据，整体退回
+        self.assertIsNone(blocks_to_doc([{"type": "quote", "text": "引", "collapsed": True}]))
+
+    def test_legacy_blocks_upgrade_lazily_and_keep_indent(self):
+        _, card = self.make_card(blocks=[
+            {"id": "b1", "type": "text", "title": "概览", "text": "正文"},
+            {"id": "b2", "type": "quote", "text": "引用", "level": 1},
+        ])
+        doc = card.editor_doc()
+        # 块级 title 没有对应字段，补一个段落承接；缩进的引用挂到正文块下面
+        self.assertEqual([b["type"] for b in doc], ["paragraph", "paragraph"])
+        self.assertEqual(doc[0]["content"][0]["text"], "概览")
+        self.assertEqual(doc[1]["children"][0]["type"], "quote")
+
+    def test_heavy_blocks_upgrade_and_round_trip(self):
+        from apps.world.normalize import blocks_to_doc, doc_to_blocks
+
+        blocks = [
+            {"id": "b1", "type": "image", "title": "图题",
+             "settings": {"url": "https://x/y.png", "caption": "说明"}},
+            {"id": "b2", "type": "bookmark", "settings": {"url": "https://a.b"}},
+            {"id": "b3", "type": "card", "settings": {"document": 42}},
+        ]
+        doc = blocks_to_doc(blocks)
+        # image / bookmark 的块级 title 折进 caption，不补承接段落
+        self.assertEqual([b["type"] for b in doc], ["image", "bookmark", "card"])
+        self.assertEqual(doc[0]["props"], {"url": "https://x/y.png", "caption": "说明"})
+        self.assertEqual(doc[1]["props"], {"url": "https://a.b", "caption": ""})
+        self.assertEqual(doc[2]["props"], {"document": 42})
+
+        # 反向拍平：重块数据全在旧 settings 里，正文块文本保持空
+        legacy = doc_to_blocks(doc)
+        self.assertEqual([b["type"] for b in legacy], ["image", "bookmark", "card"])
+        self.assertEqual(legacy[0]["settings"], {"url": "https://x/y.png", "caption": "说明"})
+        self.assertEqual(legacy[0]["text"], "")
+        self.assertEqual(legacy[2]["settings"], {"document": 42})
+
+    def test_heavy_block_title_folds_into_caption_when_empty(self):
+        from apps.world.normalize import blocks_to_doc
+
+        doc = blocks_to_doc([{"id": "b1", "type": "image", "title": "只有题",
+                              "settings": {"url": "https://x/y.png"}}])
+        self.assertEqual(doc[0]["props"]["caption"], "只有题")
+
+    def test_collection_settings_persist_as_json_string(self):
+        from apps.world.normalize import blocks_to_doc, doc_to_blocks, normalize_doc
+
+        blocks = [{"id": "b1", "type": "collection", "settings": {
+            "entity_type": 3, "view": "board", "columns": ["a", "b", "c"],
+            "sort": {"id": 1, "dir": "desc"}, "filter": {"id": 2, "text": "甲"},
+            "junk": "该被丢掉",
+        }}]
+        doc = blocks_to_doc(blocks)
+        # 嵌套 dict 塞不进 props，序列化成 JSON 字符串
+        settings = json.loads(doc[0]["props"]["settings"])
+        self.assertEqual(settings["entity_type"], 3)
+        self.assertEqual(settings["view"], "board")
+        self.assertEqual(settings["columns"], ["a", "b", "c"])
+        self.assertEqual(settings["sort"], {"id": 1, "dir": "desc"})
+        self.assertEqual(settings["filter"], {"id": 2, "text": "甲"})
+        self.assertNotIn("junk", settings)
+
+        # props.settings 已是规范化字符串，过一遍清洗仍是同一份文档
+        self.assertEqual(normalize_doc(doc), doc)
+
+        # 反向：剥掉字符串外壳，还原成旧 settings dict
+        legacy = doc_to_blocks(doc)
+        self.assertEqual(legacy[0]["type"], "collection")
+        self.assertEqual(legacy[0]["settings"]["view"], "board")
+        self.assertNotIn("junk", legacy[0]["settings"])
+
+    def test_collection_settings_reject_garbage(self):
+        from apps.world.normalize import blocks_to_doc, normalize_doc
+
+        self.assertEqual(blocks_to_doc([{"id": "b1", "type": "collection",
+                                         "settings": "not json"}])[0]["props"]["settings"], "")
+        # 孤岛里混进非法字符串也要被清成空串，而非原样留下
+        doc = normalize_doc([{"type": "collection", "props": {"settings": "not json"}}])
+        self.assertEqual(doc[0]["props"]["settings"], "")
+
+    def test_api_derives_blocks_and_body_from_doc(self):
+        document, _ = self.make_card()
+        doc = [
+            {"type": "paragraph", "content": [{"type": "text", "text": "开头", "styles": {}}]},
+            {"type": "toggleListItem", "content": [{"type": "text", "text": "点开看", "styles": {}}],
+             "children": [{"type": "paragraph",
+                           "content": [{"type": "text", "text": "内层", "styles": {}}]}]},
+            {"type": "callout", "content": [{"type": "text", "text": "注意", "styles": {}}]},
+        ]
+        card = self.client.put(f"/api/world/cards/{document.id}",
+                               data=json.dumps({"blocks_doc": doc}),
+                               content_type="application/json").json()["card"]
+
+        # 权威文档原样存下（嵌套也留着）
+        self.assertEqual([b["type"] for b in card["blocks_doc"]],
+                         ["paragraph", "toggleListItem", "callout"])
+        self.assertEqual(card["blocks_doc"][1]["children"][0]["type"], "paragraph")
+
+        # 派生区块：子块接在父块之后，缩进回写成 level
+        self.assertEqual([b["type"] for b in card["blocks"]], ["text", "toggle", "text", "callout"])
+        self.assertEqual(card["blocks"][2]["level"], 1)
+        self.assertIn("内层", card["body"])
+        self.assertIn("注意", card["body"])
+
+
 class SuggestionTests(BaseWorldCase):
     """「值得添加」：本地规则统计，不调用外部模型。"""
 
