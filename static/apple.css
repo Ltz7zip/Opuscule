@@ -599,10 +599,7 @@ body {
   border: 1px solid var(--mn-border);
   box-shadow: none;
 }
-.panel + .panel { border-left: 1px solid var(--mn-border); }
 .panel-tabs { border-bottom: 1px solid var(--mn-border); }
-.panel-grip::before { background: var(--mn-border); }
-.panel-grip:hover::before { background: var(--ap-blue); }
 
 /* 侧栏：搜索 + 树 + 底部动作，行是 8px 的紧凑块 */
 .row {

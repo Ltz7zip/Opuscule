@@ -567,31 +567,6 @@
         { duration: 300, easing: 'cubic-bezier(0.34, 1.2, 0.64, 1)' },
       );
     }
-    /** 面板滑入 / 左面板被"挤"一下（并排面板） */
-    function squeeze(panels) {
-      if (reduced()) return;
-      (panels || []).forEach((panel, index) => {
-        if (!panel || typeof panel.animate !== 'function') return;
-        if (index === 0) {
-          panel.animate([{ transform: 'scaleX(0.985)' }, { transform: 'scaleX(1)' }],
-            { duration: 350, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' });
-        } else {
-          panel.animate([{ opacity: 0, transform: 'translateX(36px)' }, { opacity: 1, transform: 'none' }],
-            { duration: 350, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' });
-        }
-      });
-    }
-    /** 以鼠标点击位置为圆心径向铺开：文档树里双击并排打开时用。 */
-    function radial(node, x, y) {
-      if (reduced() || !node || typeof node.animate !== 'function') return null;
-      const rect = node.getBoundingClientRect();
-      const cx = rect.width ? ((x - rect.left) / rect.width) * 100 : 50;
-      const cy = rect.height ? ((y - rect.top) / rect.height) * 100 : 50;
-      return node.animate([
-        { clipPath: `circle(0% at ${cx.toFixed(1)}% ${cy.toFixed(1)}%)`, opacity: 0.55 },
-        { clipPath: `circle(150% at ${cx.toFixed(1)}% ${cy.toFixed(1)}%)`, opacity: 1 },
-      ], { duration: 400, easing: 'cubic-bezier(0.65, 0, 0.35, 1)' });
-    }
     /** 标题"落地"的那一下：一束翠绿的光收进标题里。
      *
      *  为什么不用 View Transition 做这件事：过渡期间那一层快照在 Chrome 里
@@ -617,7 +592,7 @@
       );
       animation.finished.then(() => { if (done) done(); }).catch(() => { if (done) done(); });
     }
-    return { sweep, overlap, squeeze, collapse, radial, titleArrive, treePulse,
+    return { sweep, overlap, collapse, titleArrive, treePulse,
              nameFlight, typeReveal };
   })();
 

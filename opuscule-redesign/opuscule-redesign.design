@@ -1,0 +1,650 @@
+{
+  "data": [
+    {
+      "id": "page-workspace",
+      "title": "工作区",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 380,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-9c8f15df",
+          "measuredAt": 1792161247091
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/workspace.html",
+        "interactions": [
+          {
+            "domId": "ws-open-timeline",
+            "targetPageId": "page-timeline-canvas",
+            "transitionLabel": "进入时间线画布"
+          },
+          {
+            "domId": "ws-open-relationship",
+            "targetPageId": "page-relationship-tree",
+            "transitionLabel": "进入关系树"
+          },
+          {
+            "domId": "ws-open-map",
+            "targetPageId": "page-map-shell",
+            "transitionLabel": "进入地图外壳"
+          },
+          {
+            "domId": "ws-open-login",
+            "targetPageId": "page-auth",
+            "transitionLabel": "进入账号页"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-timeline-canvas",
+      "title": "时间线画布",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 760,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-f11e9ce2",
+          "measuredAt": 1792096233352
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/timeline-canvas.html",
+        "interactions": [
+          {
+            "domId": "tl-open-workspace",
+            "targetPageId": "page-workspace",
+            "hideEdge": true,
+            "transitionLabel": "返回工作台"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-relationship-tree",
+      "title": "关系树",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 1140,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-3c6291c8",
+          "measuredAt": 1792096233352
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/relationship-tree.html",
+        "interactions": [
+          {
+            "domId": "rel-open-workspace",
+            "targetPageId": "page-workspace",
+            "hideEdge": true,
+            "transitionLabel": "返回工作台"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-map-shell",
+      "title": "地图外壳",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 1520,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-666b4213",
+          "measuredAt": 1792096233352
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/map-shell.html",
+        "interactions": [
+          {
+            "domId": "map-open-panels",
+            "targetPageId": "page-map-panels",
+            "transitionLabel": "打开地图面板"
+          },
+          {
+            "domId": "map-open-editor",
+            "targetPageId": "page-map-editor",
+            "transitionLabel": "打开地图编辑器"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-map-panels",
+      "title": "地图面板",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 1893,
+        "group": 1,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1008,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-6df98df9",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/map-panels.html",
+        "interactions": [
+          {
+            "domId": "panel-open-editor",
+            "targetPageId": "page-map-editor",
+            "transitionLabel": "打开地图编辑器"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-map-editor",
+      "title": "地图编辑器",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 2297,
+        "group": 1,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-85dd3aee",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/map-editor.html",
+        "interactions": [
+          {
+            "domId": "editor-open-shell",
+            "targetPageId": "page-map-shell",
+            "hideEdge": true,
+            "transitionLabel": "返回地图外壳"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-auth",
+      "title": "登录与初始化",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 960,
+        "y": 442,
+        "group": 1,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1287,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-7bad43fc",
+          "measuredAt": 1792161247091
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/auth.html",
+        "interactions": [
+          {
+            "domId": "auth-submit",
+            "targetPageId": "page-workspace",
+            "transitionLabel": "登录成功进入工作台"
+          },
+          {
+            "domId": "auth-open-reset",
+            "targetPageId": "page-reset-password",
+            "transitionLabel": "重置密码"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-reset-password",
+      "title": "重置密码",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 2670,
+        "group": 1,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-65ac39b9",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/reset-password.html",
+        "interactions": [
+          {
+            "domId": "reset-submit",
+            "targetPageId": "page-auth",
+            "transitionLabel": "重置后返回登录"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-explore",
+      "title": "公开世界",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 480,
+        "y": 0,
+        "group": 2,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1176,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-bdd03587",
+          "measuredAt": 1792161247091
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/explore.html",
+        "interactions": [
+          {
+            "domId": "explore-open-world",
+            "targetPageId": "page-site-home",
+            "transitionLabel": "进入世界站点"
+          },
+          {
+            "domId": "explore-open-login",
+            "targetPageId": "page-auth",
+            "transitionLabel": "进入账号页"
+          },
+          {
+            "domId": "explore-open-register",
+            "targetPageId": "page-auth",
+            "transitionLabel": "进入账号页"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-base",
+      "title": "站点基座",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 3810,
+        "group": 2,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-d3042839",
+          "measuredAt": 1792165568443
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-base.html",
+        "interactions": [
+          {
+            "domId": "sitebase-open-home",
+            "targetPageId": "page-site-home",
+            "hideEdge": true,
+            "transitionLabel": "返回站点首页"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-home",
+      "title": "站点首页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 960,
+        "y": 0,
+        "group": 2,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1137,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-74ece143",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-home.html",
+        "interactions": [
+          {
+            "domId": "home-open-search",
+            "targetPageId": "page-site-search",
+            "transitionLabel": "搜索站点内容"
+          },
+          {
+            "domId": "home-open-era",
+            "targetPageId": "page-site-era",
+            "transitionLabel": "进入时代页"
+          },
+          {
+            "domId": "home-open-document",
+            "targetPageId": "page-site-document",
+            "transitionLabel": "阅读文档"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-document",
+      "title": "站点文档页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 1920,
+        "y": 0,
+        "group": 2,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1733,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-06e7d8b6",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-document.html",
+        "interactions": [
+          {
+            "domId": "doc-open-home",
+            "targetPageId": "page-site-home",
+            "hideEdge": true,
+            "transitionLabel": "返回站点首页"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-era",
+      "title": "站点时代页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 1440,
+        "y": 412,
+        "group": 3,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1388,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-5a3feba3",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-era.html",
+        "interactions": [
+          {
+            "domId": "era-open-home",
+            "targetPageId": "page-site-home",
+            "hideEdge": true,
+            "transitionLabel": "返回站点首页"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-search",
+      "title": "站点搜索",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 1440,
+        "y": 0,
+        "group": 3,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1037,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-6e31500b",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-search.html",
+        "interactions": [
+          {
+            "domId": "search-open-result",
+            "targetPageId": "page-site-document",
+            "transitionLabel": "打开搜索结果文档"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-password",
+      "title": "站点访问闸门",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 480,
+        "y": 453,
+        "group": 3,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-71c936c9",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-password.html",
+        "interactions": [
+          {
+            "domId": "gate-submit",
+            "targetPageId": "page-site-home",
+            "transitionLabel": "验证通过进入站点"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-missing",
+      "title": "站点缺失页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 480,
+        "y": 3810,
+        "group": 3,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-668367d8",
+          "measuredAt": 1792165568443
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-missing.html",
+        "interactions": [
+          {
+            "domId": "missing-open-home",
+            "targetPageId": "page-site-home",
+            "hideEdge": true,
+            "transitionLabel": "返回站点首页"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-site-filter",
+      "title": "站点筛选器",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 960,
+        "y": 927,
+        "group": 4,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-1337c985",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/site-filter.html",
+        "interactions": [
+          {
+            "domId": "filter-apply",
+            "targetPageId": "page-site-search",
+            "transitionLabel": "应用筛选并查看结果"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-maintenance",
+      "title": "系统维护",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 3430,
+        "group": 4,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-7f784e7c",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/maintenance.html",
+        "interactions": [
+          {
+            "domId": "maint-open-home",
+            "targetPageId": "page-explore",
+            "transitionLabel": "返回公开世界"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-error-404",
+      "title": "404 未找到",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 3050,
+        "group": 4,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-4eb5fa23",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/error-404.html",
+        "interactions": [
+          {
+            "domId": "err404-open-home",
+            "targetPageId": "page-explore",
+            "transitionLabel": "返回公开世界"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-error-500",
+      "title": "500 服务端错误",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1792108800000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 4,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 924,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-e0ae5bf7",
+          "measuredAt": 1792124401841
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/error-500.html",
+        "interactions": [
+          {
+            "domId": "err500-open-home",
+            "targetPageId": "page-explore",
+            "transitionLabel": "返回公开世界"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "Opuscule 世界观工作台",
+    "designLibrary": {
+      "name": "极简",
+      "id": "dl_builtin_minimalist",
+      "version": 0,
+      "scope": "built-in-global",
+      "path": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist",
+      "versionSource": "metadata.json"
+    },
+    "showEdge": true
+  }
+}

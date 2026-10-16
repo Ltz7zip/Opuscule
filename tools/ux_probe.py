@@ -20,6 +20,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
+import _island as isl  # noqa: E402
 
 BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 REPORT = pathlib.Path("/tmp/ux_report.md")
@@ -82,36 +83,31 @@ def main() -> int:
             after = len(page_errors) + len(console_errors) + len(failed)
             note(f"打开文档 {doc['name']}（{doc_type}）→ 新增报错 {after - before}")
 
-        # 3) 卡片：点属性、加区块、@ 提及
+        # 3) 卡片：加块（孤岛斜杠菜单）、名字自动识别、属性输入
+        #    0.5.2 的 P3 拆了旧 vanilla 正文渲染链：卡片底部「＋ 文本」插入条（.insert-bar）
+        #    和「@」模糊提及弹层（.mention-pop）都没了。正文改由孤岛（React + BlockNote）
+        #    渲染，加块走孤岛自己的斜杠菜单；名字识别改为自动高亮（.mentions-inline）。
         card = by_type.get("card")
         if card:
             page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
-            page.wait_for_timeout(400)
-            # 点插入条上的「文本」加一个区块（按钮现在的类名是 .insert-btn，
-            # 文案是「文本」——"＋ 文本"是更早一版的写法，早就不在了）
+            page.wait_for_timeout(2200)     # 等孤岛挂载
+            # 加块：点孤岛侧菜单的「添加块」开斜杠菜单（不选就不会真的插入）
             try:
-                page.locator(".insert-bar .insert-btn").first.click(timeout=3000)
-                page.wait_for_timeout(700)
-                note("点「＋ 文本」加区块：成功")
+                opened = isl.open_slash_menu(page, 0)
+                note(f"点侧菜单「添加块」开斜杠菜单：{'成功' if opened else '失败'}")
+                if not opened:
+                    issues.append("孤岛斜杠菜单打不开")
+                else:
+                    isl.close_menus(page)
             except Exception as exc:  # noqa: BLE001
-                issues.append(f"加区块失败：{exc}")
-                note(f"点「＋ 文本」加区块：失败 {exc}")
-            # 在新区块里输入 @ 看看提及选择器
-            try:
-                blocks = page.query_selector_all(".block-text")
-                if blocks:
-                    target = blocks[-1]
-                    target.click()
-                    target.type("@Ha", delay=80)
-                    page.wait_for_timeout(800)
-                    popup = page.query_selector(".mention-pop")
-                    note(f"输入「@Ha」后提及浮层：{'出现' if popup else '没出现'}")
-                    if popup:
-                        page.screenshot(path=str(SHOTS / "mention.png"))
-                    page.keyboard.press("Escape")
-            except Exception as exc:  # noqa: BLE001
-                issues.append(f"@ 提及失败：{exc}")
-            # 属性输入
+                issues.append(f"加块失败：{exc}")
+                note(f"加块：失败 {exc}")
+            # 旧的 @ 提及弹层应已下架；现状改为名字自动识别（装饰层）
+            if page.query_selector(".mention-pop"):
+                issues.append("旧的 @ 提及弹层（.mention-pop）不该还在")
+            note("「@ 提及」浮层：已随旧渲染链下架（名称识别改为自动高亮）")
+            note(f"名字自动识别：{len(isl.mentions(page))} 处")
+            # 属性输入（未受孤岛影响）
             try:
                 page.fill(".prop-input >> nth=0", "测试值")
                 page.keyboard.press("Tab")
@@ -162,14 +158,19 @@ def main() -> int:
                     time.sleep(0.3)
 
         # 5) 侧栏：搜索、右键菜单、拖拽
+        #    按新设计，侧栏顶部那个内联搜索框（.sb-head / #sbSearch）被收掉了
+        #    （terminal.css `.sb-head { display: none }`），搜索统一收进命令面板。
+        #    这里改点侧栏药丸行尾的放大镜（#tbNav [data-nav="search"]）打开面板再搜。
         page.goto(f"{BASE}/world", wait_until="networkidle")
         page.wait_for_timeout(400)
         try:
-            page.fill("#sbSearch", "Har")
+            page.click("#tbNav [data-nav='search']")
             page.wait_for_timeout(400)
-            rows = page.query_selector_all("#sbTree .row")
-            note(f"侧栏搜索「Har」命中 {len(rows)} 行")
-            page.fill("#sbSearch", "")
+            page.fill("#plInput", "Har")
+            page.wait_for_timeout(500)
+            hits = len(page.query_selector_all("#plList .pl-item"))
+            note(f"内联搜索框已随重设计收进命令面板；搜索「Har」命中 {hits} 条")
+            page.keyboard.press("Escape")
             page.wait_for_timeout(300)
         except Exception as exc:  # noqa: BLE001
             issues.append(f"侧栏搜索失败：{exc}")
@@ -201,19 +202,31 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             issues.append(f"命令面板失败：{exc}")
 
-        # 7) 顶栏每个按钮点一遍
+        # 7) 侧栏动作按钮点一遍
+        #    按新设计，类型 / 纪元 / 主题 / 回收站这一排被收进侧栏右下角圆形「更多」的浮层
+        #    （.sb-menu#sbMenuPop[hidden]）里，隐藏元素 page.click 会一直等到超时——用程序化
+        #    click 直接派发真实处理器，保留原逻辑。维基药丸在侧栏顶部（#tbNav）是可见的。
         for label, selector in [("类型", "#typesBtn"), ("纪元", "#erasBtn"), ("主题", "#themeBtn"),
-                                ("回收站", "#trashBtn"), ("维基", "text=维基")]:
+                                ("回收站", "#trashBtn")]:
             try:
-                page.click(selector, timeout=3000)
+                page.evaluate("(sel) => document.querySelector(sel).click()", selector)
                 page.wait_for_timeout(600)
                 modal = page.query_selector("#modal:not([hidden])")
-                note(f"顶栏「{label}」：{'弹窗出现' if modal else '没有弹窗'}")
+                note(f"侧栏「{label}」：{'弹窗出现' if modal else '没有弹窗'}")
                 page.keyboard.press("Escape")
                 page.wait_for_timeout(200)
             except Exception as exc:  # noqa: BLE001
-                issues.append(f"顶栏「{label}」点击失败：{exc}")
-                note(f"顶栏「{label}」：失败 {exc}")
+                issues.append(f"侧栏「{label}」点击失败：{exc}")
+                note(f"侧栏「{label}」：失败 {exc}")
+        try:
+            page.click("#tbNav [data-nav='wiki']", timeout=3000)
+            page.wait_for_timeout(600)
+            note("侧栏「维基」：点击成功")
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+        except Exception as exc:  # noqa: BLE001
+            issues.append(f"侧栏「维基」点击失败：{exc}")
+            note(f"侧栏「维基」：失败 {exc}")
 
         # 8) 经典时间线页面（对照）
         try:

@@ -16,6 +16,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _auth import ensure_login, ensure_login_page, make_opener  # noqa: E402
+import _island as isl  # noqa: E402
 
 BASE = os.environ.get("WS_BASE", "http://127.0.0.1:8000")
 SHOTS = pathlib.Path("/tmp/ux_shots")
@@ -52,6 +53,8 @@ def main() -> int:
     timeline = next(d for d in docs if d["type"] == "timeline")
     card = next(d for d in docs if d["type"] == "card")
     problems: list[str] = []
+    # 第 4 段要往正文里敲一下字（制造一次可撤销的编辑），跑完还原，别把演示数据改了。
+    orig_doc = json_api(f"/api/world/cards/{card['id']}")["card"].get("blocks_doc") or []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
@@ -115,7 +118,9 @@ def main() -> int:
         # ---------------- 2) 导出 / 导入面板 ----------------
         page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
         page.wait_for_timeout(1200)
-        page.click("#exchangeBtn")
+        # 「导入导出」被收进侧栏右下角圆形「更多」的浮层（.sb-menu#sbMenuPop[hidden]）：
+        # 隐藏元素 page.click 会等可见直到 30s 超时。用程序化 click 直接派发真实处理器。
+        page.evaluate("() => document.querySelector('#exchangeBtn').click()")
         page.wait_for_timeout(700)
         if not page.query_selector("#mdBody .drop-zone"):
             problems.append("导入导出面板没打开")
@@ -139,7 +144,7 @@ def main() -> int:
             problems.append("世界导出不可用")
 
         # ---------------- 3) 建议面板 ----------------
-        page.click("#suggestBtn")
+        page.evaluate("() => document.querySelector('#suggestBtn').click()")
         page.wait_for_timeout(1200)
         has_sections = page.query_selector("#mdBody .suggest-list")
         print("建议面板：", bool(has_sections))
@@ -171,17 +176,15 @@ def main() -> int:
         page.keyboard.press("Meta+b")
         page.wait_for_timeout(400)
 
-        # 撤销按钮在没有可撤销内容时是 disabled 的：先制造一次编辑，再右键看历史
+        # 撤销按钮在没有可撤销内容时是 disabled 的：先制造一次编辑，再右键看历史。
+        # 正文由孤岛渲染，别去改 DOM（改 DOM 孤岛不认、也进不了撤销栈）；
+        # 用孤岛助手落光标 + 敲一个字，等它防抖保存并记进撤销栈。
         page.goto(f"{BASE}/world#doc={card['id']}", wait_until="networkidle")
-        page.wait_for_timeout(1200)
-        page.evaluate("""() => {
-          const node = document.querySelectorAll('.block-text')[0];
-          node.focus();
-          node.innerHTML = (node.innerHTML || '') + ' ';
-        }""")
-        page.keyboard.press("End")
+        page.wait_for_timeout(2200)     # 等孤岛挂载
+        isl.place_cursor(page, 0)
+        page.wait_for_timeout(200)
         page.keyboard.type("x", delay=30)
-        page.wait_for_timeout(1400)
+        page.wait_for_timeout(1700)
         page.click("#undoBtn", button="right")
         page.wait_for_timeout(700)
         opened = bool(page.query_selector("#mdBody"))
@@ -190,7 +193,8 @@ def main() -> int:
             problems.append("撤销历史面板没打开")
         page.screenshot(path=str(SHOTS / "undo_history.png"))
 
-        # 收尾：删掉自动导入的文档
+        # 收尾：还原正文（第 4 段敲进去的那个字），并删掉自动导入的文档
+        api(f"/api/world/cards/{card['id']}", "PUT", {"blocks_doc": orig_doc}).close()
         for doc in flat(json_api("/api/world/state")["documents"]):
             if doc["name"] == "自动点测导入的文档":
                 api(f"/api/world/documents/{doc['id']}?hard=1", "DELETE").close()

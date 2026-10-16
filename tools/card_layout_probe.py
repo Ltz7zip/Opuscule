@@ -66,16 +66,17 @@ MEASURE_JS = r"""
     const r = el.getBoundingClientRect();
     return { w: px(r.width), h: px(r.height), left: px(r.left), right: px(r.right), top: px(r.top) };
   };
-  const blocks = [...view.querySelectorAll('.block')].map((el) => ({
+  const blocks = [...view.querySelectorAll('.bn-block-outer')].map((el) => ({
     cls: el.className,
-    title: (el.querySelector('.block-title') || {}).textContent || '',
+    kind: ((el.querySelector('.bn-block-content') || {}).dataset || {}).contentType || '',
     ...box(el),
     text: blockText(el),
   }));
   function blockText(el) {
-    const t = el.querySelector('.block-text');
+    const t = el.querySelector('.bn-inline-content');
     return t ? (t.innerText || '').trim().slice(0, 30) : '';
   }
+  const blocksBox = view.querySelector('.blocks');
   return {
     viewport: { w: window.innerWidth, h: window.innerHeight },
     panelBody: { w: px(bodyBox.width), avail: px(avail) },
@@ -86,7 +87,8 @@ MEASURE_JS = r"""
     propRows: [...view.querySelectorAll('.prop-row')].map((el) => ({ ...box(el), key: (el.querySelector('.prop-key') || {}).innerText || '' })),
     head: box(view.querySelector('.card-head')),
     cover: box(view.querySelector('.card-cover')),
-    blocksBox: box(view.querySelector('.blocks')),
+    blocksBox: box(blocksBox),
+    blocksCls: blocksBox ? blocksBox.className : '',
     blocks,
     insertBar: box(view.querySelector('.insert-bar')),
     scroll: { doc: document.documentElement.scrollHeight },
@@ -173,8 +175,11 @@ def main() -> int:
                 for row in data["propRows"]:
                     print(f"    prop 行 {row['key'].strip()[:12]:<12} 宽 {row['w']}")
                 for b in data["blocks"]:
-                    print(f"    块 {b['cls'][:34]:<34} {b['w']}×{b['h']} 「{b['title'] or b['text']}」")
+                    print(f"    块 {b['kind'][:14]:<14} {b['w']}×{b['h']} 「{b['text']}」")
                 print(f"  截图 → {shot}")
+
+                if "is-island" not in data["blocksCls"]:
+                    problems.append(f"{tag}@{width} 正文没有走孤岛渲染（.blocks 缺 is-island：{data['blocksCls']}）")
 
                 fill = data["view"]["w"] / data["panelBody"]["avail"]
                 if fill < FILL_MIN:
@@ -183,24 +188,23 @@ def main() -> int:
                 if data["props"] and data["propsCss"]["maxWidth"] not in ("none", "100%"):
                     problems.append(f"{tag}@{width} 属性表被 max-width:{data['propsCss']['maxWidth']} 掐窄了")
                 for b in data["blocks"]:
-                    if "quote" in b["cls"] and b["h"] > QUOTE_MAX_H:
+                    if b["kind"] == "quote" and b["h"] > QUOTE_MAX_H:
                         problems.append(f"{tag}@{width} 引用块 {b['h']}px 超预算 {QUOTE_MAX_H}px"
-                                        f"「{b['title'] or b['text']}」")
+                                        f"「{b['text']}」")
 
                 frames = page.evaluate(FRAMES_JS)
                 print(f"  描边：工作区 {frames['workspaceBorder']}px · 侧栏 {frames['sidebarBorder']}px "
-                      f"· 封面 {frames['coverBorder']}px · 插入条 {frames['insertBarBorder']}px "
-                      f"· 插入条按键 {frames['insertBtnBorders']}")
+                      f"· 封面 {frames['coverBorder']}px")
                 if frames["workspaceBorder"]:
                     problems.append(f"{tag}@{width} 编辑面板又长出 {frames['workspaceBorder']}px 描边")
                 if not frames["sidebarBorder"]:
                     problems.append(f"{tag}@{width} 侧栏的描边没了（侧栏保持圆角卡片 + 细边）")
                 if frames["coverBorder"]:
                     problems.append(f"{tag}@{width} 卡片封面框又长出 {frames['coverBorder']}px 描边")
-                if not frames["insertBarBorder"]:
-                    problems.append(f"{tag}@{width} 插入条容器没有描边了（只该去掉里面按键的）")
-                if any(frames["insertBtnBorders"]):
-                    problems.append(f"{tag}@{width} 插入条里的按键又各自描边：{frames['insertBtnBorders']}")
+                # 卡片底部插入条（.insert-bar）随 P3 拆链下架：正文加块改由孤岛斜杠菜单负责
+                if frames["insertBarBorder"] is not None or frames["insertBtnBorders"]:
+                    problems.append(f"{tag}@{width} 卡片视图不该再有插入条："
+                                    f"{frames['insertBarButtons']} 键 {frames['insertBtnBorders']}")
                 if frames["coverClipped"]:
                     problems.append(f"{tag}@{width} 封面占位文字被裁：{frames['coverClipped']}")
             page.close()

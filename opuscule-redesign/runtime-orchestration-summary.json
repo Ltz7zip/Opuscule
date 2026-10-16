@@ -1,0 +1,1651 @@
+{
+  "schemaVersion": "1.0",
+  "skillProvenance": {
+    "schema_version": "1.0",
+    "name": "solo-design",
+    "version": "2026.10.13.09.48.16",
+    "release": "canonical-image-node-append-plugin-0.1.3",
+    "version_source": "skill-release-manifest.json"
+  },
+  "project": {
+    "resolvedLane": "library_bound",
+    "operatingMode": "library-bound",
+    "deviceType": "desktop",
+    "intentProfile": {
+      "caseFamily": "library_bound",
+      "surface": "page",
+      "sourceType": "existing-project",
+      "goal": "redesign-existing-django-templates-with-design-library",
+      "language": "zh-CN",
+      "pageCount": 20
+    },
+    "selectedIntentWorkflowRead": true,
+    "contextRequirementsLoaded": [
+      {
+        "path": "shared-runtime/runtime-boundaries/lane-runtime-contracts.md",
+        "readStatus": "loaded",
+        "bodyRead": true,
+        "recordedAt": "2026-10-15T17:30:05.000Z"
+      },
+      {
+        "path": "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md",
+        "readStatus": "loaded",
+        "bodyRead": true,
+        "recordedAt": "2026-10-15T17:30:05.000Z"
+      },
+      {
+        "path": "delivery-quality/page-rendering-quality-gate.md",
+        "readStatus": "loaded",
+        "bodyRead": true,
+        "recordedAt": "2026-10-15T17:30:05.000Z"
+      },
+      {
+        "path": "delivery-quality/design-artifact-validation.md",
+        "readStatus": "loaded",
+        "bodyRead": true,
+        "recordedAt": "2026-10-15T17:30:05.000Z"
+      },
+      {
+        "path": "delivery-quality/delivery-evidence-contract.md",
+        "readStatus": "loaded",
+        "bodyRead": true,
+        "recordedAt": "2026-10-15T17:30:05.000Z"
+      }
+    ],
+    "contextReadScope": {
+      "lane": "library_bound",
+      "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
+      "runtimeFilesRead": [
+        "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
+        "intent-workflows/intent-page-library-bound/start-library-bound-project.md",
+        "intent-workflows/intent-page-library-bound/orchestration-summary-fields.md",
+        "intent-workflows/intent-page-library-bound/design-library-ingestion.md"
+      ],
+      "sharedRuntimeFilesRead": [
+        "shared-runtime/orchestration-summary-contract/orchestration-summary-contract.md",
+        "shared-runtime/orchestration-summary-contract/generalized-flow-control-fields.md"
+      ],
+      "sourceReadScope": [
+        "templates/ (20 Django templates)",
+        "static/ (project CSS and JS)",
+        "DESIGN.md"
+      ],
+      "recordedAt": "2026-10-15T17:30:05.000Z"
+    },
+    "readScopeLedger": [
+      {
+        "scopeId": "lane-workflow",
+        "paths": [
+          "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md"
+        ],
+        "declaredAt": "2026-10-15T17:30:05.000Z",
+        "status": "completed"
+      },
+      {
+        "scopeId": "lane-context-requirements",
+        "paths": [
+          "shared-runtime/runtime-boundaries/lane-runtime-contracts.md",
+          "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md",
+          "delivery-quality/page-rendering-quality-gate.md",
+          "delivery-quality/design-artifact-validation.md",
+          "delivery-quality/delivery-evidence-contract.md"
+        ],
+        "declaredAt": "2026-10-15T17:30:05.000Z",
+        "status": "completed"
+      },
+      {
+        "scopeId": "design-library-evidence",
+        "paths": [
+          "metadata.json",
+          "library-consumption.json",
+          "colors_and_type.css",
+          "css.json",
+          "components/index.json",
+          "ui_kits/dashboard/index.html"
+        ],
+        "declaredAt": "2026-10-15T17:30:05.000Z",
+        "status": "completed"
+      },
+      {
+        "scopeId": "existing-project-source",
+        "paths": [
+          "templates/",
+          "static/"
+        ],
+        "declaredAt": "2026-10-15T17:30:05.000Z",
+        "status": "completed"
+      }
+    ],
+    "dispatchPreflightManifest": [
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-workspace",
+        "htmlSrc": "pages/workspace.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/workspace.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-timeline-canvas",
+        "htmlSrc": "pages/timeline-canvas.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/timeline-canvas.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-relationship-tree",
+        "htmlSrc": "pages/relationship-tree.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/relationship-tree.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-map-shell",
+        "htmlSrc": "pages/map-shell.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/map-shell.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-map-panels",
+        "htmlSrc": "pages/map-panels.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/map-panels.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-map-editor",
+        "htmlSrc": "pages/map-editor.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/map-editor.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-auth",
+        "htmlSrc": "pages/auth.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/auth.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-reset-password",
+        "htmlSrc": "pages/reset-password.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/reset-password.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-explore",
+        "htmlSrc": "pages/explore.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/explore.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-base",
+        "htmlSrc": "pages/site-base.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-base.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-home",
+        "htmlSrc": "pages/site-home.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-home.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-document",
+        "htmlSrc": "pages/site-document.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-document.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-era",
+        "htmlSrc": "pages/site-era.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-era.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-search",
+        "htmlSrc": "pages/site-search.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-search.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-password",
+        "htmlSrc": "pages/site-password.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-password.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-missing",
+        "htmlSrc": "pages/site-missing.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-missing.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-site-filter",
+        "htmlSrc": "pages/site-filter.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/site-filter.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-maintenance",
+        "htmlSrc": "pages/maintenance.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/maintenance.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-error-404",
+        "htmlSrc": "pages/error-404.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/error-404.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      },
+      {
+        "recorded_at": "2026-10-15T15:19:57.541Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "LibraryBoundPagePacket",
+        "laneContract": {
+          "resolvedLane": "library_bound",
+          "packetType": "LibraryBoundPagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-library-bound/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-library-bound/library-bound-page-runtime.md",
+        "nodeId": "page-error-500",
+        "htmlSrc": "pages/error-500.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/error-500.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "pageSliceOnly": true,
+        "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
+        "aestheticsMode": "library-bound",
+        "headFillMode": "replace-head-after-body",
+        "viewportMode": "desktop",
+        "completionSchemaExpected": "full",
+        "proofSource": "summary-only"
+      }
+    ],
+    "validationRunDiscipline": {
+      "maxFullValidationRuns": 2,
+      "softWarningsTriggerRepair": false,
+      "blockingRepairMode": "targeted-once",
+      "forbiddenRepairTriggers": [
+        "subjective-aesthetic-polish",
+        "page-count-expansion",
+        "business-requirement-change"
+      ],
+      "recordedAt": "2026-10-15T17:30:05.000Z"
+    },
+    "lowValueCallWatchdog": {
+      "applies": true,
+      "noProgressSignals": [
+        "no_tool_call",
+        "no_artifact_diff",
+        "no_structured_decision"
+      ],
+      "noProgressNextAction": "enter_readiness_or_blocked_summary",
+      "recordedAt": "2026-10-15T17:30:05.000Z"
+    },
+    "sourceAuthorityLock": {
+      "visualAuthority": "design-library",
+      "contentSupplement": "existing-project-templates",
+      "browserObservationRole": "not-used",
+      "mayOverrideVisualAuthority": false,
+      "lockedBeforeDispatch": true
+    },
+    "visualQualityCheckpoints": [],
+    "validationHistory": [],
+    "validationRepairLedger": [],
+    "validationSnapshot": null,
+    "artifactReadinessEvidence": {
+      "expectedPageCount": 20,
+      "designFile": "opuscule-redesign.design",
+      "designRegisteredPageNodes": 20,
+      "recordedAt": "2026-10-15T17:30:05.000Z"
+    },
+    "expectedDispatches": [
+      {
+        "nodeId": "page-workspace",
+        "pageId": "page-workspace",
+        "targetPageId": "page-workspace",
+        "htmlSrc": "pages/workspace.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/workspace.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "ccd44a45b9b78a196e03e046a793486d2f0c7dcd712d25bee0488af77f6b18fc",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T11:12:31.064Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-timeline-canvas",
+        "pageId": "page-timeline-canvas",
+        "targetPageId": "page-timeline-canvas",
+        "htmlSrc": "pages/timeline-canvas.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/timeline-canvas.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "8bed0f9a3fe610e44788822a8c745d78adbc0ce077450691cbe549d66064dc8f",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:56.083Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-relationship-tree",
+        "pageId": "page-relationship-tree",
+        "targetPageId": "page-relationship-tree",
+        "htmlSrc": "pages/relationship-tree.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/relationship-tree.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "ff6deb73d1849938781c1eb8f6562ca167557119c0eff1d121c323c21b3ef89d",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:56.365Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-map-shell",
+        "pageId": "page-map-shell",
+        "targetPageId": "page-map-shell",
+        "htmlSrc": "pages/map-shell.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/map-shell.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "62c8405b5c8aee79dde9461d2ac0793f99f111552507249c0f60259e500313c3",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:56.652Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-map-panels",
+        "pageId": "page-map-panels",
+        "targetPageId": "page-map-panels",
+        "htmlSrc": "pages/map-panels.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/map-panels.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "1272258cf6052f6f3b42ae3fcb8a88cc50fe7e0c31738ceb1d94a8ad54edc11c",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:56.900Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-map-editor",
+        "pageId": "page-map-editor",
+        "targetPageId": "page-map-editor",
+        "htmlSrc": "pages/map-editor.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/map-editor.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "f2dfcc537da80a9bc3d20e02861e954be1f5ce57f8dece5c1356bad58da94629",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:57.137Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-auth",
+        "pageId": "page-auth",
+        "targetPageId": "page-auth",
+        "htmlSrc": "pages/auth.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/auth.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "5e8e9c515955e4bd0b5c79fe16587a8f369cd2b91e935b296c97b19321c729d0",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T11:12:30.847Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-reset-password",
+        "pageId": "page-reset-password",
+        "targetPageId": "page-reset-password",
+        "htmlSrc": "pages/reset-password.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/reset-password.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "1a32e1ab2ddc10382c07ccd9519edc9adcbd3b17e96034a42c0962cd2f4731d1",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:57.729Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-explore",
+        "pageId": "page-explore",
+        "targetPageId": "page-explore",
+        "htmlSrc": "pages/explore.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/explore.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "c653ff70b466e54fe1a21698457c2f284cd544fca2e7bffc04f5b202574fd5a3",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T11:12:30.632Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-base",
+        "pageId": "page-site-base",
+        "targetPageId": "page-site-base",
+        "htmlSrc": "pages/site-base.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-base.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "d791cc33ac73a1d1936fe5656665c5f9bbbf283b446718e973621dda54724e4c",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:58.242Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-home",
+        "pageId": "page-site-home",
+        "targetPageId": "page-site-home",
+        "htmlSrc": "pages/site-home.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-home.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "7e9de55244004a4f213dccbcd062e1c451bd87cded2f567748ed607caa741a05",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:58.517Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-document",
+        "pageId": "page-site-document",
+        "targetPageId": "page-site-document",
+        "htmlSrc": "pages/site-document.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-document.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "3079d3b34b69d6e160800092f37fd646cb1b9d5d9aa20092d4154ddcef230ca4",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:58.780Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-era",
+        "pageId": "page-site-era",
+        "targetPageId": "page-site-era",
+        "htmlSrc": "pages/site-era.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-era.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "2d731c67315ec498ce668e79897253e6673a0937390e8a5a79020d0b0d0c2e05",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:59.018Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-search",
+        "pageId": "page-site-search",
+        "targetPageId": "page-site-search",
+        "htmlSrc": "pages/site-search.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-search.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "ef8adc1683451354423a6e289cd0224c1b71726194641db43833f94b585f9687",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:59.255Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-password",
+        "pageId": "page-site-password",
+        "targetPageId": "page-site-password",
+        "htmlSrc": "pages/site-password.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-password.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "96e02067aa18a7acaf3606c55f3554688274b0cff58b63bd5ffebeb8c270d51b",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:59.568Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-missing",
+        "pageId": "page-site-missing",
+        "targetPageId": "page-site-missing",
+        "htmlSrc": "pages/site-missing.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-missing.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "aeb2469fd93f93e104339bbaeaa0b590e9aad0448f852fed6d7f2221ba6a864b",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:15:59.824Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-site-filter",
+        "pageId": "page-site-filter",
+        "targetPageId": "page-site-filter",
+        "htmlSrc": "pages/site-filter.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/site-filter.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "bad1ce2d2fe1e33e64b8559b5aea347c3ae8d689d8ad1f49610f9616aab6e5cf",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:16:00.078Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-maintenance",
+        "pageId": "page-maintenance",
+        "targetPageId": "page-maintenance",
+        "htmlSrc": "pages/maintenance.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/maintenance.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "e167f514b67ef6d8fb5fc2b18f78419eb883fd1b755b5d249a6a7ec7d604470e",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:16:00.393Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-error-404",
+        "pageId": "page-error-404",
+        "targetPageId": "page-error-404",
+        "htmlSrc": "pages/error-404.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/error-404.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "f9303085b53c56117320a697817707356541c428897df96a2ba0fa2b967d61e0",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:16:00.667Z",
+        "source": "record-dispatch-completion.mjs"
+      },
+      {
+        "nodeId": "page-error-500",
+        "pageId": "page-error-500",
+        "targetPageId": "page-error-500",
+        "htmlSrc": "pages/error-500.html",
+        "packetType": "LibraryBoundPagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/error-500.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "162e39a34b79375ade635caa41ffc62e10f599a6ae7d1a3bd0bde02894b0ee8e",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-10-16T04:16:00.936Z",
+        "source": "record-dispatch-completion.mjs"
+      }
+    ],
+    "mainAgentPostDispatchMutations": []
+  },
+  "designSource": {
+    "operatingMode": "library-bound",
+    "libraryIdentity": {
+      "name": "极简",
+      "id": "dl_builtin_minimalist",
+      "version": 0,
+      "scope": "built-in-global",
+      "path": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist",
+      "versionSource": "metadata.json"
+    },
+    "actualTokenNameReference": {
+      "source": "colors_and_type.css",
+      "prefixedAliases": [
+        "--minimal-background",
+        "--minimal-foreground",
+        "--minimal-card",
+        "--minimal-card-foreground",
+        "--minimal-popover",
+        "--minimal-popover-foreground",
+        "--minimal-primary",
+        "--minimal-primary-foreground",
+        "--minimal-secondary",
+        "--minimal-secondary-foreground",
+        "--minimal-muted",
+        "--minimal-muted-foreground",
+        "--minimal-accent",
+        "--minimal-accent-foreground",
+        "--minimal-destructive",
+        "--minimal-destructive-foreground",
+        "--minimal-border",
+        "--minimal-input",
+        "--minimal-ring",
+        "--minimal-chart-1",
+        "--minimal-chart-5",
+        "--minimal-sidebar",
+        "--minimal-sidebar-foreground",
+        "--minimal-sidebar-primary",
+        "--minimal-sidebar-accent"
+      ],
+      "primitiveFamilies": [
+        "--brand-50..--brand-900",
+        "--background-50..--background-900",
+        "--text-50..--text-900",
+        "--icon-50..--icon-900"
+      ],
+      "semanticRoles": [
+        "--background",
+        "--foreground",
+        "--card",
+        "--card-foreground",
+        "--popover",
+        "--muted",
+        "--muted-foreground",
+        "--primary",
+        "--primary-foreground",
+        "--secondary",
+        "--accent",
+        "--input",
+        "--ring",
+        "--border",
+        "--border-strong",
+        "--success",
+        "--success-subtle",
+        "--success-border",
+        "--success-text",
+        "--destructive",
+        "--destructive-subtle",
+        "--destructive-border",
+        "--destructive-text",
+        "--brand-subtle",
+        "--brand-border",
+        "--chart-1",
+        "--chart-5",
+        "--sidebar",
+        "--sidebar-primary",
+        "--sidebar-accent",
+        "--sidebar-border"
+      ],
+      "aliasLayer": [
+        "--color-surface",
+        "--color-surface-muted",
+        "--color-text",
+        "--color-text-muted",
+        "--color-primary",
+        "--color-primary-foreground",
+        "--color-border",
+        "--color-border-strong",
+        "--color-success-600",
+        "--color-danger-600",
+        "--space-4",
+        "--radius-md"
+      ],
+      "typography": [
+        "--font-sans",
+        "--font-serif",
+        "--font-mono",
+        "--tracking-normal",
+        "--tracking-tight"
+      ],
+      "radius": [
+        "--radius",
+        "--radius-sm",
+        "--radius-lg"
+      ],
+      "shadow": [
+        "--shadow-2xs",
+        "--shadow-xs",
+        "--shadow-sm",
+        "--shadow",
+        "--shadow-md",
+        "--shadow-lg",
+        "--shadow-xl",
+        "--shadow-2xl"
+      ],
+      "spacing": [
+        "--spacing"
+      ]
+    },
+    "componentPlan": [
+      {
+        "slug": "button",
+        "contractKind": "legacy-json",
+        "previewFile": "preview/component-button.html",
+        "contractFile": "components/button.json",
+        "implementedRegions": [
+          "primary/secondary/ghost/danger actions across all pages"
+        ]
+      },
+      {
+        "slug": "card",
+        "contractKind": "legacy-json",
+        "previewFile": "preview/component-card.html",
+        "contractFile": "components/card.json",
+        "implementedRegions": [
+          "document cards, timeline cards, metric cards, entity cards"
+        ]
+      },
+      {
+        "slug": "table",
+        "contractKind": "legacy-json",
+        "previewFile": "preview/component-table.html",
+        "contractFile": "components/table.json",
+        "implementedRegions": [
+          "property tables, member lists, moderation lists"
+        ]
+      },
+      {
+        "slug": "chart",
+        "contractKind": "legacy-json",
+        "previewFile": "preview/component-chart.html",
+        "contractFile": "components/chart.json",
+        "implementedRegions": [
+          "timeline density chart, era distribution chart"
+        ]
+      },
+      {
+        "slug": "navigation",
+        "contractKind": "legacy-json",
+        "previewFile": "preview/component-navigation.html",
+        "contractFile": "components/navigation.json",
+        "implementedRegions": [
+          "top bar, tabs, breadcrumbs, site nav"
+        ]
+      },
+      {
+        "slug": "sidebar",
+        "contractKind": "legacy-json",
+        "previewFile": "preview/component-sidebar.html",
+        "contractFile": "components/sidebar.json",
+        "implementedRegions": [
+          "document tree sidebar, map layer panel, settings rail"
+        ]
+      }
+    ],
+    "tokenFidelity": "strict",
+    "iconAssets": {
+      "source": "assets/icons",
+      "libraryKey": "dl_builtin_minimalist",
+      "projectIconDir": "assets/icons/dl_builtin_minimalist",
+      "renderMethod": "css-mask",
+      "pathTemplate": "../assets/icons/dl_builtin_minimalist/{name}.svg",
+      "totalCount": 40,
+      "availableNames": [
+        "arrow-down",
+        "arrow-left",
+        "arrow-right",
+        "arrow-up",
+        "box",
+        "check",
+        "chevron-down",
+        "chevron-left",
+        "chevron-right",
+        "chevron-up",
+        "chevrons-down-up",
+        "chevrons-up-down",
+        "circle-alert",
+        "circle-check",
+        "circle-minus",
+        "circle-pause",
+        "circle-play",
+        "circle-plus",
+        "circle-question-mark",
+        "external-link",
+        "file",
+        "folder",
+        "folder-open",
+        "funnel",
+        "grip",
+        "heart",
+        "house",
+        "mail",
+        "map-pin",
+        "message-circle-more",
+        "mouse-pointer-click",
+        "pen-line",
+        "send-horizontal",
+        "star",
+        "tag",
+        "thumbs-down",
+        "thumbs-up",
+        "trash-2",
+        "triangle-alert",
+        "user"
+      ]
+    }
+  },
+  "pages": [
+    {
+      "nodeId": "page-workspace",
+      "title": "工作区",
+      "htmlSrc": "pages/workspace.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-timeline-canvas",
+      "title": "时间线画布",
+      "htmlSrc": "pages/timeline-canvas.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-relationship-tree",
+      "title": "关系树",
+      "htmlSrc": "pages/relationship-tree.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-map-shell",
+      "title": "地图外壳",
+      "htmlSrc": "pages/map-shell.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-map-panels",
+      "title": "地图面板",
+      "htmlSrc": "pages/map-panels.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-map-editor",
+      "title": "地图编辑器",
+      "htmlSrc": "pages/map-editor.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-auth",
+      "title": "登录与初始化",
+      "htmlSrc": "pages/auth.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-reset-password",
+      "title": "重置密码",
+      "htmlSrc": "pages/reset-password.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-explore",
+      "title": "公开世界",
+      "htmlSrc": "pages/explore.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-base",
+      "title": "站点基座",
+      "htmlSrc": "pages/site-base.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-home",
+      "title": "站点首页",
+      "htmlSrc": "pages/site-home.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-document",
+      "title": "站点文档页",
+      "htmlSrc": "pages/site-document.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-era",
+      "title": "站点时代页",
+      "htmlSrc": "pages/site-era.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-search",
+      "title": "站点搜索",
+      "htmlSrc": "pages/site-search.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-password",
+      "title": "站点访问闸门",
+      "htmlSrc": "pages/site-password.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-missing",
+      "title": "站点缺失页",
+      "htmlSrc": "pages/site-missing.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-site-filter",
+      "title": "站点筛选器",
+      "htmlSrc": "pages/site-filter.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-maintenance",
+      "title": "系统维护",
+      "htmlSrc": "pages/maintenance.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-error-404",
+      "title": "404 未找到",
+      "htmlSrc": "pages/error-404.html",
+      "viewportMode": "desktop"
+    },
+    {
+      "nodeId": "page-error-500",
+      "title": "500 服务端错误",
+      "htmlSrc": "pages/error-500.html",
+      "viewportMode": "desktop"
+    }
+  ]
+}

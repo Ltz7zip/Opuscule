@@ -129,6 +129,21 @@ def check(condition: bool, label: str, detail: str = "") -> None:
     (ok if condition else bad)(label + (f"（{detail}）" if detail and not condition else ""))
 
 
+def click_tab(page, index: int) -> None:
+    """点面板 0 的第 index 个页签。
+
+    新设计把那条面板标签栏整个收掉了（terminal.css：``.panel-tabs{display:none!important}``，
+    换页走侧栏树 / ⌘K），``page.click`` 会因为元素不可见而 30s 超时。但标签节点还在 DOM 里，
+    ``HTMLElement.click()`` 照样把真实的那段点击处理器跑起来（方向、共享元素起飞、换 active、
+    重绘），所以这里改成程序化派发点击，而不是绕开处理器自己重写一遍切换逻辑。
+    """
+    page.evaluate(
+        """(index) => {
+          const tabs = document.querySelectorAll('.panel[data-panel="0"] .panel-tabs .tab');
+          if (tabs[index]) tabs[index].click();
+        }""", index)
+
+
 # --------------------------------------------------------------------- 探针
 def run(pw) -> None:
     # 这个套件会开很多 context，长时间跑偶发渲染进程崩；这条是廉价的保险
@@ -201,7 +216,9 @@ def run(pw) -> None:
     }""")
     check(not flashed, "§4.1 数据快的时候骨架不闪（opacity 0）", f"opacity={flashed}")
 
-    # ---------------------------------------------------- 工作区：双击并排打开 + 扫描线位置
+    # ---------------------------------------------------- 工作区：双击打开 + 扫描线位置
+    # 新设计下架了"右侧并排再开一个面板"：S.panels 恒为 1 个（workspace.js 只初始化
+    # 一个，窄屏还会回收成 1），双击和单击一样——都在左面板里开一篇（单面板多标签）。
     page.wait_for_timeout(900)
     page.evaluate("""() => {
       const row = document.querySelector('#sbTree .row');
@@ -212,7 +229,8 @@ def run(pw) -> None:
       panels: document.querySelectorAll('#panels .panel').length,
       tabs: document.querySelectorAll('#panels .panel-tabs > .tab').length,
     })""")
-    check(beside["panels"] >= 2, "§6.1 双击文档树在右侧并排打开", str(beside))
+    check(beside["panels"] == 1 and beside["tabs"] >= 1,
+          "§6.1 双击在左面板里打开（右侧并排面板已按新设计下架，单面板多标签）", str(beside))
     # ------------------------------- 从树里点开：张张生效，且不能挡输入
     # 先把前几行各自点开一次
     boxes = page.evaluate("""() => [...document.querySelectorAll('#sbTree .row')].slice(0, 4).map((row) => {
@@ -307,7 +325,17 @@ def run(pw) -> None:
           }
         }""")
         page.wait_for_timeout(1200)
-        page.click('.panel .tab >> nth=1')
+        # 新设计把那条面板标签栏整个收掉了（terminal.css：.panel-tabs{display:none!important}，
+        # 换页面走侧栏树 / ⌘K），所以没法再点 .tab —— 照标签点击那段代码做一次等价的切换编排。
+        tabs_hidden = page.evaluate(
+            "() => getComputedStyle(document.querySelector('.panel-tabs')).display === 'none'")
+        check(tabs_hidden, "§6.4 面板标签栏按新设计收掉（换页走侧栏树 / ⌘K）")
+        next_tab = page.evaluate("""() => {
+          const panel = S.panels[0];
+          return panel.tabs.findIndex((id, i) => i !== panel.active);
+        }""")
+        if next_tab >= 0:
+            click_tab(page, next_tab)
         page.wait_for_timeout(150)          # 遮罩在切换后 ~100ms 内出现、~450ms 撤掉
         scrim_now = page.evaluate("""() => {
           const node = document.querySelector('.xp-tab-scrim');
@@ -330,7 +358,7 @@ def run(pw) -> None:
         }""")
         typing = page.evaluate("""() => {
           const body = document.querySelector('.panel-body');
-          const nodes = [...body.querySelectorAll('.card-title, .badges, .attr-row, .prose > *, .block, .hint')];
+          const nodes = [...body.querySelectorAll('.card-title, .badges, .attr-row, .prose > *, .bn-block-outer, .hint')];
           const started = nodes.filter((n) => n.getAnimations().some((a) => {
             const frames = a.effect && a.effect.getKeyframes ? a.effect.getKeyframes() : [];
             return frames.some((f) => (f.clipPath || '').includes('inset'));
@@ -375,7 +403,7 @@ def run(pw) -> None:
       }
       return panel.active === 0 ? 1 : 0;
     }""")
-    page.click(f".panel .tab >> nth={fly_index}")
+    click_tab(page, fly_index)
     page.wait_for_timeout(150)
     flying = page.evaluate("""() => {
       const ghost = document.querySelector('.xp-fly');
@@ -514,62 +542,6 @@ def run(pw) -> None:
     else:
         notes.append("  · 命令面板里没找到文档条目，§6.3 面板起飞这一项跳过")
 
-    # ---------------------------------------------------- 并排时文档树退让 / 关标签后右边的滑过来
-    page.goto(f"{BASE}/world", wait_until="networkidle")
-    page.wait_for_timeout(1800)
-    before_yield = page.evaluate("""() => {
-      const side = document.querySelector('#sidebar');
-      return {transform: getComputedStyle(side).transform, split: document.body.classList.contains('is-split')};
-    }""")
-    page.evaluate("""() => {
-      if (!S.panels[1]) S.panels[1] = {tabs: [], active: 0};
-      const cards = [...document.querySelectorAll('#sbTree .row')].map((r) => Number(r.dataset.id))
-        .filter((id) => { const n = findNode(id); return n && n.type === 'card'; });
-      // 面板 0 里可能已经开着好几张卡：那就随便挑一张（同一篇在两格并排也是允许的）
-      const other = cards.find((id) => !S.panels[0].tabs.includes(id)) || cards[0];
-      if (other) openDoc(other, 1);
-    }""")
-    page.wait_for_timeout(900)
-    after_yield = page.evaluate("""() => {
-      const side = document.querySelector('#sidebar');
-      const box = side.getBoundingClientRect();
-      return {transform: getComputedStyle(side).transform, split: document.body.classList.contains('is-split'),
-              left: Math.round(box.left)};
-    }""")
-    check(after_yield["split"] and after_yield["transform"] not in ("none", before_yield["transform"]),
-          "§6.2 并排面板时左侧文档树向左退让（机械卡扣）", f"{before_yield} → {after_yield}")
-
-    close_flip = page.evaluate("""() => {
-      const tabs = [...document.querySelectorAll('.panel[data-panel="1"] .panel-tabs > .tab')];
-      const positions = tabs.map((t) => Math.round(t.getBoundingClientRect().left));
-      return {count: tabs.length, positions: positions};
-    }""")
-    if close_flip["count"] >= 1:
-        page.evaluate("""() => {
-          window.__flip = [];
-          const panel = S.panels[1];
-          const id = panel.tabs[panel.active];
-          closeTab(1, id);
-          setTimeout(() => {
-            document.querySelectorAll('.panel[data-panel="1"] .panel-tabs > .tab').forEach((tab) => {
-              tab.getAnimations().forEach((a) => {
-                const frames = a.effect && a.effect.getKeyframes ? a.effect.getKeyframes() : [];
-                if (frames.some((f) => (f.transform || '').includes('translateX'))) window.__flip.push(1);
-              });
-            });
-          }, 60);
-        }""")
-        page.wait_for_timeout(900)
-        flip = page.evaluate("() => window.__flip.length")
-        check(flip >= 0, "§6.2 关闭标签后右边的标签滑过来补位（FLIP）",
-              f"关之前 {close_flip['positions']}；补位动画 {flip} 个")
-    page.evaluate('''() => {
-      if (S.panels[1]) S.panels[1].tabs.length = 0;
-      if (S.panels[0]) S.panels[0].active = Math.max(0, S.panels[0].active);
-      renderPanels();
-    }''')
-    page.wait_for_timeout(400)
-
     # ---------------------------------------------------- 交叠式：旧内容滑出去
     # 标签切换时，"旧的这一格"会被寄存到 body 上的浮层里往左滑出——
     # 只有新的滑进来、旧的瞬间消失的话，看起来就像什么都没发生。
@@ -591,7 +563,7 @@ def run(pw) -> None:
         cdp_anim = None
     # 点**另一个**标签（当前这个点了不算切换，也就不会有交叠）
     active_index = page.evaluate("() => S.panels[0].active")
-    page.click(f".panel .tab >> nth={0 if active_index != 0 else 1}")
+    click_tab(page, 0 if active_index != 0 else 1)
     page.wait_for_timeout(120)
     overlap = page.evaluate("""() => {
       const layer = document.querySelector('.xp-outgoing');
@@ -611,8 +583,11 @@ def run(pw) -> None:
     check(overlap_after == 0, "§6.2 交叠结束后浮层收干净", f"还剩 {overlap_after}")
 
     # ---------------------------------------------------- 工作区：Ripple
+    # 用默认可见的「新建文档」按钮测：原来那颗「类型」(#typesBtn) 现在被收进右下角
+    # 圆形「更多」的浮层里（.sb-menu[hidden]），隐藏元素 rect 为 0，波纹处理器会直接
+    # return——拿它测只会得到假阴性。
     page.evaluate("""() => {
-      const btn = document.querySelector('#typesBtn');
+      const btn = document.querySelector('#newDocBtn');
       const r = btn.getBoundingClientRect();
       btn.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true, cancelable: true, clientX: r.left + 6, clientY: r.top + 6, button: 0, isPrimary: true,
@@ -897,8 +872,9 @@ def run(pw) -> None:
     }""")
     check(not calm["splashShown"], "§13.2 减少动效下没有启动屏", str(calm))
     check(not calm["sweepShown"], "§13.2 减少动效下没有扫描线", str(calm))
+    # 同样用默认可见的「新建文档」按钮（#typesBtn 已收进浮层，rect 为 0 会假通过）
     rm.evaluate("""() => {
-      const btn = document.querySelector('#typesBtn');
+      const btn = document.querySelector('#newDocBtn');
       const r = btn.getBoundingClientRect();
       btn.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true, cancelable: true, clientX: r.left + 6, clientY: r.top + 6, button: 0, isPrimary: true,
@@ -925,7 +901,7 @@ def run(pw) -> None:
       }
       return panel.active === 0 ? 1 : 0;
     }""")
-    rm.click(f".panel .tab >> nth={rm_index}")
+    click_tab(rm, rm_index)
     rm.wait_for_timeout(120)
     check(rm.evaluate("() => document.querySelectorAll('.xp-fly').length") == 0,
           "§13.2 减少动效下标签名不飞（共享元素让路）")
@@ -953,7 +929,10 @@ def run(pw) -> None:
     check(wiki_press["exists"] and wiki_press["published"] and wiki_press["site"],
           "§5.1 顶栏「维基」知道站点地址（发过就跳过去）", str(wiki_press))
     if wiki_press["site"]:
-        wk.click('#tbNav >> text=维基')
+        # 视图药丸现在挂在侧栏（.sb-pills），且**非当前视图那颗的文字被收起来**
+        # （workspace.css：.sb-pills .tb-view > span{display:none}），所以按文字点会
+        # 命中不可见的 span —— 改按 data-nav 钩子点那颗可见的药丸。
+        wk.click('#tbNav [data-nav="wiki"]')
         wk.wait_for_timeout(2500)
         landed = wk.evaluate("""() => {
           const brand = document.querySelector('.nav-brand');

@@ -14,3 +14,5 @@ media/
 # 上游地图库的依赖与中间产物（构建结果已落到 static/map/vendor，入库的是那个）
 third_party/fantasy-map-generator/node_modules/
 third_party/fantasy-map-generator/dist/
+# 正文编辑器孤岛的依赖（构建结果已落到 static/editor/dist，入库的是那个）
+frontend/editor/node_modules/

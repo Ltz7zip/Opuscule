@@ -660,15 +660,6 @@ input[type="range"] {
   transform: scale(0.9);
 }
 
-/* 面板分割条：抓住时亮起来 */
-.panel-grip {
-  transition: background-color var(--pf-t) var(--pf-ease),
-              box-shadow var(--pf-t) var(--pf-ease);
-}
-.panel-grip:hover {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mn-accent, #0066cc) 34%, transparent);
-}
-
 /* 顶栏 / 侧栏 / 工作区三张卡：进场时轻微浮起（它们是常驻外壳，不在 #panels 里） */
 .sidebar,
 .topbar,

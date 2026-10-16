@@ -474,17 +474,6 @@ html.xp-splash .osplash {
   to   { translate: 0 var(--xp-sweep-h, 100%); opacity: 0.2; }
 }
 
-/* 并排面板"挤压"交叠：右面板滑入、左面板微微收一下（机械卡扣） */
-.panel.is-squeezed { animation: xp-squeeze 350ms var(--xp-ease-spring); }
-@keyframes xp-squeeze {
-  from { scale: 0.98 1; }
-  to   { scale: 1 1; }
-}
-.panel[data-panel='1'].is-sliding-in { animation: xp-panel-in 350ms var(--xp-ease-spring) both; }
-@keyframes xp-panel-in {
-  from { opacity: 0; translate: 30px 0; }
-}
-
 /* 文档树 → 编辑区：工作区里不用 View Transition（那一层快照在 Chrome 里
    不可穿透，飞行期间的点击会丢——文档树恰恰是高频点击的地方）。
    标题"落地"的那束光由 Opus.switchFx.titleArrive 用 WAAPI 播，不挡输入。
@@ -787,6 +776,14 @@ html { scroll-behavior: smooth; }
   border: 1px solid color-mix(in srgb, var(--tx-green, #3ddc97) 42%, transparent);
   /* 设计的强光晕 + 一点落地阴影（深色画布上要能浮起来） */
   box-shadow: var(--xp-glow-strong), 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* 命令面板空态：搜不到任何条目时替换掉空白的一片（不可点，别被当成结果行） */
+.pl-empty {
+  padding: 16px 12px;
+  color: var(--tx-mute, var(--ink-dim, #6b6b6b));
+  font-size: 12.5px;
+  cursor: default;
 }
 
 /* ==========================================================================
@@ -1318,6 +1315,13 @@ html { scroll-behavior: smooth; }
   background: var(--xp-sunken, rgba(0, 0, 0, 0.35)); border-radius: 8px;
   font-family: var(--xp-mono, ui-monospace, monospace); font-size: 11px; color: var(--xp-dim, #a9a49c);
 }
+/* 老卡降级时顺带把正文纯文本读出来（只读，不可编辑） */
+.editor-fallback .degrade-text {
+  max-height: 260px; overflow: auto; margin: 0 0 12px; padding: 10px 12px;
+  background: var(--xp-sunken, rgba(0, 0, 0, 0.35)); border-radius: 8px;
+  font-size: 12.5px; line-height: 1.7; color: var(--xp-dim, #a9a49c);
+  white-space: pre-wrap; word-break: break-word;
+}
 
 /* 第 3、5 步：标签切换时编辑区上那层 blur(2px) 遮罩（独立元素，不挡输入） */
 .panel-body { position: relative; }
@@ -1353,8 +1357,13 @@ body[data-surface='workspace']:not(.is-embed) .app {
    飞完再淡回来——屏幕上只留"正在飞的那一份"。 */
 .panel .tab.is-fly-away .t-name,
 #sbTree .row.is-fly-away .r-name { opacity: 0; }
-.panel .tab .t-name,
-#sbTree .row .r-name { transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+.panel .tab .t-name { transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+/* 侧栏标题还要跟着按钮的进出挪出右内边距，所以这里多带一条 padding-right 过渡，
+   否则 hover 那一刻标题会"缩"一下（见下面 .r-acts 那一段）。 */
+#sbTree .row .r-name {
+  transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              padding-right 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .panel .tab .t-name,
@@ -1362,25 +1371,18 @@ body[data-surface='workspace']:not(.is-embed) .app {
 }
 
 /* ==========================================================================
-   并排面板时的"机械卡扣"
+   侧栏的横向过渡
    --------------------------------------------------------------------------
-   右侧多开一格时，左侧文档树跟着向左退让一点点，和编辑区那下 squeeze 呼应。
-   用 transform：侧栏宽度是用户自己拖出来的（--sidebar-w），不能替他改。
+   窄屏下侧栏是抽屉（responsive.css 用 translateX(-102%) 把它移出屏幕），
+   这条过渡负责它滑进滑出；缺了它抽屉是一下子跳出来的。
    ========================================================================== */
 .sidebar {
   transition: transform 220ms cubic-bezier(0.34, 1.2, 0.64, 1);
   will-change: transform;
 }
-body.is-split .sidebar { transform: translateX(-12px); }
-body.is-split .sidebar::after {
-  content: ''; position: absolute; top: 0; right: -12px; width: 12px; height: 100%;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.28), transparent);
-  pointer-events: none;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
-  body.is-split .sidebar { transform: none; }
 }
 
 /* ==========================================================================
@@ -1402,4 +1404,90 @@ body.is-split .sidebar::after {
 
 @media (prefers-reduced-motion: reduce) {
   .xp-fly { display: none; }
+}
+
+/* ==========================================================================
+   悬停才浮出的行内操作
+   --------------------------------------------------------------------------
+   Notion 的两处"要用的时候它才出现"：
+     · 侧栏文档树的行（页面行 hover 出现 ⋯，文件夹再多一个 ＋）
+     · 卡片页头（hover 标题附近才浮出 添加图标 / 添加封面 / 添加评论）
+   平时让位给内容，要用的时候伸手就能碰到——这是"易上手"的一半：
+   不用记住右键，也不用先选中。
+   ========================================================================== */
+
+/* --- 侧栏行：⋯ 更多 / 文件夹 ＋ --------------------------------------- */
+#sbTree .row .r-acts {
+  position: absolute;
+  right: 4px; top: 50%;
+  transform: translateY(-50%);
+  display: flex; align-items: center; gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  /* 跟着行的底色走：行 hover 变色时这块也跟着变，标题从按钮底下穿过也不会露馅 */
+  background-color: inherit;
+  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+#sbTree .row:hover .r-acts,
+#sbTree .row:focus-within .r-acts,
+#sbTree .row.is-active .r-acts {
+  opacity: 1;
+  pointer-events: auto;
+}
+#sbTree .row .r-act {
+  flex: 0 0 auto;
+  width: 20px; height: 20px; padding: 0;
+  display: inline-grid; place-items: center;
+  font: inherit; font-size: 13px; line-height: 1;
+  color: var(--ink-soft);
+  background: transparent; border: 0;
+  border-radius: var(--tx-r-sm, 4px);
+  cursor: pointer;
+}
+#sbTree .row .r-act:hover {
+  color: var(--ink);
+  background: var(--tx-canvas-raised);
+}
+/* 标题的右内边距：.r-name 是 flex:1 撑满整行的，而 .r-acts 绝对定位在行右侧，
+   长标题的尾部会真的被按钮盖住（不是盒子叠着、是真被遮）。所以按钮一出现，
+   就给标题让出对应的宽度：文档行 1 枚 ⋯（20px + 右 4px），文件夹行多一枚 ＋（再 +22px）。 */
+#sbTree .row:hover .r-name,
+#sbTree .row:focus-within .r-name,
+#sbTree .row.is-active .r-name { padding-right: 26px; }
+#sbTree .row.is-folder:hover .r-name,
+#sbTree .row.is-folder:focus-within .r-name,
+#sbTree .row.is-folder.is-active .r-name { padding-right: 48px; }
+/* 触屏没有 hover——别把功能藏起来 */
+@media (hover: none) {
+  #sbTree .row .r-acts { opacity: 1; pointer-events: auto; }
+  #sbTree .row .r-name { padding-right: 26px; }
+  #sbTree .row.is-folder .r-name { padding-right: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sbTree .row .r-acts { transition: none; }
+}
+
+/* --- 卡片页头：添加图标 / 添加封面 / 添加评论 --------------------------- */
+/* .page-actions 排在 .card-head **前面**（DOM 顺序），用不了兄弟选择器。
+   只能从共同的父级 .card-view 往上反查：鼠标进到标题区，动作行才淡进来。
+   故意不写 pointer-events:none —— 否则"hover 它自己才出现"永远触发不了；
+   键盘 Tab 进来靠 :focus-within 兜住。 */
+.page-actions {
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card-view:has(.card-head:hover) .page-actions,
+.card-view:has(.card-head:focus-within) .page-actions,
+.page-actions:hover,
+.page-actions:focus-within {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: none) {
+  .page-actions { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-actions { transition: none; }
 }

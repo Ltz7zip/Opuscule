@@ -113,11 +113,11 @@
         </nav>
 
         {# 「设置你的工作空间」进度卡：4 项检查由当前世界数据推导 #}
-        <button class="sb-setup" id="sbSetup" type="button">
+        <div class="sb-setup" id="sbSetup" role="group" aria-label="设置你的工作空间">
           <span class="su-line"><b>设置你的工作空间</b><span class="su-count" id="suCount">0 / 4</span></span>
           <span class="su-bar" aria-hidden="true"><i id="suBar" style="width:0%"></i></span>
-          <span class="su-list" id="suList"></span>
-        </button>
+          <div class="su-list" id="suList"></div>
+        </div>
 
         <div class="sb-tree" id="sbTree" role="tree">
           <!-- 骨架屏（DESIGN.md）：首帧就在，boot() 拿到文档树后 renderTree() 会把它换掉 -->
@@ -213,6 +213,16 @@
     <button type="button" data-mobile="suggest">建议</button>
     <button type="button" data-mobile="user">我的</button>
   </nav>
+
+  <!-- 正文编辑器孤岛：frontend/editor 的构建产物（React + BlockNote），已提交进仓库。
+       P3 起正文只有这一条渲染路径，没有 ?editor= 开关：workspace.js 在第一次要画正文时
+       按需注入这两个资源（loadEditorIsland），随后从 window.OpusEditorIsland 取挂载入口。 -->
+  <script>
+    window.OPUS_EDITOR_ASSETS = {
+      js: "{% static 'editor/dist/assets/editor.js' %}?v={{ static_version }}",
+      css: "{% static 'editor/dist/assets/editor.css' %}?v={{ static_version }}"
+    };
+  </script>
 
   <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
   <script src="{% static 'workspace.js' %}?v={{ static_version }}"></script>

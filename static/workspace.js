@@ -69,19 +69,31 @@ function renderSetupCard() {
   const walk = (nodes) => (nodes || []).forEach((n) => { all.push(n); walk(n.children); });
   walk(S.tree);
   const has = (t) => all.some((d) => d && d.type === t);
+  // 每一项都带一个"点了就能做"的动作——清单本身就是入口，不再是四行只读的待办。
   const checks = [
-    ['建第一张卡片', has('card')],
-    ['建一条时间线', has('timeline')],
-    ['建一张世界地图', has('map')],
-    ['发布只读站点', !!(S.world && S.world.published)],
+    ['建第一张卡片', has('card'), () => guidedTemplatesDialog()],
+    ['建一条时间线', has('timeline'), () => createDoc('timeline')],
+    ['建一张世界地图', has('map'), () => createDoc('map')],
+    ['发布只读站点', !!(S.world && S.world.published), () => publishDialog()],
   ];
   const done = checks.filter((c) => c[1]).length;
   const count = $('#suCount');
   if (count) count.textContent = `${done} / ${checks.length}`;
   const bar = $('#suBar');
   if (bar) bar.style.width = `${Math.round((done / checks.length) * 100)}%`;
+  // 四步都做完就收起来：侧栏最上面那块位置留给文档树（Notion 的 onboarding 卡也是完成即隐）
+  const setup = $('#sbSetup');
+  if (setup) setup.hidden = done >= checks.length;
   list.innerHTML = '';
-  checks.forEach(([label, ok]) => list.appendChild(el('span', ok ? 'is-done' : null, label)));
+  checks.forEach(([label, ok, run]) => {
+    const item = el(ok ? 'span' : 'button', `su-item${ok ? ' is-done' : ''}`, label);
+    if (!ok) {
+      item.type = 'button';
+      item.title = `${label} —— 点这里开始`;
+      item.addEventListener('click', run);
+    }
+    list.appendChild(item);
+  });
 }
 const VT_LABEL = {
   text: '文本', select: '单选', multiselect: '多选', number: '数字',
@@ -176,11 +188,25 @@ function toast(message, ms = 1900) {
   toast._t = setTimeout(() => { box.hidden = true; }, ms);
 }
 
-/** 卡片写回的统一处理：内容与修订号一起更新（漏了修订号下一次写就会被 409 拦）。 */
+/** 卡片写回的统一处理：内容与修订号一起更新（漏了修订号下一次写就会被 409 拦）。
+ *  document 必须**就地合并**而不是整体替换：标题/封面/图标等就地编辑的闭包
+ *  捕获的是旧的 document 对象，一旦被换掉，闭包写入就落在孤儿上，界面会弹回旧值。 */
 function applyCardResponse(entry, payload) {
   if (!entry || !payload) return;
-  if (payload.card) entry.card = payload.card;
-  if (payload.document) entry.document = payload.document;
+  if (payload.card) {
+    const prev = entry.card;
+    const next = payload.card;
+    // 文档接口（改标题 / 属性 / 别名…）回的 card 不带编辑器文档，
+    // 整体替换会把孤岛里那份 blocks_doc 抹掉 → 就地补回来。
+    if (prev && next.blocks_doc === undefined && Array.isArray(prev.blocks_doc)) {
+      next.blocks_doc = prev.blocks_doc;
+    }
+    entry.card = next;
+  }
+  if (payload.document) {
+    if (entry.document) Object.assign(entry.document, payload.document);
+    else entry.document = payload.document;
+  }
   if (payload.revision !== undefined) entry.revision = payload.revision;
 }
 
@@ -366,6 +392,15 @@ async function api(path, { method = 'GET', body, form } = {}) {
     noteApiFailure(response.status);
     throw new Error(message);
   }
+  // 写响应若带顶层 revision，就地回写本地账本。
+  // 服务端每次改动都会 bump revision（cards/documents 写接口都在顶层返回新值），
+  // 而多数调用点只关心成功与否、直接丢弃响应体；不在这里回写，下一次写就会
+  // 拿旧 revision 被 409 当成"被别人改过"拦下，内容会静默丢失。
+  if (writing && payload && payload.revision !== undefined) {
+    const match = /^\/api\/world\/(?:cards|documents)\/(\d+)/.exec(path);
+    const entry = match && S.docs.get(Number(match[1]));
+    if (entry) entry.revision = payload.revision;
+  }
   api._failures = 0;
   return payload;
 }
@@ -471,7 +506,6 @@ async function boot() {
   const hash = new URLSearchParams((location.hash || '').replace(/^#/, ''));
   const embedId = Number(document.body.dataset.embedDoc || 0);
   const first = Number(hash.get('doc')) || embedId || null;
-  const second = Number(hash.get('doc2')) || null;
   const preload = first ? fetchEntry(first).catch(() => null) : null;
 
   const data = await api(stateUrl());
@@ -515,12 +549,6 @@ async function boot() {
     const late = new URLSearchParams((location.hash || '').replace(/^#/, ''));
     const wanted = Number(late.get('doc')) || 0;
     await openDoc(wanted && findNode(wanted) ? wanted : firstOpenable(S.tree));
-  }
-  if (second) {
-    // 并排面板：每个标签页各自带一组可拖拽面板
-    S.panels.push({ tabs: [], active: -1 });
-    S.pendingSqueeze = true;
-    await openDoc(second, 1);
   }
   restoreViewState();          // 回到上次读到哪儿
   // 启动屏等这一句：数据到位、首屏画完才收
@@ -717,12 +745,6 @@ function openDocFromTree(node, row) {
   openDoc(node.id, 0, { pushHistory: true, fromTree: true });
 }
 
-/** 双击文档树：并排分栏（双标签页）功能已去掉，就在当前面板打开。 */
-async function openDocBeside(id) {
-  await openDoc(id, 0);
-  if (window.innerWidth < 900) closeSidebarDrawer();
-}
-
 function treeRow(node, depth) {
   const row = el('div', `row depth-${Math.min(depth, 3)}`);
   row.dataset.id = node.id;
@@ -767,16 +789,34 @@ function treeRow(node, depth) {
     }
   }
 
+  // hover 才浮出的行内操作（Notion：页面行 hover 出现 ⋯）。文件夹额外给一个「＋」直接建子项。
+  // 绝对定位在行右侧，不参与 flex 排版，标题短也不会被挤。
+  const acts = el('div', 'r-acts');
+  if (isFolder) {
+    const addChild = el('button', 'r-act', '＋');
+    addChild.type = 'button';
+    addChild.title = `在「${node.name}」里新建`;
+    addChild.setAttribute('aria-label', `在「${node.name}」里新建`);
+    addChild.addEventListener('click', (event) => { event.stopPropagation(); createDoc('card', node.id); });
+    acts.appendChild(addChild);
+  }
+  const more = el('button', 'r-act', '⋯');
+  more.type = 'button';
+  more.title = '更多操作（重命名 / 复制 / 置顶 / 隐藏 / 删除…）';
+  more.setAttribute('aria-label', '更多操作');
+  more.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const rect = more.getBoundingClientRect();
+    docContextMenu({ clientX: rect.left, clientY: rect.bottom + 4 }, node);
+  });
+  acts.appendChild(more);
+  row.appendChild(acts);
+
   // 单击：在左面板打开。标题从树里"飞"进编辑区——
   // 只在文档已经加载过（没有 await）时才走 View Transition，否则直接开，别拿动画换一次卡顿。
   row.addEventListener('click', (event) => {
-    if (event.detail > 1) return;              // 双击交给下面的处理器
+    if (event.detail > 1) return;              // 双击的第二下不重复打开一次
     openDocFromTree(node, row);
-  });
-  // 双击：在右边并排打开一格，以点击位置为圆心径向铺开
-  row.addEventListener('dblclick', (event) => {
-    event.preventDefault();
-    openDocBeside(node.id, event.clientX, event.clientY);
   });
   row.addEventListener('contextmenu', (event) => {
     event.preventDefault();
@@ -897,11 +937,11 @@ async function openDoc(id, panelIndex = 0, { focus = true, pushHistory = true, p
   }
 }
 
-/** 把当前文档写进地址栏（保留 panel / tl / doc2 这些开关），这样链接可分享、前进后退可用。 */
+/** 把当前文档写进地址栏（保留 panel / tl 这些开关），这样链接可分享、前进后退可用。 */
 function syncHash(id) {
   const params = new URLSearchParams((location.hash || '').replace(/^#/, ''));
   let hash = `#doc=${id}`;
-  ['panel', 'tl', 'doc2', 'event'].forEach((key) => {
+  ['panel', 'tl', 'event', 'editor'].forEach((key) => {
     if (params.get(key)) hash += `&${key}=${params.get(key)}`;
   });
   if (location.hash !== hash) {
@@ -978,27 +1018,11 @@ function closeTab(panelIndex, id) {
 
 function renderPanels() {
   const host = $('#panels');
-  // 面板要重建了：先把现有正文/标题节点标记为"退休"，再清空并重画。
-  // 这样它们接下来触发的 input / blur 保存不会再拿旧内容覆盖掉新结构
-  // （斜杠菜单刚写好的 <h1> 要小心别被 700ms 后的防抖保存盖回去）。
-  $$('.block-text, .block-title', host).forEach((node) => { node.dataset.retired = '1'; });
   parkLiveEmbeds(host);                 // 嵌入的 iframe 先"寄存"，别让它随面板一起销毁
   parkOutgoingPanel(host);              // 旧内容滑出去，新内容滑进来（交叠）
   host.innerHTML = '';
-  // 重渲染时清掉可能还挂在 body 上的 @ 提及浮层与格式条（否则会越积越多）
-  $$('.mention-pop').forEach((node) => node.remove());
-  formatBarHide();
   renderBreadcrumb();
-  const visible = S.panels.filter((p, i) => i === 0 || p.tabs.length);
   S.panels.forEach((panel, index) => {
-    if (index > 0 && !panel.tabs.length) return;
-    if (index > 0) {
-      const grip = el('div', 'panel-grip');
-      grip.title = '拖动改变分割 · 双击复位';
-      grip.addEventListener('dblclick', () => { S.panelSplit = 50; renderPanels(); });
-      grip.addEventListener('mousedown', startGripDrag);
-      host.appendChild(grip);
-    }
     const pane = el('section', 'panel');
     pane.dataset.panel = String(index);
     const tabs = el('div', 'panel-tabs');
@@ -1095,13 +1119,8 @@ function renderPanels() {
       // 切换 / 首次打开这一格：内容从一侧轻轻滑进来 + 扫描线揭开。
       // 只在"真的换了标签"或"这一格第一次画出来"时走一次；renderPanels() 的其它调用不触发。
       if (typeof Opus !== 'undefined') {
-        const radial = S.pendingRadial && S.pendingRadial.panel === index ? S.pendingRadial : null;
         const pending = S.tabSwitch && S.tabSwitch.panel === index ? S.tabSwitch : null;
-        if (radial) {
-          // 双击文档树：以点击位置为圆心径向铺开，就不再叠扫描线了
-          S.pendingRadial = null;
-          Opus.switchFx.radial(pane, radial.x, radial.y);
-        } else if (pending || entry.justLoaded) {
+        if (pending || entry.justLoaded) {
           Opus.switchFx.overlap(body, pending ? pending.dir : 'forward');
           Opus.switchFx.sweep();
           Opus.switchFx.treePulse(activeId);
@@ -1157,10 +1176,6 @@ function renderPanels() {
   sweepLiveEmbeds();                    // 这一轮没被认领的嵌入（文档关了）才真销毁
   const hasTabs = S.panels.some((p) => p.tabs.length);
   host.classList.toggle('has-tabs', hasTabs);
-  // 机械卡扣：并排时左侧文档树跟着向左退让一点，跟 squeeze 的"左面板被挤一下"呼应。
-  // 用 transform 而不是改宽度——宽度是用户拖出来的（--sidebar-w），不能替他改。
-  const split = S.panels.filter((p) => p.tabs.length).length > 1;
-  document.body.classList.toggle('is-split', split);
   // 没有标签页时把面板整体藏掉：否则空面板会盖在空状态上面，按钮点不动
   host.classList.toggle('is-empty', !hasTabs);
   const workspace = $('#workspace');
@@ -1168,15 +1183,6 @@ function renderPanels() {
   $('#emptyHint').hidden = hasTabs;
 
   if (!editable()) disableEditing();
-  if (S.panels.length > 1) {
-    const first = host.querySelector('.panel');
-    if (first && S.panelSplit) first.style.flex = `0 0 ${S.panelSplit}%`;
-    // 并排面板第一次出现：左面板被"挤"一下、右面板滑进来
-    if (S.pendingSqueeze && typeof Opus !== 'undefined') {
-      S.pendingSqueeze = false;
-      Opus.switchFx.squeeze(Array.prototype.slice.call(host.querySelectorAll('.panel')));
-    }
-  }
 }
 
 /* ------------------------------------------------------- 活着的嵌入 iframe */
@@ -1231,7 +1237,7 @@ function outgoingStage() {
  */
 function parkOutgoingPanel(host) {
   if (typeof Opus === 'undefined' || Opus.reduced()) return;
-  if (!S.tabSwitch && !S.pendingSqueeze) return;
+  if (!S.tabSwitch) return;
   const pane = host.querySelector('.panel');
   const body = pane && pane.querySelector('.panel-body');
   if (!body || !body.firstChild) return;
@@ -1267,7 +1273,28 @@ function parkLiveEmbeds(host) {
 function sweepLiveEmbeds() {
   const stage = liveStage();
   Array.prototype.slice.call(stage.children).forEach((node) => {
-    if (LIVE_EMBEDS.get(node.dataset.liveKey) === node) LIVE_EMBEDS.delete(node.dataset.liveKey);
+    const key = node.dataset.liveKey;
+    // 这一轮没被认领 = 文档关掉了：先把还在防抖里等着的改动写回去，再销毁。
+    // saveEditorDoc 在第一个 await 之前就同步取走了文档，所以先 flush 后销毁是安全的。
+    const pending = S.pendingFns && S.pendingFns.get(key);
+    if (pending) {
+      clearTimeout(S.pending.get(key));
+      S.pending.delete(key);
+      S.pendingFns.delete(key);
+      try { pending(); } catch (error) { /* 一处失败不拦其它 */ }
+    }
+    if (LIVE_EMBEDS.get(key) === node) LIVE_EMBEDS.delete(key);
+    if (node.__islandHandle) {
+      // 走孤岛自己的 unmount 而不是 handle.destroy：unmount 会连带把孤岛内部的
+      // 容器表（islands: container → handle）里这一项删掉，destroy 只拆 React 树，
+      // 表项会一直留着——每关一张卡就漏一条。
+      const island = window.OpusEditorIsland;
+      try {
+        if (island && typeof island.unmount === 'function') island.unmount(node);
+        else node.__islandHandle.destroy();
+      } catch (error) { /* 已经拆过了 */ }
+      node.__islandHandle = null;
+    }
     node.remove();
   });
 }
@@ -1284,22 +1311,412 @@ function liveEmbed(key, factory) {
   return node;
 }
 
-function startGripDrag(event) {
-  event.preventDefault();
-  const host = $('#panels');
-  const rect = host.getBoundingClientRect();
-  const first = host.querySelector('.panel');
-  const move = (e) => {
-    const pct = clamp(((e.clientX - rect.left) / rect.width) * 100, 22, 78);
-    S.panelSplit = pct;
-    if (first) first.style.flex = `0 0 ${pct}%`;
-  };
-  const up = () => {
-    document.removeEventListener('mousemove', move);
-    document.removeEventListener('mouseup', up);
-  };
-  document.addEventListener('mousemove', move);
-  document.addEventListener('mouseup', up);
+/* ====================================================== 正文编辑器孤岛
+ * 正文区是全工作区唯一的例外：它由 React（BlockNote）渲染，其余部分仍是原生 DOM。
+ *
+ * 能共存靠的是上面那套 is-live-embed 机制：renderPanels() 重建面板前先把带这个类的
+ * 节点搬进 #panelStage（DOM 不销毁 → React root、编辑器状态、光标都在），下一帧由
+ * renderCardBody() 按 key 认领回去。于是"每帧重建面板"这件事一行都不用改。
+ *
+ * 文档的权威存储是后端 Card.blocks_doc（BlockNote 原生 JSON）；保存走
+ * PUT /api/world/cards/<id> {blocks_doc}，blocks / body 全由服务端派生。
+ *
+ * 正文一律走孤岛（P3 起没有第二条渲染路径：旧的 vanilla 块渲染器已拆掉）。
+ * 孤岛起不来 / 这一篇搬不进孤岛时，由 renderCardBody() 就地给一块只读降级提示。
+ */
+const EDITOR_ISLAND_PREFIX = 'editor:';
+let editorIslandLoading = null;     // 模块单例 Promise，避免并发重复注入 <script>
+
+function editorIslandKey(documentId) {
+  return `${EDITOR_ISLAND_PREFIX}${documentId}`;
+}
+
+/** 按需注入孤岛的 css / js（只注入一次），解析为 window.OpusEditorIsland。 */
+function loadEditorIsland() {
+  if (window.OpusEditorIsland) return Promise.resolve(window.OpusEditorIsland);
+  if (editorIslandLoading) return editorIslandLoading;
+  const assets = window.OPUS_EDITOR_ASSETS;
+  if (!assets || !assets.js) return Promise.reject(new Error('编辑器资源未配置'));
+
+  editorIslandLoading = new Promise((resolve, reject) => {
+    if (assets.css && !document.querySelector('link[data-opus-editor]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = assets.css;
+      link.dataset.opusEditor = '1';
+      document.head.appendChild(link);
+    }
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = assets.js;
+    script.dataset.opusEditor = '1';
+    script.addEventListener('load', () => {
+      if (window.OpusEditorIsland) resolve(window.OpusEditorIsland);
+      else reject(new Error('编辑器脚本加载完成却没有导出'));
+    });
+    script.addEventListener('error', () => reject(new Error('编辑器脚本加载失败')));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    editorIslandLoading = null;      // 允许以后重试（比如部署修好了）
+    throw error;
+  });
+  return editorIslandLoading;
+}
+
+/** 正文区：一律走孤岛（React + BlockNote）。进不了孤岛时给一块只读降级提示。
+ *  返回 .blocks 元素——renderCard 还要看它是不是孤岛，来决定底部插入条。 */
+function renderCardBody(entry, card) {
+  const blocks = el('div', 'blocks');
+
+  // 服务端 editor_doc() 搬不动这一篇（未知块 / 隐藏块 / 折叠引用 / 块内评论…）时返回
+  // null。P3 之后正文没有第二条渲染路径，只能降级——数据原样留着，可导出保底。
+  if (!card || !Array.isArray(card.blocks_doc)) {
+    blocks.classList.add('is-degraded');
+    blocks.appendChild(degradeBlock(entry, card, 'legacy'));
+    return blocks;
+  }
+
+  const key = editorIslandKey(entry.document.id);
+  blocks.classList.add('is-island');
+
+  let holder = LIVE_EMBEDS.get(key);
+  if (holder) {
+    blocks.appendChild(holder);          // 认领：React root 还在，绝不重复 mount
+    syncEditorIsland(entry, holder);
+    return blocks;
+  }
+
+  holder = el('div', 'editor-island is-live-embed');
+  holder.dataset.liveKey = key;
+  holder.__seenDocRef = card.blocks_doc;   // 最近一次观察到的文档引用（外部改动靠它认）
+  blocks.appendChild(holder);
+  LIVE_EMBEDS.set(key, holder);
+
+  loadEditorIsland().then((island) => {
+    if (holder.__islandHandle) return;
+    holder.__islandHandle = island.mount(holder, {
+      doc: holder.__seenDocRef,
+      readonly: !editable(),
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+      onReady: () => {
+        // 挂载是异步的：onReady 时 __islandHandle 已经赋好值，但 React 同步 flush
+        // 的极端情况下可能是 null，所以放着别动。
+        const handle = holder.__islandHandle;
+        if (!handle) return;
+        holder.__lastSaved = JSON.stringify(handle.getDoc());
+        applyIslandMentions(entry, holder);
+      },
+      onChange: () => scheduleEditorSave(entry),
+      // 重块（图片 / 书签 / 嵌入卡 / 集合）孤岛里只画一个空容器，DOM 交给这边补；
+      // 新建重块则反过来——孤岛斜杠菜单点了重块，走 prepareHeavyBlock 由这边弹旧对话框问数据。
+      // 端口形状要和孤岛对齐：mount 读的是 options.bridge.*。
+      bridge: {
+        renderHeavyBlock: (container, kind, data) => renderIslandHeavyBlock(entry, container, kind, data),
+        prepareHeavyBlock: (kind) => prepareIslandHeavyBlock(entry, kind),
+      },
+    });
+  }).catch(() => {
+    // 孤岛资源起不来（网络 / 部署）：就地换成降级提示。这里**不能** renderPanels()——
+    // 那会重建面板再挂一次，加载一直失败就成了死循环。
+    LIVE_EMBEDS.delete(key);
+    holder.remove();
+    blocks.classList.remove('is-island');
+    blocks.classList.add('is-degraded');
+    blocks.appendChild(degradeBlock(entry, card, 'mount'));
+  });
+
+  return blocks;
+}
+
+/** 正文降级块：这一篇进不了孤岛时，说清原因、给条退路，别让正文区留块白板。
+ *  'legacy' = 老结构里有现在的编辑器表达不了的块（隐藏块 / 块内评论 / 折叠引用…）；
+ *  'mount'  = 编辑器资源没能加载（网络 / 部署），重试一次通常就好。 */
+function degradeBlock(entry, card, reason) {
+  const box = el('div', 'editor-fallback');
+  box.setAttribute('role', 'status');
+  const art = el('div', 'ef-art');
+  art.appendChild(icon('circle-alert', 26));
+  box.appendChild(art);
+  if (reason === 'legacy') {
+    box.appendChild(el('b', null, `《${entry.document.name}》用的是旧版排版`));
+    box.appendChild(el('p', 'hint',
+      '这篇里有些块现在的编辑器还表达不了（隐藏块 / 块内评论 / 折叠引用等），为保数据不动它，暂时只读。'));
+    // 正文纯文本照旧读得出来（服务端派生，已滤掉隐藏块）——数据没丢，只是不能在这里改。
+    const text = card && typeof card.body === 'string' ? card.body.trim() : '';
+    if (text) {
+      const pre = el('div', 'degrade-text');
+      pre.textContent = text;
+      box.appendChild(pre);
+    }
+  } else {
+    box.appendChild(el('b', null, `《${entry.document.name}》的编辑器没能加载`));
+    box.appendChild(el('p', 'hint', '编辑器资源没起来（网络或部署问题），重试一下通常就好了。'));
+  }
+  const actions = el('div', 'form-row');
+  if (reason !== 'legacy') actions.appendChild(button('重试', '', () => renderPanels(), true));
+  const link = el('a', 'mini-btn', '导出这一篇');
+  link.href = `/api/world/documents/${entry.document.id}/export`;
+  link.rel = 'noopener';
+  actions.appendChild(link);
+  box.appendChild(actions);
+  return box;
+}
+
+/** 孤岛里的重块：React 侧只给一个空容器，真正的 DOM 在这里用旧渲染器画进去。
+ *
+ *  data 的形状由孤岛的 HeavyMount 定（见 frontend/editor/src/main.jsx）：
+ *  图片/书签是 { url, caption }，嵌入卡是 { document }，集合是 { settings: JSON 字符串 }。
+ *
+ *  一期只读：不挂任何写事件——改地址 / 换图 / 改单元格 / 拖看板一律不做。
+ *  仅有的"交互"是嵌入卡的「打开」和书签链接，二者都是跳转，不动数据。 */
+function renderIslandHeavyBlock(entry, container, kind, data) {
+  container.innerHTML = '';
+  const payload = data || {};
+  if (kind === 'image') {
+    const url = payload.url || '';
+    const caption = payload.caption || '';
+    const figure = el('figure', 'block-image');
+    if (url) {
+      const img = el('img', 'blk-img');
+      img.src = url;
+      img.alt = caption || '图片';
+      img.loading = 'lazy';
+      img.addEventListener('error', () => figure.classList.add('is-broken'));
+      figure.appendChild(img);
+      if (caption) figure.appendChild(el('figcaption', 'blk-img-cap is-static', caption));
+    } else {
+      figure.appendChild(el('div', 'blk-img-empty', '（这张图还没有地址）'));
+    }
+    container.appendChild(figure);
+    return;
+  }
+  if (kind === 'bookmark') {
+    const url = payload.url || '';
+    const caption = payload.caption || '';
+    if (url) {
+      const link = el('a', 'block-bookmark');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      const art = el('span', 'bm-art');
+      art.appendChild(icon('link', 14));
+      link.appendChild(art);
+      const body = el('span', 'bm-body');
+      body.appendChild(el('b', null, caption || url));
+      body.appendChild(el('span', 'bm-url', url));
+      link.appendChild(body);
+      container.appendChild(link);
+    } else {
+      container.appendChild(emptyBlock({
+        iconName: 'link', title: '还没有链接',
+        text: '书签会把一个网址摆成一张可点的卡片。',
+      }));
+    }
+    return;
+  }
+  if (kind === 'card') {
+    const targetId = Number(payload.document) || 0;
+    const box = el('div', 'embed-card');
+    if (!targetId) {
+      box.appendChild(emptyBlock({
+        iconName: 'file', title: '还没有选卡片',
+        text: '嵌入卡会把另一张卡片的内容摘要摆在这里。',
+      }));
+    } else {
+      const known = findNode(targetId);
+      const head = el('div', 'embed-head');
+      const art = el('span', 'embed-art');
+      art.appendChild(docIcon(known ? known.type : 'card', 15));
+      head.appendChild(art);
+      head.appendChild(el('b', null, known ? known.name : `卡片 #${targetId}`));
+      const open = el('button', 'mini-btn is-small', '打开');
+      open.addEventListener('click', () => openDoc(targetId));
+      head.appendChild(open);
+      box.appendChild(head);
+      api(`/api/world/cards/${targetId}`).then((payload_) => {
+        const body = el('div', 'embed-body');
+        const summary = (payload_.card.body || '').slice(0, 180);
+        body.textContent = summary || '（这张卡还没有正文）';
+        box.appendChild(body);
+      }).catch(() => {});
+    }
+    container.appendChild(box);
+    return;
+  }
+  if (kind === 'collection') {
+    let settings = {};
+    try { settings = JSON.parse(payload.settings || '{}') || {}; } catch (error) { settings = {}; }
+    // 只读：类型选择 / 视图切换 / 视图设置都不落库，只按 settings 里存的那套展示。
+    container.appendChild(renderCollectionBlock(entry, { settings }, 0, true));
+  }
+}
+
+/* ── 孤岛重块插入 ───────────────────────────────────────────────────────────
+   孤岛斜杠菜单点了重块（图片 / 书签 / 嵌入卡 / 集合）就走这里：vanilla 侧弹对话
+   框问数据，把结果当 props 交回孤岛，由孤岛 updateBlock 写进文档（blocks_doc 是
+   权威）。返回值形状必须与孤岛 HeavyMount 的 data 对齐（见 main.jsx）：
+     image      → { url, caption }
+     bookmark   → { url, caption }
+     card       → { document }
+     collection → { settings: JSON 字符串 }
+   用户取消一律返回 null，孤岛那边什么都不做（当前块留作空段落）。 */
+
+/** 统一入口：孤岛 bridge.prepareHeavyBlock(kind) 落到这里。 */
+function prepareIslandHeavyBlock(entry, kind) {
+  if (kind === 'image') return askImageProps(entry);
+  if (kind === 'bookmark') return askBookmarkProps();
+  if (kind === 'card') return askCardProps(entry);
+  if (kind === 'collection') return askCollectionProps();
+  return Promise.resolve(null);
+}
+
+/** 图片重块：地址或上传，另有可选图注（沿用旧「插入图片」模态框的外形）。 */
+function askImageProps(entry) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (result) => { if (done) return; done = true; resolve(result); };
+    openModal('插入图片', (body) => {
+      const urlInput = el('input', 'mini-input');
+      urlInput.placeholder = 'https://… 图片地址';
+      const captionInput = el('input', 'mini-input');
+      captionInput.placeholder = '图注（可选）';
+      const row = el('div', 'form-row');
+      row.appendChild(el('label', null, '地址'));
+      row.appendChild(urlInput);
+      body.appendChild(row);
+      const row2 = el('div', 'form-row');
+      row2.appendChild(el('label', null, '图注'));
+      row2.appendChild(captionInput);
+      body.appendChild(row2);
+
+      const fileInput = el('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.style.display = 'none';
+      body.appendChild(fileInput);
+      const actions = el('div', 'form-row');
+      const upload = el('button', 'mini-btn', '上传本地图片');
+      upload.addEventListener('click', () => fileInput.click());
+      actions.appendChild(upload);
+      const save = el('button', 'mini-btn is-primary', '插入');
+      save.addEventListener('click', () => {
+        const url = urlInput.value.trim();
+        if (!url) { toast('先给个地址或上传一张图'); return; }
+        // 先 finish 再 closeModal：closeModal 会触发「取消」回调，顺序反了就收成 null
+        finish({ url, caption: captionInput.value.trim() });
+        closeModal();
+      });
+      actions.appendChild(save);
+      body.appendChild(actions);
+
+      fileInput.addEventListener('change', async () => {
+        const file = (fileInput.files || [])[0];
+        if (!file) return;
+        const form = new FormData();
+        form.append('file', file, file.name);
+        form.append('kind', 'image');
+        form.append('title', file.name);
+        const result = await api(`/api/world/documents/${entry.document.id}/media`, { method: 'POST', form });
+        urlInput.value = result.entry.url;
+        if (!captionInput.value.trim()) captionInput.value = file.name;
+        toast('已上传，点「插入」放进正文');
+      });
+    });
+    // X / 背景点击 / Esc 都会走 closeModal，这里把 Promise 收成 null（取消）
+    MODAL_ON_CANCEL = () => finish(null);
+  });
+}
+
+/** 书签重块：只问一个网址（与旧块菜单的「插入书签」一致）。 */
+async function askBookmarkProps() {
+  const url = await askText({ label: '书签网址', value: 'https://' });
+  if (url === null || !url.trim()) return null;
+  return { url: url.trim(), caption: '' };
+}
+
+/** 嵌入卡重块：复用卡片选择器挑一张卡。 */
+function askCardProps(entry) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (result) => { if (done) return; done = true; resolve(result); };
+    openCardPicker({
+      title: '嵌入哪张卡片',
+      exclude: entry.document.id,
+      onPick: (item) => finish({ document: item.id }),
+      onCancel: () => finish(null),
+    });
+  });
+}
+
+/** 集合重块：先选卡片类型，再按该类型可见属性给一套默认视图设置。
+ *  孤岛里的集合是只读的（不能在里面改类型 / 视图），所以这些必须在这里定好。 */
+async function askCollectionProps() {
+  const types = (S.types || []).filter((t) => !t.hidden);
+  if (!types.length) { toast('这个世界还没有卡片类型，先建一个类型再插集合'); return null; }
+  const picked = await askChoice({
+    title: '这个集合装哪种卡片？',
+    options: types.map((t) => ({ label: t.name, hint: `${(t.properties || []).length} 个属性`, value: t.id })),
+  });
+  if (!picked) return null;
+  const type = types.find((t) => t.id === picked.value) || null;
+  const columns = ((type && type.properties) || [])
+    .filter((prop) => !prop.hidden)
+    .map((prop) => String(prop.id));
+  const settings = { entity_type: picked.value, view: 'table' };
+  if (columns.length) settings.columns = columns;
+  return { settings: JSON.stringify(settings) };
+}
+
+/** 外部改了正文（撤销 / 采用了服务端版本）时，把新文档塞回孤岛。
+ *
+ *  用**数组引用**比对而不是字符串：BlockNote 会给每块补一堆默认 props，
+ *  和服务端归一化的结果必然不同，字符串比对会把"每次重画"都误判成外部改动，
+ *  于是每次都整篇换掉 → 光标位置和撤销栈全丢。 */
+function syncEditorIsland(entry, holder) {
+  const handle = holder && holder.__islandHandle;
+  const doc = entry.card ? entry.card.blocks_doc : null;
+  if (!handle || !handle.isReady()) return;      // 还没就绪：mount 用的就是这份文档
+  if (doc === holder.__seenDocRef) return;       // 引用没变 → 不是外部改动
+  holder.__seenDocRef = doc;
+  handle.setDoc(Array.isArray(doc) ? doc : []);
+  holder.__lastSaved = JSON.stringify(handle.getDoc());
+}
+
+/** 自动保存：正文改动走防抖（会接入 ⌘S 的统一落库）。 */
+function scheduleEditorSave(entry) {
+  const key = editorIslandKey(entry.document.id);
+  // 到点再查 LIVE_EMBEDS：这期间面板可能被扫掉、孤岛被销毁
+  debounce(key, () => saveEditorDoc(entry, LIVE_EMBEDS.get(key)));
+}
+
+/** 把孤岛里的文档写回服务端（blocks_doc 是权威，blocks / body 由服务端派生）。
+ *  成功**不重画面板**：重画会重建 DOM，虽然孤岛会被认领回来，但每敲一次字都来一遍没必要。 */
+async function saveEditorDoc(entry, holder) {
+  const handle = holder && holder.__islandHandle;
+  if (!handle || !handle.isReady()) return null;
+  const doc = handle.getDoc();
+  const serialized = JSON.stringify(doc);
+  if (serialized === holder.__lastSaved) return null;      // 没有真实改动
+  const before = cardSnapshot(entry);
+  const seq = (entry.saveSeq = (entry.saveSeq || 0) + 1);
+  let payload;
+  try {
+    payload = await api(`/api/world/cards/${entry.document.id}`, {
+      method: 'PUT', body: { blocks_doc: doc, revision: entry.revision },
+    });
+  } catch (error) {
+    if (error && error.isConflict) return null;      // 界面已经刷新成最新内容了
+    throw error;
+  }
+  if (seq !== entry.saveSeq) return null;
+  holder.__lastSaved = serialized;
+  applyCardResponse(entry, payload);
+  // 服务端归一化后的文档不算"外部改动"：直接记成已见，免得下一帧又整篇换一次。
+  holder.__seenDocRef = entry.card ? entry.card.blocks_doc : null;
+  recordAction(entry, before, '编辑正文');
+  // 正文变了 → 名字识别的名单要跟着重算（刚敲出来的名字才会立刻成链接）。
+  applyIslandMentions(entry, holder);
+  return payload.card;
 }
 
 /** 文件夹路径面包屑：从世界根一路点到当前文件夹，回答"我在哪一层"。 */
@@ -1721,13 +2138,16 @@ async function setCover(entry) {
   renderPanels();
 }
 
-/** 往正文里粘 / 拖一张图：先上传，再在文末插一个图片块。 */
+/** 往正文里粘 / 拖一张图：先上传，再让孤岛编辑器把图片块追加到文档末尾。 */
 async function insertImageFromFile(file) {
   if (!file || !/^image\//.test(file.type || '')) return false;
   const panel = S.panels[0];
   const id = panel && panel.tabs.length ? panel.tabs[panel.active] : null;
   const entry = (id === null || id === undefined) ? null : S.docs.get(id);
   if (!entry) { toast('先打开一篇文档'); return true; }
+  const holder = LIVE_EMBEDS.get(editorIslandKey(entry.document.id));
+  const handle = holder && holder.__islandHandle;
+  if (!handle || !handle.insertImage) { toast('正文编辑器还没就绪'); return true; }
   toast('正在上传图片…');
   try {
     const form = new FormData();
@@ -1737,19 +2157,8 @@ async function insertImageFromFile(file) {
     const res = await api(`/api/world/documents/${entry.document.id}/media`, { method: 'POST', form });
     const url = res && res.entry && res.entry.url;
     if (!url) throw new Error('没有拿到文件地址');
-    // 内存里的 entry.card.blocks 可能已经过期（比如刚用 ＋ 菜单插过块），
-    // 这里重新拉一次 entry 再追加，避免把已有的块覆盖掉。
-    let blocks = (entry.card && entry.card.blocks) || [];
-    try {
-      const fresh = await fetchEntry(entry.document.id);
-      if (fresh && fresh.card) {
-        entry.card = fresh.card;
-        blocks = entry.card.blocks || [];
-      }
-    } catch (error) { /* 拉不到就用内存里的那份，至少不丢 */ }
-    blocks.push({ id: `img${Date.now().toString(36)}`, type: 'image', title: '', text: '', settings: { url, caption: '' } });
-    await saveBlocks(entry, blocks, '插入图片');
-    renderPanels();
+    // 插入走孤岛自己的文档，onChange 会把结果防抖落库（不再有第二条派生链）。
+    if (!handle.insertImage(url, '')) throw new Error('插入图片失败');
   } catch (error) {
     toast(`上传失败：${(error && error.message) || error}`);
   }
@@ -1889,47 +2298,6 @@ function renderPageComments(entry) {
   composer.appendChild(send);
   box.appendChild(composer);
   return box;
-}
-
-/** 可插入的区块类型（底部「添加区块」下拉用）。 */
-const INSERT_ITEMS = [
-  ['text', '文本', 'type'],
-  ['heading', '标题', 'type'],
-  ['bulleted', '无序列表', 'list'],
-  ['numbered', '有序列表', 'list-ordered'],
-  ['todo', '待办事项', 'circle-check'],
-  ['toggle', '折叠列表', 'chevron-right'],
-  ['quote', '引用', 'quote'],
-  ['callout', '提示框', 'circle-alert'],
-  ['code', '代码', 'hash'],
-  ['image', '图片', 'image'],
-  ['collection', '内联数据库', 'grid-3x3'],
-  ['divider', '分隔线', 'circle-minus'],
-];
-
-/** 底部「添加区块」下拉：把这一排类型收在 ＋ 的菜单里，条上只留一颗按钮。 */
-function openInsertMenu(anchor, entry, panelIndex) {
-  const menu = el('div', 'fb-menu insert-menu');
-  INSERT_ITEMS.forEach(([kind, label, iconName]) => {
-    const button = el('button');
-    button.type = 'button';
-    button.appendChild(icon(iconName, 14));
-    button.appendChild(el('span', 'bm-label', label));
-    button.addEventListener('click', async () => { menu.remove(); await addBlock(entry, kind, panelIndex); });
-    menu.appendChild(button);
-  });
-  document.body.appendChild(menu);
-  const rect = anchor.getBoundingClientRect();
-  menu.style.left = `${clamp(rect.left, 8, window.innerWidth - menu.offsetWidth - 8)}px`;
-  // 插入条贴在底部，菜单往上弹
-  menu.style.top = `${Math.max(8, rect.top - menu.offsetHeight - 6)}px`;
-  const close = (event) => {
-    if (!menu.contains(event.target)) {
-      menu.remove();
-      document.removeEventListener('mousedown', close);
-    }
-  };
-  setTimeout(() => document.addEventListener('mousedown', close), 0);
 }
 
 function renderCard(entry, panelIndex) {
@@ -2084,23 +2452,12 @@ function renderCard(entry, panelIndex) {
   wrap.appendChild(head);
   wrap.appendChild(commentsBox);
 
-  /* 区块 */
-  const blocks = el('div', 'blocks');
-  (card.blocks || []).forEach((block, index) => blocks.appendChild(renderBlock(entry, block, index, panelIndex)));
+  /* 正文区：一律走孤岛（React + BlockNote）；接不了就画只读降级块。 */
+  const blocks = renderCardBody(entry, card);
   wrap.appendChild(blocks);
 
-  /* 底部插入条：只在**空页面**上出现（有内容就收）。
-     有内容之后靠块左边的 ＋ / 回车来加块。 */
-  if (!(card.blocks || []).length) {
-    const bar = el('div', 'insert-bar');
-    const moreBtn = el('button', 'insert-btn');
-    moreBtn.type = 'button';
-    moreBtn.appendChild(icon('plus', 14));
-    moreBtn.appendChild(el('span', null, '添加区块'));
-    moreBtn.addEventListener('click', () => openInsertMenu(moreBtn, entry, panelIndex));
-    bar.appendChild(moreBtn);
-    wrap.appendChild(bar);
-  }
+  /* 底部插入条已随 vanilla 块渲染链在 P3 拆掉：空文档里 BlockNote 自己会给一个
+     可以落光标的位置，加块靠孤岛自己的斜杠菜单 / ＋。 */
 
   /* 底部：反向链接（谁提到了这张卡）。别名已经挪到标题下的徽标行了。 */
 
@@ -2110,7 +2467,6 @@ function renderCard(entry, panelIndex) {
     line.appendChild(el('b', null, `被 ${data.mentions.length} 处提到：`));
     line.appendChild(el('span', null, data.mentions.map((m) => m.name).join('、')));
     wrap.appendChild(line);
-    highlightMentions(wrap);
   });
 
   return wrap;
@@ -2242,348 +2598,6 @@ function propertyEditor(entry, prop, panelIndex) {
   return input;
 }
 
-/* --------------------------------------------------------------- 区块编辑 */
-const grab = { keyboard: false };
-
-function renderBlock(entry, block, index, panelIndex) {
-  const document_ = entry.document;
-  // 注意：容器类名用 block-kind-<type>，不用 block-<type>——
-  // 后者在 type=text 时正好等于正文的 .block-text，选择器会命中错元素（块工具条被当成正文）。
-  const wrap = el('div', `block block-kind-${block.type}`);
-  wrap.dataset.index = String(index);
-  const level = clamp(Number(block.level) || 0, 0, 2);
-  if (level) {
-    wrap.dataset.level = String(level);
-    wrap.style.marginLeft = `${level * 22}px`;
-    wrap.classList.add('is-nested');
-  }
-  if (block.collapsed) wrap.classList.add('is-collapsed');
-
-  const tools = el('div', 'block-tools');
-
-  // 块左边悬停时只出两个按钮 —— `+`（在下方插一块）和 `⋮⋮`（拖动 / 打开块菜单）。
-  // 其余动作（上下移、放到左/右栏、隐藏、评论、删除）都收进块菜单里了。
-  const addBelow = el('button', 'block-add');
-  addBelow.type = 'button';
-  addBelow.title = '在下方插入一块';
-  addBelow.setAttribute('aria-label', '在下方插入一块');
-  addBelow.appendChild(icon('plus', 14));
-  addBelow.addEventListener('click', () => insertBlockAt(entry, index + 1));
-  tools.appendChild(addBelow);
-
-  // 拖动把手：按下才能拖（避免选中文字时误拖），点一下打开块菜单
-  const handle = el('button', 'block-handle');
-  handle.type = 'button';
-  handle.title = '拖动排序 · 点击打开块菜单';
-  handle.appendChild(icon('grip', 14));
-  handle.addEventListener('mousedown', () => { wrap.draggable = true; });
-  handle.addEventListener('mouseup', () => { wrap.draggable = false; });
-  handle.addEventListener('click', () => openBlockMenu(handle, entry, index));
-  // 键盘也能拖动：空格拾起 → ↑↓ 移动 → 空格放下 / Esc 取消
-  handle.addEventListener('keydown', async (event) => {
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      grab.keyboard = !grab.keyboard;
-      handle.classList.toggle('is-grabbed', grab.keyboard);
-      wrap.classList.toggle('is-grabbed', grab.keyboard);
-      announce(grab.keyboard ? '已拾起区块，用上下方向键移动，空格放下' : '已放下区块');
-      return;
-    }
-    if (!grab.keyboard) return;
-    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      const delta = event.key === 'ArrowUp' ? -1 : 1;
-      const target = index + delta;
-      const blocks = entry.card.blocks || [];
-      if (target < 0 || target >= blocks.length) { announce('已经到头了'); return; }
-      await moveBlockTo(entry, index, target);
-      announce(`已移动到第 ${target + 1} 位`);
-      const nextHandle = $(`.block[data-index="${target}"] .block-handle`);
-      if (nextHandle) nextHandle.focus();
-      return;
-    }
-    if (event.key === 'Escape') {
-      grab.keyboard = false;
-      handle.classList.remove('is-grabbed');
-      wrap.classList.remove('is-grabbed');
-      announce('已取消拖动');
-    }
-  });
-  tools.appendChild(handle);
-
-  wrap.appendChild(tools);
-
-  // ---------------- 拖拽排序 ----------------
-  wrap.addEventListener('dragstart', (event) => {
-    if (!wrap.draggable) { event.preventDefault(); return; }
-    S.draggingBlock = index;
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(index));
-    wrap.classList.add('is-dragging');
-  });
-  wrap.addEventListener('dragend', () => {
-    wrap.draggable = false;
-    wrap.classList.remove('is-dragging');
-    S.draggingBlock = null;
-    $$('.block.drop-before, .block.drop-after').forEach((n) => n.classList.remove('drop-before', 'drop-after'));
-  });
-  wrap.addEventListener('dragover', (event) => {
-    if (S.draggingBlock === null || S.draggingBlock === undefined || S.draggingBlock === index) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    const rect = wrap.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    wrap.classList.toggle('drop-after', after);
-    wrap.classList.toggle('drop-before', !after);
-  });
-  wrap.addEventListener('dragleave', () => wrap.classList.remove('drop-before', 'drop-after'));
-  wrap.addEventListener('drop', async (event) => {
-    event.preventDefault();
-    const from = Number(event.dataTransfer.getData('text/plain'));
-    const rect = wrap.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    let to = index + (after ? 1 : 0);
-    if (from < to) to -= 1;
-    wrap.classList.remove('drop-before', 'drop-after');
-    if (Number.isFinite(from) && from !== to) await moveBlockTo(entry, from, to);
-    S.draggingBlock = null;
-  });
-
-  // 块没有"区块标题"这一行 —— 块的正文就是它的全部。
-  // 老数据里已经写过标题的，退化成一行只读小标题，别让内容凭空消失。
-  if (block.title && block.type !== 'divider' && block.type !== 'heading') {
-    wrap.appendChild(el('div', 'block-title is-static', block.title));
-  }
-
-  if (block.type === 'divider') {
-    wrap.appendChild(el('div', 'block-divider'));
-    return wrap;
-  }
-
-  // 嵌入卡：把另一张卡片做成一张可点的卡片
-  if (block.type === 'card') {
-    const targetId = block.settings && block.settings.document;
-    const box = el('div', 'embed-card');
-    if (!targetId) {
-      box.appendChild(emptyBlock({
-        iconName: 'file', title: '还没有选卡片',
-        text: '嵌入卡会把另一张卡片的内容摘要摆在这里。',
-      }));
-    } else {
-      const known = findNode(targetId);
-      const head = el('div', 'embed-head');
-      const art = el('span', 'embed-art');
-      art.appendChild(docIcon(known ? known.type : 'card', 15));
-      head.appendChild(art);
-      head.appendChild(el('b', null, known ? known.name : `卡片 #${targetId}`));
-      const open = el('button', 'mini-btn is-small', '打开');
-      open.addEventListener('click', () => openDoc(targetId));
-      head.appendChild(open);
-      box.appendChild(head);
-      api(`/api/world/cards/${targetId}`).then((payload) => {
-        const body = el('div', 'embed-body');
-        const summary = (payload.card.body || '').slice(0, 180);
-        body.textContent = summary || '（这张卡还没有正文）';
-        box.appendChild(body);
-      }).catch(() => {});
-    }
-    wrap.appendChild(box);
-    return wrap;
-  }
-
-  // 内联数据库：一个块 = 某个实体类型下的卡片集合（表格 / 看板 / 画廊 / 列表 / 日历）
-  if (block.type === 'collection') {
-    wrap.appendChild(renderCollectionBlock(entry, block, index));
-    return wrap;
-  }
-
-  // ---------------- 基本区块：列表 / 待办 / 折叠 / 代码 / 书签 ----------------
-  if (block.type === 'bulleted' || block.type === 'numbered') {
-    const row = el('div', `block-list-row is-${block.type}`);
-    row.appendChild(el('span', 'block-marker', block.type === 'bulleted' ? '•' : `${ordinalOf(entry, index)}.`));
-    row.appendChild(blockTextField(entry, block, index, 'block-line'));
-    wrap.appendChild(row);
-    return wrap;
-  }
-
-  if (block.type === 'todo') {
-    const row = el('div', 'block-list-row is-todo');
-    if (block.checked) row.classList.add('is-done');
-    const box = el('input', 'block-check');
-    box.type = 'checkbox';
-    box.checked = !!block.checked;
-    box.setAttribute('aria-label', '完成这一项');
-    if (!editable()) box.disabled = true;
-    box.addEventListener('change', async () => {
-      row.classList.toggle('is-done', box.checked);
-      await saveBlock(entry, index, { checked: box.checked }, '勾选待办');
-    });
-    row.appendChild(box);
-    row.appendChild(blockTextField(entry, block, index, 'block-line'));
-    wrap.appendChild(row);
-    return wrap;
-  }
-
-  if (block.type === 'toggle') {
-    const head = el('button', 'block-toggle-head');
-    head.type = 'button';
-    head.appendChild(icon(block.collapsed ? 'chevron-right' : 'chevron-down', 14));
-    head.appendChild(el('span', 'block-toggle-label', block.title || block.text || '折叠内容'));
-    head.setAttribute('aria-expanded', String(!block.collapsed));
-    head.addEventListener('click', async () => {
-      await saveBlock(entry, index, { collapsed: !block.collapsed }, '折叠区块');
-      renderPanels();
-    });
-    wrap.appendChild(head);
-    const body = el('div', 'block-toggle-body');
-    if (block.collapsed) body.hidden = true;
-    body.appendChild(blockTextField(entry, block, index, 'block-line'));
-    wrap.appendChild(body);
-    return wrap;
-  }
-
-  if (block.type === 'code') {
-    const pre = el('pre', 'block-code');
-    const code = el('code', 'block-line');
-    if (editable()) code.contentEditable = 'true';
-    code.dataset.placeholder = '代码…';
-    code.textContent = block.text || '';
-    code.addEventListener('input', () => {
-      debounce(`block:${entry.document.id}:${index}`, () => {
-        if (code.dataset.retired === '1' || !code.isConnected) return;
-        saveBlock(entry, index, { text: code.textContent });
-      }, 700);
-    });
-    code.addEventListener('blur', () => {
-      clearTimeout(S.pending.get(`block:${entry.document.id}:${index}`));
-      S.pending.delete(`block:${entry.document.id}:${index}`);
-      if (code.dataset.retired === '1' || !code.isConnected) return;
-      saveBlock(entry, index, { text: code.textContent });
-    });
-    pre.appendChild(code);
-    wrap.appendChild(pre);
-    return wrap;
-  }
-
-  if (block.type === 'bookmark') {
-    const url = (block.settings && block.settings.url) || '';
-    if (url) {
-      const link = el('a', 'block-bookmark');
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      const art = el('span', 'bm-art');
-      art.appendChild(icon('link', 14));
-      link.appendChild(art);
-      const body = el('span', 'bm-body');
-      body.appendChild(el('b', null, block.title || (block.settings && block.settings.caption) || url));
-      body.appendChild(el('span', 'bm-url', url));
-      link.appendChild(body);
-      wrap.appendChild(link);
-    } else {
-      wrap.appendChild(emptyBlock({
-        iconName: 'link', title: '还没有链接',
-        text: '书签会把一个网址摆成一张可点的卡片。',
-      }));
-    }
-    return wrap;
-  }
-
-  /* 图片块：上传文件 或 粘链接（和封面共用 pickImage）。
-     后端 normalize 已经放行 image 块和它的 settings.url / settings.caption。 */
-  if (block.type === 'image') {
-    const url = (block.settings && block.settings.url) || '';
-    const caption = (block.settings && block.settings.caption) || '';
-    const figure = el('figure', 'block-image');
-    const choose = async (label) => {
-      const next = await pickImage({ docId: entry.document.id, value: url });
-      if (!next) return;
-      await saveBlock(entry, index, { type: 'image', settings: { url: next, caption } }, label);
-      renderPanels();
-    };
-    if (url) {
-      const img = el('img', 'blk-img');
-      img.src = url;
-      img.alt = caption || block.title || '图片';
-      img.loading = 'lazy';
-      img.addEventListener('error', () => { figure.classList.add('is-broken'); });
-      figure.appendChild(img);
-      const cap = el('input', 'blk-img-cap');
-      cap.type = 'text';
-      cap.value = caption;
-      cap.placeholder = '输入题注…';
-      cap.addEventListener('change', async () => {
-        await saveBlock(entry, index, { settings: { url, caption: cap.value.trim() } }, '改图片题注');
-      });
-      figure.appendChild(cap);
-      const tools = el('div', 'blk-img-tools');
-      const swap = el('button', 'blk-img-act', '更换');
-      const drop = el('button', 'blk-img-act', '移除');
-      swap.type = 'button'; drop.type = 'button';
-      swap.addEventListener('click', () => choose('更换图片'));
-      drop.addEventListener('click', async () => {
-        await saveBlock(entry, index, { settings: { url: '', caption } }, '移除图片');
-        renderPanels();
-      });
-      tools.append(swap, drop);
-      figure.appendChild(tools);
-    } else {
-      const empty = el('div', 'blk-img-empty');
-      const up = el('button', 'blk-img-pick', '上传文件');
-      const lk = el('button', 'blk-img-pick', '粘贴链接');
-      up.type = 'button'; lk.type = 'button';
-      up.addEventListener('click', () => choose('插入图片'));
-      lk.addEventListener('click', () => choose('插入图片'));
-      empty.append(up, lk);
-      empty.appendChild(el('div', 'blk-img-hint', '从本机选一张图（会存到这个文档下），或粘一个图片地址'));
-      figure.appendChild(empty);
-    }
-    wrap.appendChild(figure);
-    return wrap;
-  }
-
-  wrap.appendChild(blockTextField(entry, block, index, block.type === 'quote' ? 'block-quote' : ''));
-
-  // 提示框的样式由 .block-kind-callout 承担（见 CSS）
-  return wrap;
-}
-
-/** 块内可编辑正文：引用 / 提示框 / 列表 / 待办 / 折叠 共用同一套行为。 */
-function blockTextField(entry, block, index, extraClass) {
-  const text = el('div', `block-text${extraClass ? ` ${extraClass}` : ''}`);
-  if (editable()) text.contentEditable = 'true';
-  text.dataset.placeholder = '按 / 插入区块，或直接开始写…';
-  if (block.html) text.innerHTML = block.html;
-  else text.textContent = block.text || '';
-  text.addEventListener('input', () => {
-    debounce(`block:${entry.document.id}:${index}`, () => {
-      if (text.dataset.retired === '1' || !text.isConnected) return;   // 已被重渲染换掉
-      saveBlock(entry, index, { html: text.innerHTML });
-    }, 700);
-  });
-  text.addEventListener('blur', () => {
-    clearTimeout(S.pending.get(`block:${entry.document.id}:${index}`));
-    S.pending.delete(`block:${entry.document.id}:${index}`);
-    if (text.dataset.retired === '1' || !text.isConnected) return;
-    saveBlock(entry, index, { html: text.innerHTML });
-  });
-  // 回车 = 在下面开一块并落光标。列表/待办/引用则续同类型，
-  // Shift+回车是块内换行，不拦。
-  // 注意：名字补全要在下面的回车处理**之前**挂上，接受候补时才拦得住"回车开新块"。
-  attachNameCompleter(text, entry);
-  text.addEventListener('keydown', async (event) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
-    event.preventDefault();
-    const keep = ['bulleted', 'numbered', 'todo', 'quote', 'code'].includes(block.type) ? block.type : 'text';
-    await saveBlock(entry, index, { html: text.innerHTML });
-    await insertBlockAt(entry, index + 1, keep);
-  });
-  attachMentionPicker(text, entry);
-  attachSlashMenu(text, entry, index);
-  attachFormatBar(text, entry, index);
-  return text;
-}
-
 /* ============================================================ 内联数据库
    一个块 = 某个实体类型下的全部卡片。数据源直接用 /api/world/documents?type=card
    （本来就带 card.values），列来自 S.types 里该类型的属性，改单元格 = 改那张卡。 */
@@ -2661,7 +2675,7 @@ function collectionCard(entry, row) {
   return card;
 }
 
-function renderCollectionTable(rows, columns, entry) {
+function renderCollectionTable(rows, columns, entry, readonly) {
   const table = el('table', 'cb-table');
   const thead = el('thead');
   const hr = el('tr');
@@ -2675,7 +2689,9 @@ function renderCollectionTable(rows, columns, entry) {
     tr.appendChild(el('td', null, '')).appendChild(collectionCard(entry, row));
     columns.forEach((prop) => {
       const td = el('td', 'cb-cell');
-      td.appendChild(collectionCellEditor(prop, row, entry));
+      td.appendChild(readonly
+        ? el('div', 'cb-ro', collectionCellText(prop, row.values))
+        : collectionCellEditor(prop, row, entry));
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
@@ -2684,7 +2700,7 @@ function renderCollectionTable(rows, columns, entry) {
   return table;
 }
 
-function renderCollectionBoard(rows, columns, entry) {
+function renderCollectionBoard(rows, columns, entry, readonly) {
   const groupProp = columns.find((p) => p.value_type === 'select') || columns[0];
   const board = el('div', 'cb-board');
   if (!groupProp) { board.appendChild(el('div', 'hint', '这个类型还没有属性，没法分组。')); return board; }
@@ -2707,7 +2723,11 @@ function renderCollectionBoard(rows, columns, entry) {
     col.appendChild(head);
     list.forEach((row) => {
       const card = collectionCard(entry, row);
-      // 拖到别的列 = 改这个分组属性的值（和表格里改单元格是同一条写路径）
+      // 拖到别的列 = 改这个分组属性的值（和表格里改单元格是同一条写路径）；只读就不给拖
+      if (readonly) {
+        col.appendChild(card);
+        return;
+      }
       card.draggable = true;
       card.addEventListener('dragstart', (event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -2715,6 +2735,10 @@ function renderCollectionBoard(rows, columns, entry) {
       });
       col.appendChild(card);
     });
+    if (readonly) {
+      board.appendChild(col);
+      return;
+    }
     col.addEventListener('dragover', (event) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
@@ -2777,7 +2801,7 @@ function renderCollectionList(rows, columns, entry) {
 /** 日历的月份偏移（按块 id 记，不落库，切走再回来会回到当月）。 */
 const collectionCalMonths = {};
 
-function renderCollectionCalendar(rows, columns, entry, block) {
+function renderCollectionCalendar(rows, columns, entry, block, readonly) {
   const dateProp = columns.find((p) => p.value_type === 'date') || columns[0];
   const wrap = el('div', 'cb-cal');
   if (!dateProp) { wrap.appendChild(el('div', 'hint', '这个类型没有日期属性，摆不了日历。')); return wrap; }
@@ -2788,23 +2812,27 @@ function renderCollectionCalendar(rows, columns, entry, block) {
   const pad = anchor.getDay();
 
   const head = el('div', 'cb-calhead-row');
-  const prev = el('button', 'cb-tab', '‹');
-  prev.type = 'button';
-  prev.title = '上一个月';
-  prev.addEventListener('click', () => { collectionCalMonths[block.id] = offset - 1; renderPanels(); });
-  const next = el('button', 'cb-tab', '›');
-  next.type = 'button';
-  next.title = '下一个月';
-  next.addEventListener('click', () => { collectionCalMonths[block.id] = offset + 1; renderPanels(); });
   const title = el('span', 'cb-caltitle', `${anchor.getFullYear()} 年 ${anchor.getMonth() + 1} 月`);
-  head.appendChild(prev);
-  head.appendChild(title);
-  head.appendChild(next);
-  if (offset) {
-    const back = el('button', 'cb-tab', '回到本月');
-    back.type = 'button';
-    back.addEventListener('click', () => { collectionCalMonths[block.id] = 0; renderPanels(); });
-    head.appendChild(back);
+  if (readonly) {
+    head.appendChild(title);      // 只读：翻月要重画面板，孤岛里接不上，就不给翻
+  } else {
+    const prev = el('button', 'cb-tab', '‹');
+    prev.type = 'button';
+    prev.title = '上一个月';
+    prev.addEventListener('click', () => { collectionCalMonths[block.id] = offset - 1; renderPanels(); });
+    const next = el('button', 'cb-tab', '›');
+    next.type = 'button';
+    next.title = '下一个月';
+    next.addEventListener('click', () => { collectionCalMonths[block.id] = offset + 1; renderPanels(); });
+    head.appendChild(prev);
+    head.appendChild(title);
+    head.appendChild(next);
+    if (offset) {
+      const back = el('button', 'cb-tab', '回到本月');
+      back.type = 'button';
+      back.addEventListener('click', () => { collectionCalMonths[block.id] = 0; renderPanels(); });
+      head.appendChild(back);
+    }
   }
   wrap.appendChild(head);
 
@@ -2885,113 +2913,8 @@ function renderCollectionSummary(rows, columns, view) {
   return sum;
 }
 
-/** 集合的视图设置：显示哪些列 / 按谁排序 / 按谁筛选 —— 都写进 block.settings。 */
-function openCollectionSettings(anchor, entry, index, block) {
-  const settings = block.settings || {};
-  const typeId = Number(settings.entity_type) || null;
-  const type = (S.types || []).find((t) => t.id === typeId) || null;
-  const columns = ((type && type.properties) || []).filter((prop) => !prop.hidden);
-  if (!columns.length) { toast('先给这个集合选一个卡片类型'); return; }
-
-  const chosen = Array.isArray(settings.columns) && settings.columns.length
-    ? settings.columns.map(String) : null;
-  const draft = {
-    columns: chosen ? [...chosen] : columns.map((prop) => String(prop.id)),
-    sort: settings.sort || null,
-    filter: settings.filter || null,
-  };
-  const save = async () => {
-    await saveBlock(entry, index, { settings: { ...settings, ...draft } }, '设置集合视图');
-    renderPanels();
-  };
-
-  const menu = el('div', 'fb-menu cb-settings');
-  menu.appendChild(el('div', 'bm-group', '显示这些列'));
-  columns.forEach((prop) => {
-    const row = el('label', 'cbs-row');
-    const box = el('input');
-    box.type = 'checkbox';
-    box.checked = draft.columns.includes(String(prop.id));
-    box.addEventListener('change', () => {
-      const key = String(prop.id);
-      draft.columns = box.checked
-        ? [...draft.columns, key]
-        : draft.columns.filter((item) => item !== key);
-      save();
-    });
-    row.appendChild(box);
-    row.appendChild(el('span', null, prop.name));
-    menu.appendChild(row);
-  });
-
-  const propSelect = (label) => {
-    const select = el('select', 'cb-input');
-    const none = el('option', null, label);
-    none.value = '';
-    select.appendChild(none);
-    columns.forEach((prop) => {
-      const option = el('option', null, prop.name);
-      option.value = String(prop.id);
-      select.appendChild(option);
-    });
-    return select;
-  };
-
-  menu.appendChild(el('div', 'bm-group', '排序'));
-  const sortSel = propSelect('不排序');
-  sortSel.value = draft.sort ? String(draft.sort.id) : '';
-  const dir = el('button', 'cb-tab', draft.sort && draft.sort.dir === 'desc' ? '降序 ↓' : '升序 ↑');
-  dir.type = 'button';
-  dir.addEventListener('click', () => {
-    if (!draft.sort) { toast('先选一个排序字段'); return; }
-    draft.sort = { ...draft.sort, dir: draft.sort.dir === 'desc' ? 'asc' : 'desc' };
-    dir.textContent = draft.sort.dir === 'desc' ? '降序 ↓' : '升序 ↑';
-    save();
-  });
-  sortSel.addEventListener('change', () => {
-    draft.sort = sortSel.value
-      ? { id: Number(sortSel.value), dir: (draft.sort && draft.sort.dir) || 'asc' } : null;
-    save();
-  });
-  const sortRow = el('div', 'cbs-row');
-  sortRow.appendChild(sortSel);
-  sortRow.appendChild(dir);
-  menu.appendChild(sortRow);
-
-  menu.appendChild(el('div', 'bm-group', '筛选'));
-  const filterSel = propSelect('不筛选');
-  filterSel.value = draft.filter ? String(draft.filter.id) : '';
-  const filterText = el('input', 'cb-input');
-  filterText.type = 'text';
-  filterText.placeholder = '包含…';
-  filterText.value = (draft.filter && draft.filter.text) || '';
-  const collectFilter = () => {
-    draft.filter = filterSel.value && filterText.value
-      ? { id: Number(filterSel.value), text: filterText.value } : null;
-    save();
-  };
-  filterSel.addEventListener('change', collectFilter);
-  filterText.addEventListener('change', collectFilter);
-  const filterRow = el('div', 'cbs-row');
-  filterRow.appendChild(filterSel);
-  filterRow.appendChild(filterText);
-  menu.appendChild(filterRow);
-
-  document.body.appendChild(menu);
-  const rect = anchor.getBoundingClientRect();
-  menu.style.left = `${clamp(rect.right - menu.offsetWidth, 8, window.innerWidth - menu.offsetWidth - 8)}px`;
-  menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menu.offsetHeight - 8)}px`;
-  const close = (event) => {
-    if (!menu.contains(event.target)) {
-      menu.remove();
-      document.removeEventListener('mousedown', close);
-    }
-  };
-  setTimeout(() => document.addEventListener('mousedown', close), 0);
-}
-
-/** 内联数据库块。 */
-function renderCollectionBlock(entry, block, index) {
+/** 内联数据库块。readonly 用于孤岛里嵌入的集合：只展示，不改数据。 */
+function renderCollectionBlock(entry, block, index, readonly) {
   const settings = block.settings || {};
   const typeId = Number(settings.entity_type) || null;
   const view = settings.view || 'table';
@@ -3008,11 +2931,7 @@ function renderCollectionBlock(entry, block, index) {
     typeSelect.appendChild(option);
   });
   typeSelect.value = typeId ? String(typeId) : '';
-  typeSelect.addEventListener('change', async () => {
-    const next = { ...settings, entity_type: Number(typeSelect.value) || null };
-    await saveBlock(entry, index, { settings: next }, '设置集合类型');
-    renderPanels();
-  });
+  typeSelect.disabled = true;    // 孤岛里集合只展示，不改数据
   head.appendChild(typeSelect);
 
   const tabs = el('div', 'cb-tabs');
@@ -3021,19 +2940,10 @@ function renderCollectionBlock(entry, block, index) {
     tab.type = 'button';
     tab.appendChild(icon(ico, 13));
     tab.appendChild(el('span', null, label));
-    tab.addEventListener('click', async () => {
-      await saveBlock(entry, index, { settings: { ...settings, view: key } }, '切换集合视图');
-      renderPanels();
-    });
+    tab.disabled = true;        // 只读：切视图要落库，孤岛里不能写
     tabs.appendChild(tab);
   });
-  const gear = el('button', 'cb-tab');
-  gear.type = 'button';
-  gear.title = '视图设置：显示哪些列 / 排序 / 筛选';
-  gear.appendChild(icon('sliders', 13));
-  gear.addEventListener('click', () => openCollectionSettings(gear, entry, index, block));
   head.appendChild(tabs);
-  head.appendChild(gear);
   box.appendChild(head);
 
   const body = el('div', 'cb-body');
@@ -3092,11 +3002,14 @@ function renderCollectionBlock(entry, block, index) {
       return;
     }
     const renderers = {
-      table: renderCollectionTable, board: renderCollectionBoard,
-      gallery: renderCollectionGallery, list: renderCollectionList,
-      calendar: renderCollectionCalendar, timeline: renderCollectionTimeline,
+      table: () => renderCollectionTable(rows, columns, entry, readonly),
+      board: () => renderCollectionBoard(rows, columns, entry, readonly),
+      gallery: () => renderCollectionGallery(rows, columns, entry),
+      list: () => renderCollectionList(rows, columns, entry),
+      calendar: () => renderCollectionCalendar(rows, columns, entry, block, readonly),
+      timeline: () => renderCollectionTimeline(rows, columns, entry),
     };
-    body.appendChild((renderers[view] || renderCollectionTable)(rows, columns, entry, block, index));
+    body.appendChild((renderers[view] || renderers.table)());
     if (view !== 'calendar' && view !== 'timeline') {
       body.appendChild(renderCollectionSummary(rows, columns, view));
     }
@@ -3107,17 +3020,6 @@ function renderCollectionBlock(entry, block, index) {
   return box;
 }
 
-/** 有序列表的序号：往回数一数前面连着几个同类型的块。 */
-function ordinalOf(entry, index) {
-  const blocks = entry.card.blocks || [];
-  let n = 1;
-  for (let i = index - 1; i >= 0; i -= 1) {
-    if ((blocks[i] || {}).type !== 'numbered') break;
-    n += 1;
-  }
-  return n;
-}
-
 /* ============================================================ 撤销 / 重做
    做法很直接：每次写之前存一份"整卡快照"（别名 + 属性值 + 区块），
    撤销就是把快照 PUT 回去。比逐条反演可靠得多，也不用给每种操作写逆操作。 */
@@ -3125,21 +3027,15 @@ const UNDO = { stack: [], redo: [], limit: 80, applying: false };
 
 function cardSnapshot(entry) {
   const card = entry.card || {};
-  return JSON.stringify({
+  const snap = {
     aliases: card.aliases || [],
     values: card.values || {},
     blocks: card.blocks || [],
-  });
+  };
+  // 孤岛的文档才是正文权威：不带上它，撤销会退回派生 blocks 并把 blocks_doc 清空（有损）。
+  if (Array.isArray(card.blocks_doc)) snap.blocks_doc = card.blocks_doc;
+  return JSON.stringify(snap);
 }
-
-function labelForPatch(patch) {
-  if (patch.title !== undefined) return '修改区块标题';
-  if (patch.hidden !== undefined) return patch.hidden ? '隐藏区块' : '显示区块';
-  if (patch.comments !== undefined) return '评论区块';
-  if (patch.type !== undefined) return '转换区块类型';
-  return '编辑正文';
-}
-
 function recordAction(entry, before, label) {
   if (UNDO.applying) return;
   const after = cardSnapshot(entry);
@@ -3198,1186 +3094,6 @@ function updateUndoUI() {
   }
 }
 
-/** 统一的区块写入：记快照 → PUT → 更新本地 → 重画。 */
-async function saveBlocks(entry, blocks, label) {
-  const before = cardSnapshot(entry);
-  const seq = (entry.saveSeq = (entry.saveSeq || 0) + 1);
-  let payload;
-  try {
-    payload = await api(`/api/world/cards/${entry.document.id}`, {
-      method: 'PUT', body: { blocks, revision: entry.revision },
-    });
-  } catch (error) {
-    if (error && error.isConflict) return null;      // 界面已经刷新成最新内容了
-    throw error;
-  }
-  if (seq !== entry.saveSeq) return null;
-  applyCardResponse(entry, payload);
-  recordAction(entry, before, label);
-  return payload.card;
-}
-
-async function saveBlock(entry, index, patch, label) {
-  const card = entry.card;
-  const blocks = (card.blocks || []).map((b, i) => (i === index ? { ...b, ...patch } : b));
-  // 统一走 saveBlocks：它会记快照（撤销用）、处理并发写序号、再更新本地副本
-  const saved = await saveBlocks(entry, blocks, label || labelForPatch(patch));
-  if (!saved) return;
-  if (patch.text !== undefined) highlightMentions($(`.card-view[data-doc="${entry.document.id}"]`));
-}
-
-async function addBlock(entry, kind, panelIndex) {
-  const card = entry.card;
-  const blocks = [...(card.blocks || [])];
-  const id = `b${Date.now().toString(36)}`;
-  // 新块一律不带标题（块就是一个正文）
-  blocks.push({ id, type: kind, title: '', text: '' });
-  await saveBlocks(entry, blocks, '新增区块');
-  renderPanels();
-  const view = $(`.card-view[data-doc="${entry.document.id}"]`);
-  const last = view && view.querySelectorAll('.block-text');
-  if (last && last.length) last[last.length - 1].focus();
-}
-
-async function removeBlock(entry, index) {
-  const blocks = (entry.card.blocks || []).filter((_, i) => i !== index);
-  await saveBlocks(entry, blocks, '删除区块');
-  renderPanels();
-}
-
-async function moveBlock(entry, index, delta) {
-  const target = index + delta;
-  await moveBlockTo(entry, index, target);
-}
-
-/** 把第 from 块移动到 to 位置（拖拽排序与上下移都走它）。 */
-async function moveBlockTo(entry, from, to) {
-  const blocks = [...(entry.card.blocks || [])];
-  if (from === to || from < 0 || from >= blocks.length || to < 0 || to >= blocks.length) return;
-  const [moved] = blocks.splice(from, 1);
-  blocks.splice(to, 0, moved);
-  await saveBlocks(entry, blocks, '调整区块顺序');
-  renderPanels();
-}
-
-/* 「四向插入」的左右：左右表示并排分栏，这里落成「并排组」标记 */
-async function moveBlockAcross(entry, index, direction) {
-  const blocks = [...(entry.card.blocks || [])];
-  const block = { ...blocks[index] };
-  const column = clamp((block.column || 1) + direction, 1, 2);
-  if (column === (block.column || 1)) { toast(column === 1 ? '已经在左栏' : '已经在右栏'); return; }
-  block.column = column;
-  blocks[index] = block;
-  await saveBlocks(entry, blocks, column === 2 ? '放到右栏' : '放到左栏');
-  renderPanels();
-  toast(column === 2 ? '已放到右栏' : '已放回左栏');
-}
-
-async function toggleBlockHidden(entry, index) {
-  const block = (entry.card.blocks || [])[index];
-  await saveBlock(entry, index, { hidden: !block.hidden });
-  renderPanels();
-}
-
-/* ------------------------------------------------- @ 提及 */
-/**
- * 在正文里输入 `@` 拉起卡片选择器：
- *  - 输入 `@` 后面的字作为关键词，去 /api/world/search 找卡片；
- *  - 回车或点击就把「@关键词」替换成卡片名；
- *  - 如果输入的词和卡片名不同，顺手把这个词存成它的别名（这样以后用这个词也能指回同一张卡）。
- */
-function attachMentionPicker(node, entry) {
-  const state = { open: false, query: '', start: 0, items: [], index: 0 };
-  const popup = el('div', 'mention-pop');
-  popup.hidden = true;
-  document.body.appendChild(popup);
-
-  const close = () => {
-    state.open = false;
-    popup.hidden = true;
-    popup.innerHTML = '';
-  };
-
-  const caretInfo = () => {
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) return null;
-    const range = selection.getRangeAt(0);
-    if (!node.contains(range.startContainer)) return null;
-    // 同上：用光标所在文本节点的前缀，换行后也能正确算出 @ 的位置
-    return { text: (range.startContainer.textContent || "").slice(0, range.startOffset), range };
-  };
-
-  const renderPopup = () => {
-    popup.innerHTML = '';
-    state.items.forEach((item, index) => {
-      const row = el('div', `mention-row${index === state.index ? ' is-active' : ''}`);
-      row.appendChild(el('span', 'mr-name', item.name));
-      if (item.fuzzy) row.appendChild(el('span', 'mr-kind', item.snippet || '≈ 打错了一点'));
-      else if (item.entity_type) row.appendChild(el('span', 'mr-kind', item.entity_type));
-      row.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        insert(item);
-      });
-      popup.appendChild(row);
-    });
-    const selection = window.getSelection();
-    const rect = selection && selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
-    const base = rect && rect.width ? rect : node.getBoundingClientRect();
-    popup.style.left = `${Math.min(base.left, window.innerWidth - 280)}px`;
-    popup.style.top = `${base.bottom + 6}px`;
-    popup.hidden = false;
-  };
-
-  const insert = async (item) => {
-    const info = caretInfo();
-    if (!info) return;
-    const typed = state.query;
-    // 退掉「@关键词」，再在光标处插入名字（用 execCommand 保住已有格式）
-    for (let i = 0; i <= typed.length; i += 1) document.execCommand('delete');
-    document.execCommand('insertText', false, item.name);
-    close();
-    saveBlock(entry, indexOfBlock(node), { html: node.innerHTML });
-    if (typed && typed !== item.name) {
-      // 把输入过的写法补成别名，下次不敲 @ 也能被自动识别
-      try {
-        const payload = await api(`/api/world/cards/${item.id}`);
-        const aliases = Array.from(new Set([...(payload.card.aliases || []), typed]));
-        await api(`/api/world/cards/${item.id}`, { method: 'PUT', body: { aliases } });
-        toast(`已把「${typed}」记为「${item.name}」的别名`);
-      } catch (error) { /* 别名失败不影响正文 */ }
-    }
-  };
-
-  const search = debounce_(async () => {
-    const query = state.query;
-    const data = await api(`/api/world/search?q=${encodeURIComponent(query)}&limit=8&fuzzy=1`);
-    state.items = data.results.filter((r) => r.type === 'card');
-    state.index = 0;
-    if (!state.items.length) { close(); return; }
-    state.open = true;
-    renderPopup();
-  }, 160);
-
-  node.addEventListener('input', () => {
-    const info = caretInfo();
-    if (!info) { close(); return; }
-    const match = /@([^\s@]{0,20})$/.exec(info.text);
-    if (!match) { close(); return; }
-    state.query = match[1];
-    state.start = info.text.length - match[0].length;
-    search();
-  });
-
-  node.addEventListener('keydown', (event) => {
-    if (!state.open) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      state.index = clamp(state.index + (event.key === 'ArrowDown' ? 1 : -1), 0, state.items.length - 1);
-      renderPopup();
-    } else if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      const item = state.items[state.index];
-      if (item) insert(item);
-    } else if (event.key === 'Escape') {
-      close();
-    }
-  });
-
-  node.addEventListener('blur', () => setTimeout(close, 120));
-}
-
-/* --------------------------------------------------- 打字补全（精确名字） */
-/**
- * 打字时自动弹出「精确名字」候补：把一个词的前缀 / 包含命中列出来，选中即补成正式名字。
- *  - 只认当前光标前的一个词，至少两个字符才触发（避免每敲一个字都蹦）；
- *  - `@` 提及与 `/` 区块菜单在场时让位，各自那套更具体；
- *  - 候选里带类型与描述，回车 / Tab / 点击都能接受（只把词替换成名字，链路由渲染时的识别补上）。
- */
-function attachNameCompleter(node, entry) {
-  const state = { open: false, query: '', items: [], index: 0 };
-  const popup = el('div', 'mention-pop');
-  popup.hidden = true;
-  document.body.appendChild(popup);
-
-  const close = () => {
-    state.open = false;
-    popup.hidden = true;
-    popup.innerHTML = '';
-  };
-
-  // 光标前那一个词（不含空白与标点）；已被 `@` / `/` 接管时返回 null
-  const wordBeforeCaret = () => {
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) return null;
-    const range = selection.getRangeAt(0);
-    if (!node.contains(range.startContainer)) return null;
-    const text = (range.startContainer.textContent || '').slice(0, range.startOffset);
-    if (/[@/][^\s@/]*$/.test(text)) return null;
-    const match = /([^\s@/，。、；：！？…—·"'（）()【】\[\]{}<>,.!?;:]{1,20})$/.exec(text);
-    return match ? match[1] : null;
-  };
-
-  const renderPopup = () => {
-    popup.innerHTML = '';
-    state.items.forEach((item, index) => {
-      const row = el('div', `mention-row${index === state.index ? ' is-active' : ''}`);
-      row.appendChild(el('span', 'mr-name', item.name));
-      const meta = [item.entity_type, item.description].filter(Boolean).join(' · ');
-      if (meta) row.appendChild(el('span', 'mr-kind mr-desc', meta));
-      row.addEventListener('mousedown', (event) => { event.preventDefault(); insert(item); });
-      popup.appendChild(row);
-    });
-    const selection = window.getSelection();
-    const rect = selection && selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
-    const base = rect && rect.width ? rect : node.getBoundingClientRect();
-    popup.style.left = `${Math.min(base.left, window.innerWidth - 280)}px`;
-    popup.style.top = `${base.bottom + 6}px`;
-    popup.hidden = false;
-  };
-
-  const insert = (item) => {
-    // 退掉已输入的关键词，再插入正式名字（用 execCommand 保住已有格式）
-    for (let i = 0; i < state.query.length; i += 1) document.execCommand('delete');
-    document.execCommand('insertText', false, item.name);
-    close();
-    saveBlock(entry, indexOfBlock(node), { html: node.innerHTML });
-  };
-
-  const search = debounce_(async () => {
-    const query = state.query;
-    const data = await api(`/api/world/complete?q=${encodeURIComponent(query)}&exclude=${entry.document.id}&limit=8`);
-    if (query !== state.query) return;                 // 结果过期，丢弃
-    state.items = data.results || [];
-    state.index = 0;
-    if (!state.items.length) { close(); return; }
-    state.open = true;
-    renderPopup();
-  }, 140);
-
-  node.addEventListener('input', (event) => {
-    if (event.isComposing) return;                     // 中文输入法正在拼字，先别打扰
-    const word = wordBeforeCaret();
-    if (!word || word.length < 2) { close(); return; }
-    state.query = word;
-    search();
-  });
-
-  // 注册在块自身的回车处理之前（见 blockTextField），这样接受候补能拦下"回车开新块"
-  node.addEventListener('keydown', (event) => {
-    if (!state.open) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault(); event.stopImmediatePropagation();
-      state.index = clamp(state.index + (event.key === 'ArrowDown' ? 1 : -1), 0, state.items.length - 1);
-      renderPopup();
-    } else if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault(); event.stopImmediatePropagation();
-      const item = state.items[state.index];
-      if (item) insert(item);
-    } else if (event.key === 'Escape') {
-      event.preventDefault(); event.stopImmediatePropagation();
-      close();
-    }
-  });
-
-  node.addEventListener('blur', () => setTimeout(close, 120));
-}
-
-/* --------------------------------------------------- `/` 斜杠菜单 */
-const SLASH_ITEMS = [
-  { key: 'text', label: '文本', hint: '普通段落', type: 'text' },
-  { key: 'h1', label: '标题 1', hint: '大章节标题', type: 'heading', html: '<h1>' },
-  { key: 'h2', label: '标题 2', hint: '中章节标题', type: 'heading', html: '<h2>' },
-  { key: 'h3', label: '标题 3', hint: '小章节标题', type: 'heading', html: '<h3>' },
-  { key: 'quote', label: '引用', hint: '带引用样式', type: 'quote' },
-  { key: 'callout', label: '提示框', hint: '规则或需要记住的事', type: 'callout' },
-  { key: 'divider', label: '分隔线', hint: '水平分隔', type: 'divider' },
-  { key: 'ul', label: '无序列表', hint: '圆点列表', type: 'bulleted' },
-  { key: 'ol', label: '有序列表', hint: '编号列表', type: 'numbered' },
-  { key: 'todo', label: '待办事项', hint: '带复选框', type: 'todo' },
-  { key: 'toggle', label: '折叠列表', hint: '可展开收起', type: 'toggle' },
-  { key: 'code', label: '代码块', hint: '等宽代码', type: 'code' },
-  { key: 'bookmark', label: '网页书签', hint: '把网址摆成卡片', type: 'bookmark' },
-  { key: 'inline-code', label: '行内代码', hint: '<code>', command: 'inline', wrap: 'code' },
-  { key: 'b', label: '加粗', hint: '⌘B', command: 'bold' },
-  { key: 'i', label: '斜体', hint: '⌘I', command: 'italic' },
-];
-
-/** 输入 `/` 拉起区块菜单。 */
-function attachSlashMenu(node, entry, index) {
-  const state = { open: false, query: '', items: [], active: 0 };
-  // 面板重渲染会换掉 DOM 节点，闭包里那个 node 会变成"旧节点"。
-  // 所有写操作都按「区块序号」实时取当前节点，避免把内容写回旧节点/旧内容。
-  const live = () => $(`.card-view[data-doc="${entry.document.id}"] .block[data-index="${index}"] .block-text`) || node;
-  const popup = el('div', 'mention-pop slash-pop');
-  popup.hidden = true;
-  document.body.appendChild(popup);
-
-  const close = () => { state.open = false; popup.hidden = true; popup.innerHTML = ''; };
-
-  const caretText = () => {
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) return null;
-    const range = selection.getRangeAt(0);
-    if (!node.contains(range.startContainer)) return null;
-    // 只看「光标所在文本节点」里光标之前的部分：换行（contenteditable 会插 <div>）
-    // 之后 node 级文本不带空白，用整段文字判断会漏掉新起的一行。
-    return (range.startContainer.textContent || "").slice(0, range.startOffset);
-  };
-
-  const render = () => {
-    popup.innerHTML = '';
-    if (!state.items.length) {
-      const row = el('div', 'mention-row is-empty');
-      row.appendChild(el('span', 'mr-name', '没有匹配的区块'));
-      row.appendChild(el('span', 'mr-kind', 'Esc 关闭'));
-      popup.appendChild(row);
-    }
-    state.items.forEach((item, i) => {
-      const row = el('div', `mention-row${i === state.active ? ' is-active' : ''}`);
-      row.appendChild(el('span', 'mr-name', item.label));
-      row.appendChild(el('span', 'mr-kind', item.hint || ''));
-      row.addEventListener('mousedown', (event) => { event.preventDefault(); apply(item); });
-      popup.appendChild(row);
-    });
-    const selection = window.getSelection();
-    const rect = selection && selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
-    const base = rect && rect.width ? rect : node.getBoundingClientRect();
-    popup.style.left = `${Math.min(base.left, window.innerWidth - 280)}px`;
-    popup.style.top = `${base.bottom + 6}px`;
-    popup.hidden = false;
-  };
-
-  /** 精确退掉光标前的 "/关键词"（execCommand('delete') 在换行后的 <div> 里不可靠）。 */
-  const deleteTyped = (count) => {
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) return;
-    const range = selection.getRangeAt(0);
-    const container = range.startContainer;
-    if (container.nodeType !== 3) return;
-    const offset = range.startOffset;
-    const from = Math.max(0, offset - count);
-    container.deleteData(from, offset - from);
-    const caret = document.createRange();
-    caret.setStart(container, from);
-    caret.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(caret);
-  };
-
-  const setBlockType = async (type, wrapTag) => {
-
-    const card = entry.card;
-    let html = node.innerHTML;
-    if (wrapTag !== undefined) {
-      // 标题：把内容换成对应标签
-      const inner = node.textContent || '';
-      html = inner.trim() ? `<${wrapTag}>${inner}</${wrapTag}>` : `<${wrapTag}><br></${wrapTag}>`;
-    }
-    const blocks = (card.blocks || []).map((b, i) => (i === index ? { ...b, type, html } : b));
-    const payload = await api(`/api/world/cards/${entry.document.id}`, { method: 'PUT', body: { blocks } });
-    applyCardResponse(entry, payload);
-    renderPanels();
-  };
-
-  const apply = async (item) => {
-    deleteTyped(state.query.length + 1);      // 退掉 "/关键词"
-    close();
-    const tag = item.html ? item.html.slice(1, -1) : null;
-    if (item.command === 'inline') {
-      document.execCommand('insertHTML', false, `<${item.wrap}></${item.wrap}>`);
-      return;
-    }
-    if (item.command) {                        // 列表 / 加粗 / 斜体
-      document.execCommand(item.command, false, null);
-      await saveBlock(entry, index, { html: live().innerHTML });
-      return;
-    }
-    if (item.type === 'divider') {             // 分隔线：在下面插一个新块
-      const blocks = [...(entry.card.blocks || [])];
-      blocks.splice(index + 1, 0, { id: `b${Date.now().toString(36)}`, type: 'divider', title: '', text: '' });
-      const payload = await api(`/api/world/cards/${entry.document.id}`, { method: 'PUT', body: { blocks, revision: entry.revision } });
-      applyCardResponse(entry, payload);
-      renderPanels();
-      return;
-    }
-    if (item.type === 'bookmark') {            // 书签：先要个网址
-      const url = await askText({ label: '书签网址', value: 'https://' });
-      if (url === null || !url.trim()) return;
-      await saveBlock(entry, index, { type: 'bookmark', settings: { url: url.trim() } }, '插入书签');
-      renderPanels();
-      return;
-    }
-    await setBlockType(item.type, tag);
-  };
-
-  node.addEventListener('input', () => {
-    const before = caretText();
-    if (before === null) { close(); return; }
-    // 关键词里允许空格（「标题 2」要能过滤），只挡换行与斜杠
-    const match = /(?:^|\s)\/([^\n/]{0,16})$/.exec(before);
-    if (!match) { close(); return; }
-    state.query = match[1];
-    const query = state.query.trim();
-    state.items = SLASH_ITEMS.filter((item) => !query
-      || item.label.includes(query)
-      || item.key.startsWith(query.toLowerCase())
-      || item.hint.toLowerCase().includes(query.toLowerCase()));
-    state.active = 0;
-    state.open = true;      // 没匹配时也留着弹层，并给一行提示（不然用户以为卡住）
-    render();
-  });
-
-  node.addEventListener('keydown', (event) => {
-    // Tab / ⇧Tab：缩进与取消缩进（斜杠菜单开着时 Tab 是选中菜单项）
-    if (!state.open && event.key === 'Tab') {
-      event.preventDefault();
-      const current = (Number(entry.card.blocks[index] && entry.card.blocks[index].level) || 0);
-      const next = clamp(current + (event.shiftKey ? -1 : 1), 0, 2);
-      if (next !== current) {
-        saveBlock(entry, index, { level: next }, event.shiftKey ? '取消缩进' : '缩进区块')
-          .then(() => { renderPanels(); announce(`第 ${next} 层`); });
-      }
-      return;
-    }
-    if (!state.open) {
-      if ((event.metaKey || event.ctrlKey) && ['b', 'i', 'u'].includes(event.key.toLowerCase())) {
-        event.preventDefault();
-        document.execCommand({ b: 'bold', i: 'italic', u: 'underline' }[event.key.toLowerCase()]);
-        debounce(`block:${entry.document.id}:${index}`, () => saveBlock(entry, index, { html: node.innerHTML }), 300);
-      }
-      return;
-    }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      state.active = clamp(state.active + (event.key === 'ArrowDown' ? 1 : -1), 0, state.items.length - 1);
-      render();
-    } else if (event.key === 'Enter' || event.key === 'Tab') {
-      const item = state.items[state.active];
-      if (!item) { close(); return; }        // 没得选就让它照常换行
-      event.preventDefault();
-      apply(item);
-    } else if (event.key === 'Escape') {
-      close();
-    }
-  });
-
-  node.addEventListener('blur', () => setTimeout(close, 120));
-}
-
-/* ------------------------------- 选中文字浮出的气泡工具栏（全局唯一，图标化） */
-/**
- * 选区气泡：上排是**动作**（创建卡片 / 链接卡片），下排是**格式**——
- * A▾ 段落样式、B I U S、引用、链接、≡▾ 列表、☰▾ 对齐、A 文字颜色、◐ 高亮、👁 块可见性。
- * 全部用 Minimal 设计系统的线条图标，圆角矩形浮层。
- */
-const FORMAT_BAR = { wrap: null, target: null, range: null, hovering: false, menu: null };
-
-const FB_TEXT_COLORS = ['#0a0a0a', '#525252', '#858585', '#cf001c', '#16a34a', '#2563eb', '#a855f7', '#d97706'];
-const FB_HIGHLIGHTS = ['rgba(24,24,27,.10)', 'rgba(37,99,235,.18)', 'rgba(22,163,74,.20)', 'rgba(207,0,28,.16)', 'rgba(217,119,6,.20)', 'rgba(168,85,247,.18)'];
-
-function fbButton(name, label, title, onClick, withCaret = false) {
-  const button = el('button', null);
-  button.type = 'button';
-  button.title = title || label || '';
-  if (name) button.appendChild(icon(name, 15));
-  if (label) button.appendChild(el('span', null, label));
-  if (withCaret) {
-    const caret = icon('chevron-down', 12);
-    caret.classList.add('fb-caret');
-    button.appendChild(caret);
-  }
-  button.addEventListener('mousedown', (event) => {
-    event.preventDefault();          // 保住选区
-    onClick(button);
-  });
-  return button;
-}
-
-function closeFbMenu() {
-  if (FORMAT_BAR.menu) { FORMAT_BAR.menu.remove(); FORMAT_BAR.menu = null; }
-}
-
-function openFbMenu(anchor, build) {
-  closeFbMenu();
-  const menu = el('div', 'fb-menu');
-  build(menu);
-  document.body.appendChild(menu);
-  const rect = anchor.getBoundingClientRect();
-  menu.style.left = `${clamp(rect.left, 8, window.innerWidth - menu.offsetWidth - 8)}px`;
-  menu.style.top = `${rect.bottom + 6}px`;
-  FORMAT_BAR.menu = menu;
-}
-
-function fbMenuButton(menu, label, { iconName, on, run }) {
-  const button = el('button', on ? 'is-on' : null);
-  button.type = 'button';
-  if (iconName) button.appendChild(icon(iconName, 15));
-  button.appendChild(el('span', null, label));
-  if (on) button.appendChild(icon('check', 14));
-  button.addEventListener('mousedown', (event) => {
-    event.preventDefault();
-    run();
-    closeFbMenu();
-  });
-  menu.appendChild(button);
-  return button;
-}
-
-function fbSwatchMenu(anchor, colors, apply) {
-  openFbMenu(anchor, (menu) => {
-    const box = el('div', 'fb-swatches');
-    colors.forEach((color) => {
-      const swatch = el('button');
-      swatch.type = 'button';
-      swatch.style.background = color;
-      swatch.title = color;
-      swatch.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        apply(color);
-        closeFbMenu();
-      });
-      box.appendChild(swatch);
-    });
-    menu.appendChild(box);
-  });
-}
-
-/** 当前选区所在的块级标签（用来在「段落样式」里打勾）。 */
-function currentBlockTag() {
-  const selection = window.getSelection();
-  if (!selection || !selection.rangeCount) return 'p';
-  let node = selection.getRangeAt(0).startContainer;
-  while (node && node.nodeType !== 1) node = node.parentNode;
-  while (node && node.tagName && !['P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'LI', 'DIV'].includes(node.tagName)) {
-    node = node.parentNode;
-  }
-  return node && node.tagName ? node.tagName.toLowerCase() : 'p';
-}
-
-function formatBarElement() {
-  if (FORMAT_BAR.wrap) return FORMAT_BAR.wrap;
-  const wrap = el('div', 'fb-wrap');
-  wrap.hidden = true;
-
-  const runCommand = (command, value) => {
-    const target = FORMAT_BAR.target;
-    if (!target) return;
-    const selection = window.getSelection();
-    if (FORMAT_BAR.range) {
-      selection.removeAllRanges();
-      selection.addRange(FORMAT_BAR.range);
-    }
-    if (command === 'createLink' && !value) return;
-    document.execCommand(command, false, value === undefined ? null : value);
-    FORMAT_BAR.range = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    saveBlock(target.entry, target.index, { html: target.node.innerHTML });
-    formatBarUpdate();
-  };
-
-  const setBlockTag = (tag) => {
-    document.execCommand('formatBlock', false, tag);
-    const target = FORMAT_BAR.target;
-    if (target) saveBlock(target.entry, target.index, { html: target.node.innerHTML });
-    formatBarUpdate();
-  };
-
-  /* 上排：选区动作 */
-  const actions = el('div', 'fb-actions');
-  actions.appendChild(fbButton('card-plus', '创建卡片', '用选中的文字新建一张卡片', () => createCardFromSelection()));
-  actions.appendChild(fbButton('link', '链接卡片', '把选中的文字链到已有卡片', () => linkSelectionToCard()));
-  wrap.appendChild(actions);
-
-  /* 下排：格式 */
-  const bar = el('div', 'format-bar');
-  bar.appendChild(fbButton('type', null, '段落样式', (button) => {
-    const tag = currentBlockTag();
-    openFbMenu(button, (menu) => {
-      [['p', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'], ['blockquote', '引用']]
-        .forEach(([value, label]) => fbMenuButton(menu, label, {
-          on: tag === value, run: () => setBlockTag(value),
-        }));
-    });
-  }, true));
-
-  ['bold', 'italic', 'underline', 'strikeThrough'].forEach((command, index) => {
-    const glyph = ['B', 'I', 'U', 'S'][index];
-    const button = el('button', null, glyph);
-    button.type = 'button';
-    button.title = ['加粗 ⌘B', '斜体 ⌘I', '下划线 ⌘U', '删除线'][index];
-    button.style.fontWeight = command === 'bold' ? '700' : '500';
-    button.style.fontStyle = command === 'italic' ? 'italic' : 'normal';
-    button.style.textDecoration = command === 'underline' ? 'underline' : (command === 'strikeThrough' ? 'line-through' : 'none');
-    button.addEventListener('mousedown', (event) => { event.preventDefault(); runCommand(command); });
-    bar.appendChild(button);
-  });
-
-  bar.appendChild(fbButton('quote', null, '引用', () => {
-    const tag = currentBlockTag();
-    setBlockTag(tag === 'blockquote' ? 'p' : 'blockquote');
-  }));
-  bar.appendChild(fbButton('link', null, '插入 / 取消链接', async (button) => {
-    const target = FORMAT_BAR.target;
-    const selection = window.getSelection();
-    let inside = selection && selection.anchorNode;
-    while (inside && inside.nodeType !== 1) inside = inside.parentNode;
-    const existing = inside && inside.closest ? inside.closest('a') : null;
-    if (existing) { runCommand('unlink'); return; }
-    // 浮层会把焦点从正文里拿走——先把选区存下来，插链接前还回去
-    const savedRange = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    const url = await askText({ label: '链接地址', value: 'https://' });
-    if (url) {
-      if (savedRange) {
-        const back = window.getSelection();
-        back.removeAllRanges();
-        back.addRange(savedRange);
-      }
-      runCommand('createLink', url);
-    }
-    void button;
-    void target;
-  }));
-  bar.appendChild(fbButton('list', null, '列表', (button) => {
-    openFbMenu(button, (menu) => {
-      fbMenuButton(menu, '无序列表', { iconName: 'list', run: () => runCommand('insertUnorderedList') });
-      fbMenuButton(menu, '有序列表', { iconName: 'list-ordered', run: () => runCommand('insertOrderedList') });
-    });
-  }, true));
-  bar.appendChild(fbButton('align', null, '对齐', (button) => {
-    openFbMenu(button, (menu) => {
-      fbMenuButton(menu, '左对齐', { iconName: 'align', run: () => runCommand('justifyLeft') });
-      fbMenuButton(menu, '居中', { iconName: 'align', run: () => runCommand('justifyCenter') });
-      fbMenuButton(menu, '右对齐', { iconName: 'align', run: () => runCommand('justifyRight') });
-    });
-  }, true));
-
-  const colorButton = fbButton(null, 'A', '文字颜色', (button) => {
-    fbSwatchMenu(button, FB_TEXT_COLORS, (color) => runCommand('foreColor', color));
-  });
-  colorButton.classList.add('fb-color');
-  bar.appendChild(colorButton);
-
-  bar.appendChild(fbButton('droplet', null, '高亮', (button) => {
-    fbSwatchMenu(button, FB_HIGHLIGHTS, (color) => runCommand('hiliteColor', color));
-  }));
-
-  const eyeButton = fbButton('eye', null, '这块在站点上显示 / 隐藏', async () => {
-    const target = FORMAT_BAR.target;
-    if (!target) return;
-    const block = (target.entry.card.blocks || [])[target.index];
-    if (!block) return;
-    await saveBlock(target.entry, target.index, { hidden: !block.hidden });
-    toast(block.hidden ? '这块已恢复显示' : '这块已从站点隐藏');
-    renderPanels();
-  });
-  eyeButton.dataset.role = 'visibility';
-  bar.appendChild(eyeButton);
-
-  wrap.appendChild(bar);
-  document.body.appendChild(wrap);
-  FORMAT_BAR.wrap = wrap;
-  document.addEventListener('selectionchange', formatBarUpdate);
-  document.addEventListener('mousedown', (event) => {
-    if (!event.target.closest('.fb-menu') && !event.target.closest('.format-bar') && !event.target.closest('.fb-actions')) {
-      closeFbMenu();
-    }
-  });
-  return wrap;
-}
-
-function formatBarHide() {
-  if (FORMAT_BAR.wrap) FORMAT_BAR.wrap.hidden = true;
-  closeFbMenu();
-}
-
-function formatBarUpdate() {
-  const wrap = FORMAT_BAR.wrap;
-  const target = FORMAT_BAR.target;
-  if (!wrap || !target || FORMAT_BAR.menu) return;
-  const selection = window.getSelection();
-  if (!selection || !selection.rangeCount) { if (!FORMAT_BAR.hovering) wrap.hidden = true; return; }
-  const range = selection.getRangeAt(0);
-  const inside = target.node.contains(range.commonAncestorContainer);
-  if (selection.isCollapsed || !inside) {
-    if (!FORMAT_BAR.hovering) wrap.hidden = true;
-    return;
-  }
-  FORMAT_BAR.range = range.cloneRange();
-  const rect = range.getBoundingClientRect();
-  if (!rect.width && !rect.height) { if (!FORMAT_BAR.hovering) wrap.hidden = true; return; }
-  wrap.hidden = false;
-  // 先显示再量高度：浮层要整块贴在选区上方
-  const height = wrap.offsetHeight || 76;
-  const above = rect.top - height - 12;
-  wrap.style.left = `${clamp(rect.left, 8, window.innerWidth - wrap.offsetWidth - 12)}px`;
-  wrap.style.top = `${above > 8 ? above : Math.min(rect.bottom + 12, window.innerHeight - height - 8)}px`;
-
-  // 状态回显：加粗 / 斜体 / 下划线 / 引用 / 块可见性
-  const states = {
-    bold: document.queryCommandState('bold'),
-    italic: document.queryCommandState('italic'),
-    underline: document.queryCommandState('underline'),
-    strikeThrough: document.queryCommandState('strikeThrough'),
-  };
-  $$('.format-bar button', wrap).forEach((button) => {
-    const glyph = button.textContent.trim();
-    const map = { B: 'bold', I: 'italic', U: 'underline', S: 'strikeThrough' };
-    if (map[glyph]) button.classList.toggle('is-on', states[map[glyph]]);
-  });
-  const block = (target.entry.card.blocks || [])[target.index];
-  const eye = $('[data-role="visibility"]', wrap);
-  if (eye && block) {
-    eye.innerHTML = '';
-    eye.appendChild(icon(block.hidden ? 'eye-off' : 'eye', 15));
-    eye.title = block.hidden ? '这块在站点上被隐藏了' : '这块在站点上显示';
-  }
-}
-
-function attachFormatBar(node, entry, index) {
-  const wrap = formatBarElement();
-  wrap.addEventListener('pointerenter', () => { FORMAT_BAR.hovering = true; });
-  wrap.addEventListener('pointerleave', () => { FORMAT_BAR.hovering = false; });
-  FORMAT_BAR.target = { node, entry, index };
-  node.addEventListener('focus', () => { FORMAT_BAR.target = { node, entry, index }; });
-  node.addEventListener('blur', () => { if (!FORMAT_BAR.hovering) formatBarHide(); });
-}
-
-/* --------------------------------- 选区动作：创建卡片 / 链接卡片 */
-function wrapSelectionAsMention(documentId) {
-  const selection = window.getSelection();
-  if (!selection || !selection.rangeCount || selection.isCollapsed) return false;
-  const range = selection.getRangeAt(0);
-  const text = selection.toString();
-  const span = document.createElement('span');
-  span.className = 'mentions-inline';
-  span.dataset.target = String(documentId);
-  span.textContent = text;
-  range.deleteContents();
-  range.insertNode(span);
-  selection.removeAllRanges();
-  return true;
-}
-
-async function createCardFromSelection() {
-  const target = FORMAT_BAR.target;
-  const selection = window.getSelection();
-  if (!target || !selection || selection.isCollapsed) { toast('先选中一段文字'); return; }
-  const text = selection.toString().trim();
-  if (!text) { toast('先选中一段文字'); return; }
-
-  const type = S.types.find((t) => !t.hidden) || S.types[0];
-  const created = await api('/api/world/documents', {
-    method: 'POST',
-    body: { type: 'card', name: text.slice(0, 60), entity_type: null },
-  });
-  // 选中的文字成为新卡片的「概览」
-  await api(`/api/world/cards/${created.id}`, {
-    method: 'PUT',
-    body: { blocks: [{ id: 'b1', type: 'text', title: '概览', text }] },
-  });
-  wrapSelectionAsMention(created.id);
-  await saveBlock(target.entry, target.index, { html: target.node.innerHTML });
-  await reloadTree();
-  toast(`已创建卡片「${created.name}」，选中的文字已链到它`);
-  formatBarHide();
-}
-
-async function linkSelectionToCard() {
-  const target = FORMAT_BAR.target;
-  const selection = window.getSelection();
-  if (!target || !selection || selection.isCollapsed) { toast('先选中一段文字'); return; }
-  const text = selection.toString().trim();
-  const range = selection.getRangeAt(0).cloneRange();
-
-  cardPicker(async (chosen) => {
-    selection.removeAllRanges();
-    selection.addRange(range);
-    wrapSelectionAsMention(chosen.id);
-    await saveBlock(target.entry, target.index, { html: target.node.innerHTML });
-    if (text && text !== chosen.name) {
-      const payload = await api(`/api/world/cards/${chosen.id}`);
-      const aliases = Array.from(new Set([...(payload.card.aliases || []), text]));
-      await api(`/api/world/cards/${chosen.id}`, { method: 'PUT', body: { aliases } });
-      toast(`已链到「${chosen.name}」，并把「${text}」记成别名`);
-    } else {
-      toast(`已链到「${chosen.name}」`);
-    }
-    formatBarHide();
-  });
-}
-
-/** 块类型的中文名（块菜单页脚等处复用）。 */
-const BLOCK_LABEL = {
-  text: '正文', heading: '标题', quote: '引用', callout: '提示框', divider: '分隔线',
-  bulleted: '无序列表', numbered: '有序列表', todo: '待办事项', toggle: '折叠列表',
-  code: '代码', bookmark: '网页书签', card: '嵌入卡', image: '图片', embed: '嵌入',
-  media: '媒体', tool: '工具', table: '表格',
-};
-
-/** 块菜单：转换类型 / 复制 / 上下移 / 隐藏 / 删除（拖动把手点一下打开）。 */
-function openBlockMenu(anchor, entry, index) {
-  const block = (entry.card.blocks || [])[index];
-  if (!block) return;
-  const menu = el('div', 'fb-menu block-menu');
-
-  // 块菜单第一行是「搜索操作…」——操作有近 20 项，靠敲比靠眼睛找快。
-  const search = el('input', 'bm-search');
-  search.type = 'text';
-  search.placeholder = '搜索操作…';
-  search.setAttribute('aria-label', '搜索操作');
-  menu.appendChild(search);
-
-  const list = el('div', 'bm-list');
-  menu.appendChild(list);
-
-  const rows = [];
-  const item = (label, iconName, run, danger, shortcut) => {
-    const button = el('button', danger ? 'is-danger' : null);
-    button.type = 'button';
-    if (iconName) button.appendChild(icon(iconName, 14));
-    button.appendChild(el('span', 'bm-label', label));
-    if (shortcut) button.appendChild(el('kbd', 'bm-hint', shortcut));
-    button.addEventListener('click', async () => {
-      menu.remove();
-      document.removeEventListener('keydown', onKey);
-      await run();
-    });
-    list.appendChild(button);
-    rows.push({ button, label });
-    return button;
-  };
-  const sep = () => list.appendChild(el('div', 'fb-sep'));
-  const group = (text) => list.appendChild(el('div', 'bm-group', text));
-
-  group('转换成');
-  const convert = (type, label, iconName) => item(label, iconName, async () => {
-    if (block.type === type) return;
-    await saveBlock(entry, index, { type }, '转换区块类型');
-    renderPanels();
-  });
-  convert('text', '正文', 'type');
-  convert('heading', '标题', 'type');
-  convert('bulleted', '无序列表', 'list');
-  convert('numbered', '有序列表', 'list-ordered');
-  convert('todo', '待办事项', 'circle-check');
-  convert('toggle', '折叠列表', 'chevron-right');
-  convert('quote', '引用', 'quote');
-  convert('callout', '提示框', 'circle-alert');
-  convert('code', '代码', 'hash');
-
-  sep();
-  group('排版');
-  item('上移一块', 'arrow-up', () => moveBlock(entry, index, -1));
-  item('下移一块', 'arrow-down', () => moveBlock(entry, index, 1));
-  item('缩进一层', 'chevron-right', async () => {
-    const level = Math.min(2, (Number(block.level) || 0) + 1);
-    await saveBlock(entry, index, { level }, '缩进区块');
-    renderPanels();
-    announce(`已缩进到第 ${level} 层`);
-  });
-  item('取消缩进', 'chevron-left', async () => {
-    const level = Math.max(0, (Number(block.level) || 0) - 1);
-    await saveBlock(entry, index, { level }, '取消缩进');
-    renderPanels();
-    announce(level ? `已缩进到第 ${level} 层` : '已回到顶层');
-  });
-  item(block.collapsed ? '展开这一块' : '折叠这一块', block.collapsed ? 'chevron-down' : 'chevron-up', async () => {
-    await saveBlock(entry, index, { collapsed: !block.collapsed }, '折叠区块');
-    renderPanels();
-  });
-
-  sep();
-  item('在上面插入一块', 'circle-plus', () => insertBlockAt(entry, index));
-  item('在下面插入一块', 'circle-plus', () => insertBlockAt(entry, index + 1));
-  item('复制这一块', 'file', () => duplicateBlock(entry, index), null, '⌘D');
-  item('嵌入一张卡片…', 'file', () => {
-    openCardPicker({
-      title: '嵌入哪张卡片',
-      exclude: entry.document.id,
-      onPick: async (chosen) => {
-        await saveBlock(entry, index, { type: 'card', settings: { document: chosen.id } }, '嵌入卡片');
-        renderPanels();
-      },
-    });
-  });
-  item('插入图片…', 'box', () => imageBlockDialog(entry, index));
-  item('插入书签…', 'link', async () => {
-    const url = await askText({ label: '书签网址', value: 'https://' });
-    if (url === null || !url.trim()) return;
-    await saveBlock(entry, index, { type: 'bookmark', settings: { url: url.trim() } }, '插入书签');
-    renderPanels();
-  });
-  item(block.hidden ? '在站点上显示' : '在站点上隐藏', block.hidden ? 'eye' : 'eye-off', () => toggleBlockHidden(entry, index));
-  const commentCount = (block.comments || []).length;
-  item(commentCount ? `评论（${commentCount}）` : '评论…', 'message-circle-more', () => openBlockComments(anchor, entry, index), null, '⌘⇧M');
-
-  sep();
-  item('删除这一块', 'trash-2', () => removeBlock(entry, index), true, 'Del');
-
-  // 页脚：这一块的体量（块菜单底部也挂着一行统计）
-  const plain = (block.text || '').trim();
-  const words = (plain.match(/[\u4e00-\u9fff]|[A-Za-z0-9]+/g) || []).length;
-  const foot = el('div', 'bm-foot');
-  foot.appendChild(el('div', null, `这一块 · ${BLOCK_LABEL[block.type] || block.type}`));
-  foot.appendChild(el('div', null, `${words} 个单词，${plain.length} 个字符`));
-  menu.appendChild(foot);
-
-  // 顶部搜索直接过滤（打错也别卡住，没匹配就空着）
-  search.addEventListener('input', () => {
-    const query = search.value.trim().toLowerCase();
-    rows.forEach(({ button, label }) => {
-      button.hidden = Boolean(query) && !label.toLowerCase().includes(query);
-    });
-  });
-
-  // 菜单开着时的快捷键（对应右侧那列提示）
-  const onKey = async (event) => {
-    if (event.key === 'Escape') {
-      menu.remove();
-      document.removeEventListener('keydown', onKey);
-      return;
-    }
-    const mod = event.metaKey || event.ctrlKey;
-    if (!mod && (event.key === 'Delete' || event.key === 'Backspace')) {
-      event.preventDefault();
-      menu.remove();
-      document.removeEventListener('keydown', onKey);
-      await removeBlock(entry, index);
-      return;
-    }
-    if (mod && !event.shiftKey && event.key.toLowerCase() === 'd') {
-      event.preventDefault();
-      menu.remove();
-      document.removeEventListener('keydown', onKey);
-      await duplicateBlock(entry, index);
-      return;
-    }
-    if (mod && event.shiftKey && event.key.toLowerCase() === 'm') {
-      event.preventDefault();
-      menu.remove();
-      document.removeEventListener('keydown', onKey);
-      openBlockComments(anchor, entry, index);
-    }
-  };
-  document.addEventListener('keydown', onKey);
-
-  document.body.appendChild(menu);
-  const rect = anchor.getBoundingClientRect();
-  menu.style.left = `${clamp(rect.left, 8, window.innerWidth - menu.offsetWidth - 8)}px`;
-  menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menu.offsetHeight - 8)}px`;
-  search.focus();
-  const close = (event) => {
-    if (!menu.contains(event.target)) {
-      menu.remove();
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', onKey);
-    }
-  };
-  setTimeout(() => document.addEventListener('mousedown', close), 0);
-}
-
-/** 插入图片：给地址，或者直接上传（走文档媒体接口）。 */
-async function imageBlockDialog(entry, index) {
-  openModal('插入图片', (body) => {
-    const urlInput = el('input', 'mini-input');
-    urlInput.placeholder = 'https://… 图片地址';
-    const captionInput = el('input', 'mini-input');
-    captionInput.placeholder = '图注（可选）';
-    const row = el('div', 'form-row');
-    row.appendChild(el('label', null, '地址'));
-    row.appendChild(urlInput);
-    body.appendChild(row);
-    const row2 = el('div', 'form-row');
-    row2.appendChild(el('label', null, '图注'));
-    row2.appendChild(captionInput);
-    body.appendChild(row2);
-
-    const fileInput = el('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
-    fileInput.style.display = 'none';
-    body.appendChild(fileInput);
-    const actions = el('div', 'form-row');
-    const upload = el('button', 'mini-btn', '上传本地图片');
-    upload.addEventListener('click', () => fileInput.click());
-    actions.appendChild(upload);
-    const save = el('button', 'mini-btn is-primary', '插入');
-    save.addEventListener('click', async () => {
-      if (!urlInput.value.trim()) { toast('先给个地址或上传一张图'); return; }
-      await saveBlock(entry, index, {
-        type: 'image',
-        settings: { url: urlInput.value.trim(), caption: captionInput.value.trim() },
-      }, '插入图片');
-      closeModal();
-      renderPanels();
-      announce('已插入图片');
-    });
-    actions.appendChild(save);
-    body.appendChild(actions);
-
-    fileInput.addEventListener('change', async () => {
-      const file = (fileInput.files || [])[0];
-      if (!file) return;
-      const form = new FormData();
-      form.append('file', file, file.name);
-      form.append('kind', 'image');
-      form.append('title', file.name);
-      const result = await api(`/api/world/documents/${entry.document.id}/media`, { method: 'POST', form });
-      urlInput.value = result.entry.url;
-      toast('已上传，点「插入」放进正文');
-    });
-  });
-}
-
-async function insertBlockAt(entry, index, type = 'text') {
-  const blocks = [...(entry.card.blocks || [])];
-  blocks.splice(index, 0, { id: `b${Date.now().toString(36)}`, type, title: '', text: '' });
-  await saveBlocks(entry, blocks, '插入区块');
-  renderPanels();
-  // 插完把光标放到新块里（回车换块、块左边的 ＋ 都靠这一句接着往下写）
-  setTimeout(() => {
-    const node = $(`.card-view[data-doc="${entry.document.id}"] .block[data-index="${index}"] .block-text`);
-    if (node) node.focus();
-  }, 0);
-}
-
-async function duplicateBlock(entry, index) {
-  const blocks = [...(entry.card.blocks || [])];
-  const source = blocks[index];
-  blocks.splice(index + 1, 0, { ...source, id: `b${Date.now().toString(36)}` });
-  await saveBlocks(entry, blocks, '复制区块');
-  renderPanels();
-  toast('已复制这一块');
-}
-
-/** 块评论：一个小浮层，能发评论、标记解决、删除。 */
-function openBlockComments(anchor, entry, index) {
-  const block = (entry.card.blocks || [])[index] || {};
-  const comments = [...(block.comments || [])];
-  const pop = el('div', 'comment-pop');
-  pop.appendChild(el('div', 'comment-head', `评论 · ${block.title || (block.text || '').slice(0, 12) || '这一块'}`));
-  const list = el('div', 'comment-list');
-  const render = () => {
-    list.innerHTML = '';
-    if (!comments.length) list.appendChild(el('p', 'hint', '还没有评论。'));
-    comments.forEach((comment, i) => {
-      const row = el('div', `comment-row${comment.resolved ? ' is-resolved' : ''}`);
-      const head = el('div', 'comment-meta');
-      head.appendChild(el('b', null, comment.author || '我'));
-      head.appendChild(el('span', 'hint', (comment.at || '').replace('T', ' ').slice(0, 16)));
-      row.appendChild(head);
-      row.appendChild(el('div', 'comment-text', comment.text));
-      const actions = el('div', 'comment-actions');
-      const resolve = el('button', 'mini-btn is-small', comment.resolved ? '重新打开' : '标记解决');
-      resolve.addEventListener('click', async () => {
-        comments[i] = { ...comment, resolved: !comment.resolved };
-        await saveComments();
-        render();
-      });
-      const remove = el('button', 'mini-btn is-small is-danger', '删除');
-      remove.addEventListener('click', async () => {
-        comments.splice(i, 1);
-        await saveComments();
-        render();
-      });
-      actions.appendChild(resolve);
-      actions.appendChild(remove);
-      row.appendChild(actions);
-      list.appendChild(row);
-    });
-  };
-  const saveComments = async () => {
-    await saveBlock(entry, index, { comments }, '评论区块');
-    renderPanels();
-  };
-
-  const input = el('textarea', 'comment-input');
-  input.rows = 2;
-  input.placeholder = '写评论…（⌘↵ 发送）';
-  const send = async () => {
-    const text = input.value.trim();
-    if (!text) return;
-    // 乐观 UI：先上屏，再落库；**失败要回滚并闪一下琥珀**
-    const optimistic = {
-      id: `c${Date.now().toString(36)}`,
-      author: '我',
-      text,
-      at: new Date().toISOString(),
-      resolved: false,
-    };
-    comments.push(optimistic);
-    input.value = '';
-    render();
-    try {
-      await saveComments();
-      render();
-      announce('评论已保存');
-    } catch (error) {
-      // 回滚：把这条从本地列表里拿掉，并把文字还给输入框，别让人重打一遍
-      const index_ = comments.indexOf(optimistic);
-      if (index_ >= 0) comments.splice(index_, 1);
-      input.value = text;
-      render();
-      const box = pop.querySelector('.comment-list, .comment-rows') || pop;
-      if (typeof box.animate === 'function' && typeof Opus !== 'undefined' && !Opus.reduced()) {
-        box.animate([
-          { boxShadow: 'inset 0 0 0 1px rgba(224, 168, 60, 0.85)' },
-          { boxShadow: 'inset 0 0 0 1px rgba(224, 168, 60, 0)' },
-        ], { duration: 700, easing: 'ease-out' });
-      }
-      if (!error || !error.isSurfaced) toast('评论没发出去，先给你留着了', { kind: 'warn' });
-      announce('评论没保存成功，已经放回输入框');
-    }
-  };
-  input.addEventListener('keydown', (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); send(); }
-  });
-  const foot = el('div', 'comment-foot');
-  foot.appendChild(input);
-  const sendBtn = el('button', 'mini-btn is-primary', '发送');
-  sendBtn.addEventListener('click', send);
-  foot.appendChild(sendBtn);
-
-  pop.appendChild(list);
-  pop.appendChild(foot);
-  document.body.appendChild(pop);
-  render();
-  /* 定位按实测尺寸算，别按写死的 320：浮层宽高改了之后写死的数字会把便签
-     顶到视口外（窄屏尤其明显）。默认贴在块的右下角，放不下就翻到上方。 */
-  const rect = anchor.getBoundingClientRect();
-  const box = pop.getBoundingClientRect();
-  const margin = 8;
-  pop.style.left = `${clamp(rect.right - box.width, margin, Math.max(margin, window.innerWidth - box.width - margin))}px`;
-  const below = rect.bottom + margin;
-  pop.style.top = `${below + box.height > window.innerHeight - margin
-    ? Math.max(margin, rect.top - box.height - margin)
-    : below}px`;
-  input.focus();
-  const dismiss = () => {
-    pop.remove();
-    document.removeEventListener('mousedown', close);
-    document.removeEventListener('keydown', onKey);
-  };
-  const close = (event) => {
-    if (!pop.contains(event.target) && !anchor.contains(event.target)) dismiss();
-  };
-  // Esc 也能收掉这张"便签"（和外层浮层的约定一致，键盘用户不用去够鼠标）
-  const onKey = (event) => {
-    if (event.key === 'Escape') { event.preventDefault(); dismiss(); }
-  };
-  setTimeout(() => {
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-  }, 0);
-}
-
-/** 找到某个区块在它所属卡片里的序号（@ 提及保存时要用）。 */
-function indexOfBlock(node) {
-  const view = node.closest('.card-view');
-  if (!view) return 0;
-  const blocks = Array.from(view.querySelectorAll('.block'));
-  return Math.max(0, blocks.indexOf(node.closest('.block')));
-}
-
 /** 轻量防抖（给搜索用，和 S.pending 那套分开，避免互相清理）。 */
 function debounce_(fn, wait) {
   let timer = null;
@@ -4406,7 +3122,7 @@ async function pickType(entry, panelIndex) {
  * 卡片选择器：一个可搜索的浮层（替换掉原来那套 window.prompt 问编号的做法）。
  * 输入即搜、↑↓ 选择、↵ 或点击确认、Esc 关闭。
  */
-function openCardPicker({ title = '选择卡片', exclude = null, onPick }) {
+function openCardPicker({ title = '选择卡片', exclude = null, onPick, onCancel = null }) {
   const overlay = el('div', 'picker');
   const box = el('div', 'picker-box');
   const head = el('div', 'picker-head');
@@ -4427,8 +3143,13 @@ function openCardPicker({ title = '选择卡片', exclude = null, onPick }) {
 
   let items = [];
   let active = 0;
+  let picked = false;
 
-  const close = () => overlay.remove();
+  // 关掉选择器。没选到东西就调 onCancel（孤岛插入重块靠它把 Promise 收成 null）。
+  const close = () => {
+    overlay.remove();
+    if (!picked && onCancel) onCancel();
+  };
 
   const render = () => {
     list.innerHTML = '';
@@ -4453,6 +3174,7 @@ function openCardPicker({ title = '选择卡片', exclude = null, onPick }) {
   };
 
   const choose = (item) => {
+    picked = true;
     close();
     onPick(item);
   };
@@ -6632,8 +5354,12 @@ async function publishDialog() {
 /* 模态框的焦点管理：打开时记下触发者，关掉还回去 */
 let MODAL_OPENER = null;
 let MODAL_UNTRAP = null;
+// 关掉模态框时的「取消」回调：给那些要把结果返回成 Promise 的对话框用
+// （比如孤岛重块插入）。没设就是 null，普通对话框不受影响。
+let MODAL_ON_CANCEL = null;
 
 function openModal(title, build) {
+  MODAL_ON_CANCEL = null;   // 新开一个，上一份的取消回调不能漏到这一份
   $('#mdTitle').textContent = title;
   const body = $('#mdBody');
   body.innerHTML = '';
@@ -6657,6 +5383,10 @@ function closeModal() {
     try { MODAL_OPENER.focus({ preventScroll: true }); } catch (error) { /* 忽略 */ }
   }
   MODAL_OPENER = null;
+  // 取消回调最后跑：它可能马上又开别的浮层，抢焦点，所以放在还原焦点之后。
+  const onCancel = MODAL_ON_CANCEL;
+  MODAL_ON_CANCEL = null;
+  if (onCancel) onCancel();
 }
 
 /* ========================================================== 输入浮层 */
@@ -6899,6 +5629,9 @@ async function runPalette(query) {
   const render = (entries) => {
     list.innerHTML = '';
     const rows = el('div', 'pl-rows');
+    // 搜不到东西时别留一片空白：给一行空态，和斜杠菜单的 .mention-row.is-empty 同一个语气。
+    // 用独立的 .pl-empty 而不是 .pl-item，免得被上下键当成可选项选中。
+    if (!entries.length) rows.appendChild(el('div', 'pl-empty', '没有匹配的条目'));
     let lastGroup = null;
     entries.forEach((entry, index) => {
       if (entry.group && entry.group !== lastGroup) {
@@ -7140,41 +5873,75 @@ async function showTrash() {
 }
 
 /* ====================================================== 名字自动识别 */
-async function highlightMentions(root) {
-  if (!root || !S.world || !S.world.auto_link_enabled) return;
-  const texts = $$('.block-text', root);
-  if (!texts.length) return;
-  const joined = texts.map((node) => node.textContent).join('\n');
-  if (!joined.trim()) return;
-  const docId = Number(root.dataset.doc);
-  const data = await api('/api/world/autolink', { method: 'POST', body: { text: joined, exclude: docId } });
-  if (!data.matches.length) return;
+/** 正文里的卡片名 / 别名 → 可点的高亮链接。
+ *
+ *  接入孤岛前这是 vanilla 的活：拿到服务端匹配结果后**重写 `.block-text` 的
+ *  innerHTML**，把命中的名字包成 span。正文改由孤岛（BlockNote / ProseMirror）
+ *  渲染之后，`.block-text` 不复存在，而且重写 innerHTML 这一招也不能再用了——
+ *  那是 ProseMirror 管的 DOM，直接改会连光标、选区和撤销栈一起打坏。
+ *
+ *  现在的分工：
+ *    · 这边（vanilla）负责识别与点击——拿孤岛的实时文档拼出纯文本，POST 给
+ *      /api/world/autolink 换回命中名单，再把「命中的字面 → 目标卡片」交给孤岛；
+ *    · 孤岛负责画——用 ProseMirror 装饰在视图上贴一层 `.mentions-inline` 外壳，
+ *      文档、选区、撤销栈一概不动，正文一变就按当前名单重算。
+ *
+ *  点击监听挂在容器上（委托）而不是逐个 span 上：装饰层每次事务都会重画，
+ *  逐个挂的监听会被一起冲掉。 */
+async function applyIslandMentions(entry, holder) {
+  const handle = holder && holder.__islandHandle;
+  if (!handle || typeof handle.setMentions !== 'function') return;
 
-  const names = Array.from(new Set(data.matches.map((m) => m.matched)));
-  const pattern = new RegExp(`(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
-  const idFor = new Map(data.matches.map((m) => [m.matched, m.document_id]));
-
-  // 用户正在编辑 / 选中的块绝对不要动：重写 innerHTML 会把选区连同光标一起吞掉
-  const activeSelection = window.getSelection();
-  const anchorNode = activeSelection && activeSelection.rangeCount ? activeSelection.anchorNode : null;
-  texts.forEach((node) => {
-    if (node.dataset.linked === '1') return;
-    if (/<[a-z][\s\S]*>/i.test(node.innerHTML)) return;   // 富文本区块不重写（会把格式抹掉）
-    if (anchorNode && node.contains(anchorNode)) return;   // 正在这里打字 / 选字
-    const html = esc(node.textContent).replace(pattern, (match) => (
-      `<span class="mentions-inline" data-target="${idFor.get(match) || ''}">${match}</span>`
-    ));
-    node.innerHTML = html;
-    node.dataset.linked = '1';
-  });
-
-  $$('.mentions-inline', root).forEach((span) => {
-    span.addEventListener('click', (event) => {
+  if (!holder.__mentionsBound) {
+    holder.__mentionsBound = true;
+    holder.addEventListener('click', (event) => {
+      const span = event.target && event.target.closest
+        ? event.target.closest('.mentions-inline') : null;
+      if (!span || !holder.contains(span)) return;
+      const target = Number(span.dataset.target) || 0;
+      if (!target) return;
       event.stopPropagation();
-      const target = Number(span.dataset.target);
-      if (target) openDoc(target);
+      openDoc(target);
     });
+  }
+
+  if (!S.world || !S.world.auto_link_enabled) { handle.setMentions([]); return; }
+  const text = islandDocText(handle.getDoc());
+  if (!text.trim()) { handle.setMentions([]); return; }
+  let data;
+  try {
+    data = await api('/api/world/autolink', {
+      method: 'POST', body: { text, exclude: entry.document.id },
+    });
+  } catch (error) {
+    return;      // 识别失败不该影响正文，留着一份旧名单也无妨
+  }
+  // 孤岛是按「字面」重新扫描文档的，所以这里只给字面 → 目标卡片就够；
+  // 去重交给孤岛的长名优先 + 占位逻辑（见 frontend/editor/src/main.jsx）。
+  const seen = new Set();
+  const list = [];
+  ((data && data.matches) || []).forEach((match) => {
+    if (!match.matched || !match.document_id || seen.has(match.matched)) return;
+    seen.add(match.matched);
+    list.push({ name: match.matched, id: match.document_id });
   });
+  handle.setMentions(list);
+}
+
+/** 孤岛文档（BlockNote 原生 JSON）→ 纯文本，给 /api/world/autolink 用。
+ *  只取块的行内正文：重块的 props（图片地址 / 集合设置）不是"写出来的名字"。 */
+function islandDocText(doc) {
+  const out = [];
+  const walk = (nodes) => {
+    (nodes || []).forEach((node) => {
+      if (!node) return;
+      if (node.type === 'text' && node.text) out.push(node.text);
+      if (Array.isArray(node.content)) walk(node.content);
+      if (Array.isArray(node.children)) walk(node.children);
+    });
+  };
+  walk(doc);
+  return out.join('\n');
 }
 
 /* ================================================================ 事件绑定 */
@@ -7304,17 +6071,20 @@ function bindEvents() {
   wire('#ehGuide', () => guidedTemplatesDialog());
   wire('#templateBtn', () => guidedTemplatesDialog());
   wire('#ehCard', async () => {
+    // 和 createDoc('card') 对齐：给第一个可见类型，别建一张连属性都没有的空壳卡。
     const type = S.types.find((t) => !t.hidden) || S.types[0];
     const created = await api('/api/world/documents', {
-      method: 'POST', body: { type: 'card', name: '未命名卡片', entity_type: null },
+      method: 'POST', body: { type: 'card', name: '未命名卡片', entity_type: type ? type.id : null },
     });
     await reloadTree();
-    openDoc(created.id);
+    await openDoc(created.id);
+    toast(`已新建「${created.name}」`);
   });
   wire('#ehTimeline', async () => {
     const created = await api('/api/world/documents', { method: 'POST', body: { type: 'timeline', name: '新时间线' } });
     await reloadTree();
-    openDoc(created.id);
+    await openDoc(created.id);
+    toast(`已新建「${created.name}」`);
   });
   wire('#ehImport', () => exchangeDialog());
   /* 保存状态：样式层早就写好了 .save-state，这里把它接上事件。
@@ -7393,17 +6163,13 @@ function bindEvents() {
   // 长按 = 右键菜单（触屏没有右键）
   let longPress = null;
   document.addEventListener('touchstart', (event) => {
-    const row = event.target.closest('.row, .folder-row, .block');
+    const row = event.target.closest('.row, .folder-row');
     if (!row) return;
     const touch = event.touches[0];
     longPress = setTimeout(() => {
       if (row.classList.contains('row')) {
         const node = findNode(Number(row.dataset.id));
         if (node) docContextMenu({ preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY }, node);
-      } else if (row.classList.contains('block')) {
-        const handle = $('.block-handle', row);
-        if (handle) openBlockMenu(handle, S.docs.get(Number(row.closest('[data-doc]').dataset.doc)),
-                                  Number(row.dataset.index));
       }
       longPress = null;
     }, 550);
@@ -7529,8 +6295,10 @@ function bindEvents() {
     } else if (event.key === 'Enter') {
       event.preventDefault();
       const entry = (runPalette._entries || [])[active < 0 ? 0 : active];
+      // 没有可执行的条目就别关面板——否则敲了回车、面板消失、却什么都没发生，用户只会以为卡了。
+      if (!entry) return;
       closePalette();
-      if (entry) await entry.run();
+      await entry.run();
     }
   });
 
@@ -7604,11 +6372,6 @@ function bindEvents() {
     if (meta && event.key.toLowerCase() === 's') {
       event.preventDefault();
       toast('全部改动都是即时保存的');
-    }
-    if (meta && event.key === '\\') {
-      event.preventDefault();
-      S.panels.push({ tabs: [], active: -1 });
-      renderPanels();
     }
   });
 }
@@ -9332,6 +8095,10 @@ function applyViewer(viewer) {
 
 function disableEditing() {
   $$('[contenteditable="true"]').forEach((node) => node.setAttribute('contenteditable', 'false'));
+  // 正文孤岛由 React 管，contenteditable 管不到它，得点名关掉
+  LIVE_EMBEDS.forEach((node) => {
+    if (node.__islandHandle) node.__islandHandle.setReadonly(true);
+  });
 }
 
 /* 只读时要"藏起来"的写操作入口（不是靠点了再提示——那是骗点击）。

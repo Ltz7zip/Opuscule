@@ -262,6 +262,11 @@ class Card(models.Model):
     aliases = models.JSONField("别名", default=list, blank=True)  # ["The Untreated", ...]
     values = models.JSONField("属性值", default=dict, blank=True)  # {property_id: raw}
     blocks = models.JSONField("区块", default=list, blank=True)
+    # 编辑器文档：React 编辑器孤岛（BlockNote）的原生 JSON，正文的**权威存储**。
+    # ``blocks`` / ``body`` 由它派生（见 world.normalize.doc_to_blocks），下游
+    # （发布站 / 自动识别 / 搜索 / 导入导出）只认派生结果，所以一行都不用改。
+    # 为空表示这张卡还没被孤岛编辑过，读取时按需从旧 ``blocks`` 惰性转换。
+    blocks_doc = models.JSONField("编辑器文档", default=list, blank=True)
     comments = models.JSONField("页面评论", default=list, blank=True)   # 页面级评论（挂在卡片上，不在块里）
     body = models.TextField("正文纯文本", blank=True, default="")  # 供搜索与自动识别
     # 纪元作为「世界版本分支」：这张卡在哪些纪元里出现
@@ -286,8 +291,22 @@ class Card(models.Model):
 
         return resolve_card_values(self)
 
-    def to_payload(self) -> dict:
-        return {
+    def editor_doc(self):
+        """编辑器文档（BlockNote 原生 JSON）；``None`` 表示这张卡还搬不进孤岛。
+
+        存过就用存的；没存过就从旧 ``blocks`` 惰性升格一次。升格不了（老结构里有
+        一期表达不了的块）返回 ``None``，前端据此回退到旧的 vanilla 渲染器。
+        """
+        from apps.world.normalize import blocks_to_doc
+
+        if isinstance(self.blocks_doc, list) and self.blocks_doc:
+            return self.blocks_doc
+        return blocks_to_doc(self.blocks)
+
+    def to_payload(self, with_doc: bool = False) -> dict:
+        """``with_doc=True`` 才带 ``blocks_doc`` —— 内联数据库一次拉一整个类型的卡片，
+        无条件附带编辑器文档会把那个响应撑大，所以默认不带。"""
+        payload = {
             "id": self.id,
             "document": self.document_id,
             "entity_type": self.entity_type_id,
@@ -300,6 +319,9 @@ class Card(models.Model):
             "era_mode": self.era_mode,
             "era_ids": self.era_ids if isinstance(self.era_ids, list) else [],
         }
+        if with_doc:
+            payload["blocks_doc"] = self.editor_doc()
+        return payload
 
     def visible_in_era(self, era_id) -> bool:
         """在某个纪元里这张卡是否出现（没选纪元 = 全部可见）。"""
