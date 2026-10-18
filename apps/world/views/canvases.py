@@ -318,10 +318,15 @@ def tree_edge_collection(request, variant_id):
     # "先连上、以后再命名"，不该被兜底成「自定义」印在线上。
     label = (as_text(payload.get("label"), 40) if "label" in payload
              else RELATION_LABELS.get(kind, ""))
+    start_year = as_number(payload.get("start_year"))
+    end_year = as_number(payload.get("end_year"))
+    if start_year is not None and end_year is not None and start_year > end_year:
+        return error("关系的起始年不能晚于结束年")
     edge, created = TreeEdge.objects.get_or_create(
         variant=variant, source=source, target=target, kind=kind,
         defaults={"label": label, "style": as_text(payload.get("style"), 20)
-                  or relation_style(kind)},
+                  or relation_style(kind),
+                  "start_year": start_year, "end_year": end_year},
     )
     return json_response(edge.to_payload())
 
@@ -351,11 +356,39 @@ def tree_edge_detail(request, edge_id):
         edge.label = as_text(payload.get("label"), 40)
     if "style" in payload:
         edge.style = as_text(payload.get("style"), 20)
+    if "start_year" in payload:
+        edge.start_year = as_number(payload.get("start_year"))
+    if "end_year" in payload:
+        edge.end_year = as_number(payload.get("end_year"))
+    if (edge.start_year is not None and edge.end_year is not None
+            and edge.start_year > edge.end_year):
+        return error("关系的起始年不能晚于结束年")
     edge.save()
     return json_response(edge.to_payload())
 
 
-def map_state(document: Document) -> dict:
+def markers_in_era(document: Document, era_id: int = 0) -> list:
+    """这张地图在当前纪元里应显示的标注（``era_id`` 为 0 = 不过滤）。
+
+    可见性口径与工作区一致：一律问 ``Card.visible_in_era``；没关联卡片、
+    或卡片已不存在（无法判定）的标注照常显示。
+    """
+    markers = list(document.map_markers.select_related("card"))
+    if not era_id:
+        return markers
+    cards = {
+        card.document_id: card
+        for card in Card.objects.filter(document__world=document.world)
+    }
+    return [
+        marker for marker in markers
+        if marker.card_id is None
+        or marker.card_id not in cards
+        or cards[marker.card_id].visible_in_era(era_id)
+    ]
+
+
+def map_state(document: Document, era_id: int = 0) -> dict:
     """一张地图的完整状态：图层 + 标注 + 背景与视野。"""
     layers = list(document.map_layers.all())
     if not layers:
@@ -364,7 +397,7 @@ def map_state(document: Document) -> dict:
     return {
         "document": document.to_payload(),
         "layers": [layer.to_payload() for layer in layers],
-        "markers": [marker.to_payload() for marker in document.map_markers.all()],
+        "markers": [marker.to_payload() for marker in markers_in_era(document, era_id)],
         "background": {
             "url": as_text(settings_.get("background"), 4000),
             "zoom": float(settings_.get("zoom") or settings_.get("bg_zoom") or 1.0),
@@ -390,7 +423,10 @@ def map_state_view(request, doc_id):
         return json_response(DOC_NOT_FOUND, status=404)
     if document.document_type != DOC_MAP:
         return error("这个文档不是地图")
-    return json_response(map_state(document))
+    era_id = as_int(request.GET.get("era"), 0)
+    if era_id and not world.eras.filter(id=era_id).exists():
+        era_id = 0
+    return json_response(map_state(document, era_id))
 
 
 @csrf_exempt

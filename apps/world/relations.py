@@ -29,14 +29,14 @@ from __future__ import annotations
 #: 一个网格的边长（像素）。前端画布点阵的间距就是这个值。
 GRID = 28
 #: 一张人物卡占几格（宽 × 高）。卡片边框因此天然落在网格线上。
-CARD_COLS = 5
-CARD_ROWS = 8
+CARD_COLS = 6
+CARD_ROWS = 3
 #: 卡片之间的空隙（格）。横向留得下两张卡片各自的加号手柄，纵向窄一点就够。
-GAP_X = 3
-GAP_Y = 4
+GAP_X = 1
+GAP_Y = 2
 #: 相邻两列 / 两行卡片的格距
-COL_STEP = CARD_COLS + GAP_X      # 8
-ROW_STEP = CARD_ROWS + GAP_Y      # 12
+COL_STEP = CARD_COLS + GAP_X      # 7
+ROW_STEP = CARD_ROWS + GAP_Y      # 5
 
 
 def slot(col: int, row: int) -> dict:

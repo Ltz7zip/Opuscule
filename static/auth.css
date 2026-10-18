@@ -32,6 +32,7 @@
 body.auth-body {
   background-color: var(--tx-canvas);
   overflow: hidden;
+  margin: 0;
 }
 
 .auth-shell {
@@ -1317,7 +1318,7 @@ html.js .auth-keys { display: flex; }
     block-size: auto;
     min-block-size: 100dvh;
     overflow: visible;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(200px, 30vh) 1fr auto;
     grid-template-areas:
       "top"

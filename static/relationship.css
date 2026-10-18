@@ -73,10 +73,22 @@
 
 /* 嵌进工作区面板 / 发布站点时：外壳由宿主给，这里只负责把编辑器铺满 */
 .rt-body.is-embed { height: 100%; }
+/* 工作区里底色要和宿主画布同色；发布站点的纸面模式另有 is-paper 配色，不覆盖它 */
+.rt-body.is-embed:not(.is-paper) { background: var(--nb-canvas); }
+/* 三块屏（选模版 / 模版关系 / 编辑器）在嵌入态统一回到画布底色，
+   否则浅色下会出现一块 #f5f5f5 的夹层，和白色时间线画布对不上 */
+.rt-body.is-embed:not(.is-paper) .rt-screen { background: var(--nb-canvas); }
+/* 嵌入时不再套"浮卡"：外边距和内衬都归零，画布直接贴住宿主面板 */
+.rt-body.is-embed:not(.is-paper) .rt-app:has(> .rt-screen--editor:not([hidden])) {
+  padding: 0;
+  background: var(--nb-canvas);
+}
 .rt-body.is-embed .rt-app { padding: 0; height: 100vh; }
 .rt-body.is-embed .rt-screen { border: 0; border-radius: 0; }
 .rt-body.is-embed .rt-topbar { padding: 0 var(--mn-3); }
 .rt-body.is-embed .rt-canvas-wrap { margin: var(--mn-2); }
+/* 画布面也回到宿主画布色（经典时间线画布 = --nb-canvas），不再用下沉灰 */
+.rt-body.is-embed:not(.is-paper) .rt-canvas-wrap { background-color: var(--nb-canvas); }
 /* 面板左侧本来就是文档树，"已有关系树"这一块在嵌入时是重复信息 */
 .rt-body.is-embed .rt-side-foot { display: none; }
 /* 嵌在宿主里时，编辑区顶栏那个"回模版选择"没有意义——那会把宿主的面板整个换掉；
@@ -356,7 +368,8 @@
   border-radius: var(--mn-radius-lg);
   overflow: hidden;
   background-color: var(--mn-surface);
-  background-image: radial-gradient(circle, var(--rt-dot) 1.1px, transparent 1.1px);
+  /* 点的软硬边与经典画布 .bg-grid 一致（网格间距由 --rt-grid 的吸附逻辑决定，保持 28px） */
+  background-image: radial-gradient(circle at center, var(--rt-dot) 1px, transparent 1.3px);
   background-size: var(--rt-grid) var(--rt-grid);
   background-position: 0 0;
 }
@@ -709,7 +722,8 @@
   border-radius: var(--mn-radius-lg);
   overflow: hidden;
   background-color: var(--mn-surface);
-  background-image: radial-gradient(circle, var(--rt-dot) 1.1px, transparent 1.1px);
+  /* 点的软硬边与经典画布 .bg-grid 一致（网格间距由 --rt-grid 的吸附逻辑决定，保持 28px） */
+  background-image: radial-gradient(circle at center, var(--rt-dot) 1px, transparent 1.3px);
   background-size: var(--rt-grid) var(--rt-grid);
   cursor: default;
 }

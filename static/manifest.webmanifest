@@ -1,7 +1,7 @@
 {
   "name": "世界工作区",
   "short_name": "世界",
-  "start_url": "/world",
+  "start_url": "/w/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#121110",

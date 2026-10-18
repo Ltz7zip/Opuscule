@@ -256,6 +256,8 @@
         <form id="authForm" class="auth-creds" method="post" action="{{ form_action }}"
               data-mode="{% if needs_setup %}setup{% elif mode == 'register' %}register{% else %}login{% endif %}">
           {% csrf_token %}
+          {# 从 /login?next=… 过来时，登录成功后回到原来那一页 #}
+          {% if next %}<input type="hidden" name="next" value="{{ next }}" />{% endif %}
 
           {# 无 JS 时看得见的那条错误（有 JS 时由封锁面板接管）#}
           <div class="auth-error auth-nojs-only" id="authError" {% if not error %}hidden{% endif %}>{{ error }}</div>
@@ -342,14 +344,14 @@
 
         <div class="auth-switch">
           {% if needs_setup %}
-            <a href="/world">先看看 →</a>
+            <a href="/explore">先看看 →</a>
           {% elif mode == 'register' %}
             <a href="/login">已有账号 · 去登录</a>
-            <a href="/world">先看看 →</a>
+            <a href="/explore">先看看 →</a>
           {% else %}
             <a href="/register">没有账号 · 注册（需邀请码）</a>
             <a href="/reset">忘记密码？</a>
-            <a href="/world">先看看 →</a>
+            <a href="/explore">先看看 →</a>
           {% endif %}
         </div>
 
@@ -374,7 +376,7 @@
       <span class="auth-cap-en" id="authCapEn">{% if needs_setup %}NO OWNER YET · THE FIRST ACCOUNT BECOMES THE OWNER OF THIS WORLD{% elif mode == 'register' %}YOU ARE JOINING A WORLD. PRESENT YOUR INVITE KEY.{% else %}THE WORKSPACE IS SEALED. PRESENT YOUR CREDENTIALS.{% endif %}</span>
     </div>
     <div class="auth-statusline">
-      <a href="/world">Browse</a> · {% if mode == 'register' or needs_setup %}<a href="/login">Login</a>{% else %}<a href="/register">Register</a>{% endif %} ｜ Powered by {{ app.display }}
+      <a href="/explore">Browse</a> · {% if mode == 'register' or needs_setup %}<a href="/login">Login</a>{% else %}<a href="/register">Register</a>{% endif %} ｜ Powered by {{ app.display }}
     </div>
   </footer>
 </div>

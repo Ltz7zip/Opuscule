@@ -23,14 +23,34 @@
 
 from __future__ import annotations
 
-from .models import PRECISION_ORDER, World
+from .models import CONFIDENCES, PRECISION_ORDER, World
 from .normalize import as_alias_list, as_int, as_text, blocks_to_text
-from apps.documents.models import Document, Era, TimelineEvent
+from apps.documents.models import Document, Era, TimelineEvent, WorldTimeline
 
 ERA_ID_BASE = 1_000_000          # 纪元的 id 偏移，避免和事件 id 撞车
 MONTHS_PER_YEAR = 12
 DAYS_PER_MONTH = 30
 HOURS_PER_DAY = 24
+
+
+def _optional_float(value):
+    """可空年份：空串 / None / 非法值一律当「没填」。"""
+    try:
+        return round(float(value), 4)
+    except (TypeError, ValueError):
+        return None
+
+
+def axis_origin(document) -> float:
+    """坐标原点：编辑器里显示的年份 = 存储年份 − ``origin_year``。
+
+    只有世界总时间线（``WorldTimeline``）有这个字段；旧的时间线文档一律按 0 处理，
+    所以 origin=0 时行为与迁移前完全一致。
+    """
+    try:
+        return float(getattr(document, "origin_year", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -74,8 +94,8 @@ def float_to_parts(value: float, precision: str) -> dict:
 # 读：world -> 经典编辑器
 # --------------------------------------------------------------------------- #
 
-def spans_for(world: World, document: Document) -> dict[int, tuple[float, float]]:
-    """纪元在轴上的位置：优先用文档里存过的，其次按长度依次铺开。"""
+def spans_for(world: World, document) -> dict[int, tuple[float, float]]:
+    """纪元在轴上的位置：优先用时代自己的起止，其次文档里存过的，最后按长度铺开。"""
     saved = {}
     settings_ = document.settings if isinstance(document.settings, dict) else {}
     raw = settings_.get("era_spans")
@@ -88,15 +108,16 @@ def spans_for(world: World, document: Document) -> dict[int, tuple[float, float]
                     continue
 
     spans: dict[int, tuple[float, float]] = {}
-    cursor = 0.0
-    for index, era in enumerate(world.eras.all()):
-        if era.id in saved:
-            spans[era.id] = saved[era.id]
-            cursor = max(cursor, saved[era.id][1])
-            continue
-        length = float(era.length_years or 0) or 50.0
-        spans[era.id] = (cursor, cursor + length)
-        cursor += length
+    cursor = axis_origin(document)
+    for era in world.eras.all():
+        span = era.resolved_span()
+        if span is None:
+            span = saved.get(era.id)
+        if span is None:
+            length = float(era.length_years or 0) or 50.0
+            span = (cursor, cursor + length)
+        spans[era.id] = span
+        cursor = max(cursor, span[1])
     return spans
 
 
@@ -105,17 +126,20 @@ def cards_payload(event: TimelineEvent) -> list[dict]:
     return [
         {
             "title": document.name,
-            "url": f"/w#doc={document.id}",
+            "url": f"/w/{document.world.slug}#doc={document.id}",
             "cover": document.cover or "",
         }
         for document in event.linked_cards.all()
     ]
 
 
-def event_item(event: TimelineEvent) -> dict:
+def event_item(event: TimelineEvent, origin: float = 0.0) -> dict:
     """事件 -> 经典编辑器的 item 形状（写接口的返回值也必须是这个形状，
-    否则编辑器把新建的记录 adopt 进来时会缺 kind/start，界面上会当成另一种记录）。"""
-    value = event_to_float(event)
+    否则编辑器把新建的记录 adopt 进来时会缺 kind/start，界面上会当成另一种记录）。
+
+    ``origin`` 是世界坐标的原点：编辑器看到的是「显示年」，存储仍是世界坐标。
+    """
+    value = round(event_to_float(event) - origin, 6)
     settings = event.settings if isinstance(event.settings, dict) else {}
     return {
         "id": event.id,
@@ -129,18 +153,23 @@ def event_item(event: TimelineEvent) -> dict:
         "theme": "",
         "cover": event.cover or "",
         "cards": cards_payload(event),
+        # 模糊 / 相对时间（§4.4 E）：经典编辑器只透传，面板里编辑
+        "precision": event.precision,
+        "era_id": event.era_id,
+        "confidence": event.confidence,
+        "range_years": event.range_years or 0.0,
     }
 
 
-def era_item(era: Era, span: tuple[float, float]) -> dict:
+def era_item(era: Era, span: tuple[float, float], origin: float = 0.0) -> dict:
     """纪元 -> 经典编辑器的 item 形状（id 用偏移量，避免和事件 id 撞车）。"""
     start, end = span
     return {
         "id": ERA_ID_BASE + era.id,
         "kind": "era",
         "title": era.name,
-        "start": start,
-        "end": end,
+        "start": round(start - origin, 6),
+        "end": round(end - origin, 6),
         "desc": era.description or "",
         "row": era.position - 1 if era.position else 0,
         "theme": era.theme,
@@ -149,25 +178,31 @@ def era_item(era: Era, span: tuple[float, float]) -> dict:
     }
 
 
-def classic_payload(document: Document) -> dict:
+def classic_payload(document) -> dict:
     """整条时间线 -> ``{view, items}``（与 /api/timeline 的返回结构一致）。"""
     world = document.world
+    origin = axis_origin(document)
     settings_ = document.settings if isinstance(document.settings, dict) else {}
     items: list[dict] = []
 
     spans = spans_for(world, document)
     for era in world.eras.all():
-        items.append(era_item(era, spans.get(era.id, (0.0, 50.0))))
+        items.append(era_item(era, spans.get(era.id, (origin, origin + 50.0)), origin))
 
     for event in document.events.select_related("era").prefetch_related("linked_cards"):
-        items.append(event_item(event))
+        items.append(event_item(event, origin))
 
-    view = {
-        "start": float(settings_.get("view_start", 1500.0) or 1500.0),
-        "end": float(settings_.get("view_end", 1900.0) or 1900.0),
-    }
+    view = settings_.get("view")
+    if not isinstance(view, dict):
+        view = {
+            "start": float(settings_.get("view_start", 1500.0) or 1500.0),
+            "end": float(settings_.get("view_end", 1900.0) or 1900.0),
+        }
+    view = {"start": float(view.get("start", 1500.0)), "end": float(view.get("end", 1900.0))}
     if view["end"] <= view["start"]:
         view = {"start": 1500.0, "end": 1900.0}
+    # 视野按世界坐标存，编辑器里看到的是显示坐标
+    view = {"start": round(view["start"] - origin, 6), "end": round(view["end"] - origin, 6)}
     return {"view": view, "items": items}
 
 
@@ -187,12 +222,14 @@ def link_cards(event: TimelineEvent, world: World, cards) -> None:
     event.linked_cards.set(matched)
 
 
-def apply_item(document: Document, payload: dict, event: TimelineEvent | None = None) -> dict:
+def apply_item(document, payload: dict, event: TimelineEvent | None = None) -> dict:
     """新建 / 更新一条事件（经典编辑器发来的结构）。"""
     world = document.world
+    origin = axis_origin(document)
     is_new = event is None
-    event = event or TimelineEvent(document=document)
     if is_new:
+        event = (TimelineEvent(timeline=document)
+                 if isinstance(document, WorldTimeline) else TimelineEvent(document=document))
         # 经典编辑器本身是按「月」在轴上走的（提示里写的是 Month 5, Year -8），
         # 所以新建事件默认存到月；文档/日历显式指定默认精度时以它为准。
         settings_ = document.settings if isinstance(document.settings, dict) else {}
@@ -215,7 +252,8 @@ def apply_item(document: Document, payload: dict, event: TimelineEvent | None = 
     start = payload.get("start")
     if start is not None:
         try:
-            parts = float_to_parts(float(start), event.precision)
+            # 编辑器发来的是显示坐标，落库前加回原点
+            parts = float_to_parts(float(start) + origin, event.precision)
         except (TypeError, ValueError):
             parts = None
         if parts:
@@ -237,18 +275,28 @@ def apply_item(document: Document, payload: dict, event: TimelineEvent | None = 
         settings = dict(event.settings or {})
         settings["flagged"] = bool(payload.get("flagged"))
         event.settings = settings
+    if "confidence" in payload:
+        confidence = as_text(payload.get("confidence"), 8)
+        if confidence in dict(CONFIDENCES):
+            event.confidence = confidence
+    if "range_years" in payload:
+        try:
+            event.range_years = max(0.0, float(payload.get("range_years") or 0.0))
+        except (TypeError, ValueError):
+            event.range_years = 0.0
     event.save()
     if "cards" in payload:
         link_cards(event, world, payload.get("cards"))
     if not is_new:
         document.save(update_fields=["updated_at"])
     # 注意：返回经典形状（含 kind/start/end），编辑器会直接 adopt 这个对象
-    return event_item(event)
+    return event_item(event, origin)
 
 
-def apply_era(document: Document, era_id: int, payload: dict) -> dict:
-    """更新纪元本身 + 它在轴上的位置（位置存在文档 settings 里）。"""
+def apply_era(document, era_id: int, payload: dict) -> dict:
+    """更新时代本身 + 它在总时间线上的起止（``era_spans`` 仍同步写入，兼容旧前端）。"""
     world = document.world
+    origin = axis_origin(document)
     era = world.eras.filter(pk=era_id).first()
     if era is None:
         return {}
@@ -262,24 +310,41 @@ def apply_era(document: Document, era_id: int, payload: dict) -> dict:
         theme = as_text(payload.get("theme"), 16)
         if theme in ("blue", "sky", "violet", "red", "teal", "gold"):
             era.theme = theme
+
+    start = end = None
+    try:
+        # 编辑器发来的是显示坐标，落库前加回原点
+        start = float(payload.get("start")) + origin
+        end = float(payload.get("end")) + origin
+    except (TypeError, ValueError):
+        start = end = None
+    if start is not None and end is not None and end > start:
+        era.start_year = round(start, 4)
+        era.end_year = round(end, 4)
+    if "start_year" in payload:
+        value = _optional_float(payload.get("start_year"))
+        era.start_year = None if value is None else round(value + origin, 4)
+    if "end_year" in payload:
+        value = _optional_float(payload.get("end_year"))
+        era.end_year = None if value is None else round(value + origin, 4)
+    for field in ("start_precision", "end_precision"):
+        if field in payload:
+            value = as_text(payload.get(field), 8)
+            if value in PRECISION_ORDER:
+                setattr(era, field, value)
     era.save()
 
     settings_ = dict(document.settings or {})
     spans = dict(settings_.get("era_spans") or {})
-    try:
-        start = float(payload.get("start"))
-        end = float(payload.get("end"))
-    except (TypeError, ValueError):
-        start = end = None
-    if start is not None and end is not None and end > start:
-        spans[str(era.id)] = [round(start, 4), round(end, 4)]
-        era.length_years = round(end - start, 4)
-        era.save(update_fields=["length_years"])
+    span = era.resolved_span()
+    if span is not None:
+        spans[str(era.id)] = [round(span[0], 4), round(span[1], 4)]
     settings_["era_spans"] = spans
     document.settings = settings_
     document.save(update_fields=["settings", "updated_at"])
     position = spans.get(str(era.id))
-    return era_item(era, tuple(position) if position else (0.0, float(era.length_years or 50)))
+    span = tuple(position) if position else (origin, origin + float(era.length_years or 50))
+    return era_item(era, span, origin)
 
 
 def create_era(document: Document, payload: dict) -> dict:
@@ -307,6 +372,10 @@ def delete_item(document: Document, item_id: int) -> dict:
         settings_["era_spans"] = spans
         document.settings = settings_
         document.save(update_fields=["settings", "updated_at"])
+        if isinstance(removed, (list, tuple)) and len(removed) == 2:
+            origin = axis_origin(document)
+            removed = [round(float(removed[0]) - origin, 6),
+                       round(float(removed[1]) - origin, 6)]
         return {"kind": "era", "removed": removed}
     event = document.events.filter(pk=item_id).first()
     if event is None:
@@ -318,9 +387,11 @@ def delete_item(document: Document, item_id: int) -> dict:
 
 
 def save_view(document: Document, start: float, end: float) -> dict:
+    origin = axis_origin(document)
     settings_ = dict(document.settings or {})
-    settings_["view_start"] = round(float(start), 4)
-    settings_["view_end"] = round(float(end), 4)
+    # 编辑器发来的是显示坐标，落库前加回原点
+    settings_["view_start"] = round(float(start) + origin, 4)
+    settings_["view_end"] = round(float(end) + origin, 4)
     document.settings = settings_
     document.save(update_fields=["settings"])
-    return {"start": settings_["view_start"], "end": settings_["view_end"]}
+    return {"start": round(float(start), 4), "end": round(float(end), 4)}

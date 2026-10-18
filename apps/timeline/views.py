@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 """HTTP 接口与页面。
 
-本 app 对外提供一条经典横向时间轴：独立成页的入口在 ``/legacy``，被工作区
-嵌入时走 ``/world/timeline/<doc_id>``。接口清单如下（路径结尾都不带斜杠）：
+本 app 提供经典横向时间轴编辑器的外壳（模板 + 静态资源）。0.7.0 起编辑器
+读写的是**世界的总时间线**（``WorldTimeline``），不再是一条时间线文档：
 
-    GET    /legacy                    页面
+    GET    /w/<slug>/timeline              世界总时间线（走世界级 classic 接口）
+    GET    /w/<slug>/timeline/<doc_id>     旧时间线文档（兼容旧备份 / 已发布站点）
+
+本 app 自己的 ``/api/*`` 接口仍在，但只服务 0.7.0 之前那张全局 ``TimelineItem``
+表（老数据 / 迁移命令）；页面里注入的适配层会把编辑器的请求改写到上面两个地址，
+所以它已经不是编辑器实际直连的接口。清单如下（路径结尾都不带斜杠）：
+
     GET    /api/timeline              全量数据
     POST   /api/items                 新建条目
     PUT    /api/items/<id>            更新条目（PATCH 等价，都是「局部覆盖 + 其余沿用原值」）
@@ -27,6 +33,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_safe
 
 from apps.world import permissions
+from apps.world.views.common import world_page_allowed, world_page_denied
 
 from .models import TimelineItem, TimelineView
 from .normalize import apply_values, as_float, normalize
@@ -59,36 +66,83 @@ def parse_json(request):
 # 页面
 # --------------------------------------------------------------------------- #
 @require_safe
-def index(request):
-    """经典时间轴的独立页。
+def index(request, world_slug=None):
+    """经典时间轴的独立页（``/w/<slug>/timeline``）。
 
-    这里的数据是全场共用的那一份（不挂在任何世界上），所以**要求登录**：
-    匿名访客打开这一页等于把整份时间轴读走（2026-10-15 体检 F2）。库里一个用户
-    都没有时照旧放行——那是"首次安装"，得让人进得来把世界建起来，口径与
-    ``world.views.workspace`` 的读守门人一致。
+    页面在世界的地址下，所以先过与世界工作区同一道守门：游客去登录（带 ``next``
+    回来），登录了但不是这个世界的人给 404。库里一个用户都没有时照旧放行——那是
+    "首次安装"，得让人进得来把世界建起来，口径与 ``world.views.workspace`` 一致。
+
+    0.7.0 起这一页的数据是当前世界的总时间线（``WorldTimeline``），路径里的 slug
+    决定读写哪一个世界。
     """
-    if permissions.users_exist() and not (request.user and request.user.is_authenticated):
-        return redirect("/login")
-    return render(request, "index.html")
+    world = permissions.current_world_or_none()
+    if world is None:
+        return redirect("/w/")
+    if not world_page_allowed(request, world):
+        return world_page_denied(request, world)
+    return render(request, "index.html", {
+        # 0.7.0：经典编辑器直接读写世界的总时间线（不再是一条时间线文档）
+        "classic_api_base": f"/w/{world.slug}/api/world/timeline/classic",
+        "classic_title": "世界时间线",
+        "world_base": f"/w/{world.slug}",
+    })
 
 
 @require_safe
-def classic_embedded(request, doc_id):
-    """把经典编辑器嵌进工作区用（``/w/timeline/<doc_id>``）。
+def classic_embedded(request, doc_id, world_slug=None):
+    """把经典编辑器嵌进旧时间线文档（``/w/<slug>/timeline/<doc_id>``）。
+
+    **这是兼容路径**：0.7.0 起时间线不再是文档，世界总时间线走 ``index()``
+    （``/w/<slug>/timeline``）。这里只服务仍然存在的旧 ``DOC_TIMELINE`` 文档
+    ——从旧备份导入回来的、或发布站点上早期已公开的那几页。
 
     编辑器本身**一行都不用改**：模板在 script.js 之前注入一段 fetch 适配层，
-    把它写死的 /api/timeline、/api/items*、/api/view 改写到 world 的时间线文档上
-    （转换逻辑见 world/classic.py）。
+    把它写死的 /api/timeline、/api/items*、/api/view 改写到这条文档自己的
+    classic 接口上（转换逻辑见 world/classic.py）。
     """
+    world = permissions.current_world_or_none()
+    if world is None:
+        return redirect("/w/")
+    # 发布站点会直接嵌这一页（路径里就是文档 id，不带 ?embed=）：那篇已公开就放行。
+    embedded = permissions.published_document(doc_id)
+    if not world_page_allowed(request, world) and not (
+            embedded is not None and embedded.world_id == world.id):
+        return world_page_denied(request, world)
+
     readonly = request.GET.get("readonly") in ("1", "true", "yes")
+    # 画布必须跟宿主同色：工作区切到浅色时会把 ?theme=light 带进来，
+    # 没带就退回世界主题（非 light 即 dark），与关系树、地图同一条规则。
+    theme_mode = request.GET.get("theme", "")
+    if theme_mode not in ("light", "dark"):
+        theme = world.theme_config if isinstance(world.theme_config, dict) else {}
+        theme_mode = "light" if theme.get("mode") == "light" else "dark"
     return render(request, "index.html", {
-        "classic_api_base": f"/api/world/timelines/{doc_id}/classic",
+        "classic_api_base": f"/w/{world.slug}/api/world/timelines/{doc_id}/classic",
         "embedded": True,
         "classic_readonly": readonly,
-        # 外壳只有一套暗色形态；嵌进工作区的画布必须跟宿主同色，
-        # 所以 paper（浅色纸面）恒为关。
-        "classic_paper": False,
+        # 嵌入画布只有明暗两档，浅色档见 style.css 的 html.tl-embed[data-theme="light"]。
+        "classic_theme": theme_mode,
+        # 整页壳的面包屑要显示文档名；取不到就留空，模板回落到「时间轴」。
+        "classic_title": _timeline_title(doc_id),
+        "world_base": f"/w/{world.slug}",
     })
+
+
+def _timeline_title(doc_id):
+    """旧时间线文档的名字（兼容路径）；文档不存在或类型不对就返回空串。
+
+    世界总时间线不从这里取名——``index()`` 直接给固定的「世界时间线」。
+    """
+    from apps.world.models import DOC_TIMELINE
+
+    world = permissions.current_world_or_none()
+    if world is None:
+        return ""
+    document = world.documents.filter(pk=doc_id, deleted_at__isnull=True).first()
+    if document is None or document.document_type != DOC_TIMELINE:
+        return ""
+    return document.name
 
 
 # --------------------------------------------------------------------------- #
@@ -168,7 +222,7 @@ def page_not_found(request, exception=None):
     DEBUG 被强制为 False，所以这一条是被测试真正走过的）。
     页面是一处 glitch 效果的 404 + 两句人话 + 一条回去的路。
     """
-    if request.path.startswith("/api/"):
+    if permissions.api_path(request.path).startswith("/api/"):
         return json_response(API_NOT_FOUND, status=404)
     # 有已发布的站点就把搜索指向它——"找不到东西"时最有用的一步是搜一下
     site_slug = ""

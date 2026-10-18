@@ -28,6 +28,10 @@
   'use strict';
 
   /* ------------------------------------------------------------- 基础设施 */
+  /* 世界级接口挂在 /w/<slug>/api/world 下；页面模板会注入 window.__WORLD__。
+     没注入的页面（登录页 / 公开站）退回旧前缀，行为不变。 */
+  const WORLD = window.__WORLD__ || {};
+  const API_BASE = WORLD.apiBase || '/api/world';
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.prototype.slice.call((root || document).querySelectorAll(sel));
   const el = (tag, cls, text) => {
@@ -1227,7 +1231,7 @@
       if (document.body && !document.body.classList.contains('is-embed') && $('#presence')) {
         const payload = JSON.stringify({ leaving: true, path: location.pathname });
         if (navigator.sendBeacon) {
-          try { navigator.sendBeacon('/api/world/presence', new Blob([payload], { type: 'application/json' })); }
+          try { navigator.sendBeacon(`${API_BASE}/presence`, new Blob([payload], { type: 'application/json' })); }
           catch (error) { /* 上报失败不该影响离开 */ }
         }
       }
@@ -1368,7 +1372,7 @@
     }
     async function load() {
       try {
-        const response = await fetch('/api/world/activity', { credentials: 'same-origin' });
+        const response = await fetch(`${API_BASE}/activity`, { credentials: 'same-origin' });
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
         rows = data.activity || [];
@@ -1547,7 +1551,8 @@
   function crossDocName(fromUrl) {
     let from = null;
     try { from = fromUrl ? new URL(fromUrl, location.href) : null; } catch (error) { from = null; }
-    const fromWorkspace = Boolean(from && from.pathname.startsWith('/world'));
+    const fromWorkspace = Boolean(from
+      && (from.pathname.startsWith('/w/') || from.pathname.startsWith('/world')));
     const fromSite = Boolean(from && from.pathname.startsWith('/s/'));
     if (document.body && document.body.classList.contains('site')) {
       const title = $('.site .page-head h1, .site .doc-title');

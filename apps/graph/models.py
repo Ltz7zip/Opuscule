@@ -140,6 +140,7 @@ class TreeVariant(models.Model):
             TreeEdge.objects.create(
                 variant=clone, source=mapping.get(edge.source_id), target=mapping.get(edge.target_id),
                 kind=edge.kind, label=edge.label, style=edge.style,
+                start_year=edge.start_year, end_year=edge.end_year,
             )
         return clone
 
@@ -232,7 +233,11 @@ class TreeNode(models.Model):
 
 
 class TreeEdge(models.Model):
-    """两个人之间的关系；关系名按 variant 的模板 + 覆盖来显示。"""
+    """两个人之间的关系；关系名按 variant 的模板 + 覆盖来显示。
+
+    0.7.0 起关系带**有效区间**（§4.4 D）：``start_year`` / ``end_year`` 为空表示
+    「一直有效」，与当前时代是否相交决定这条边显不显示。
+    """
 
     variant = models.ForeignKey(TreeVariant, on_delete=models.CASCADE, related_name="edges")
     source = models.ForeignKey(TreeNode, on_delete=models.CASCADE, related_name="out_edges")
@@ -240,6 +245,9 @@ class TreeEdge(models.Model):
     kind = models.CharField("关系", max_length=32, choices=TREE_EDGE_KINDS, default="parent")
     label = models.CharField("自定义关系名", max_length=40, blank=True, default="")
     style = models.CharField("线型", max_length=10, blank=True, default="")  # "" / dashed / dotted
+    #: 有效区间（总时间线坐标）；一端为空 = 该端不设限
+    start_year = models.FloatField("起始年", null=True, blank=True, default=None)
+    end_year = models.FloatField("结束年", null=True, blank=True, default=None)
 
     class Meta:
         db_table = "world_treeedge"
@@ -254,6 +262,18 @@ class TreeEdge(models.Model):
     def display_label(self) -> str:
         return self.label or self.variant.label_for(self.kind)
 
+    def active_in_span(self, start, end) -> bool:
+        """这条关系与给定区间是否相交（区间缺失的一端不设限）。"""
+        if start is None and end is None:
+            return True
+        low = self.start_year
+        high = self.end_year
+        if start is not None and high is not None and high < start:
+            return False
+        if end is not None and low is not None and low > end:
+            return False
+        return True
+
     def to_payload(self) -> dict:
         return {
             "id": self.id,
@@ -264,4 +284,6 @@ class TreeEdge(models.Model):
             "label": self.label,
             "display_label": self.display_label(),
             "style": self.style,
+            "start_year": self.start_year,
+            "end_year": self.end_year,
         }

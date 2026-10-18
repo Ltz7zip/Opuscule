@@ -274,10 +274,30 @@ MAX_OWNED_WORLDS = 7
 
 
 # --------------------------------------------------------------------------- #
-# 版本
+# 版本与存档
 # --------------------------------------------------------------------------- #
 
 MAX_VERSIONS = 30
+# 每个世界最多保留多少份世界存档（0.7.0 拍板：上限 20）
+MAX_ARCHIVES = 20
+
+# 事件时间的确信度：确切 / 约 / 传说（0.7.0 §4.4 E：模糊与相对时间）
+CONFIDENCE_EXACT = "exact"
+CONFIDENCE_APPROX = "approx"
+CONFIDENCE_LEGEND = "legend"
+CONFIDENCES = [
+    (CONFIDENCE_EXACT, "确切"),
+    (CONFIDENCE_APPROX, "约"),
+    (CONFIDENCE_LEGEND, "传说"),
+]
+
+# 世界存档的来源：手动存档 / 读档前自动备份
+ARCHIVE_MANUAL = "manual"
+ARCHIVE_AUTO = "auto"
+ARCHIVE_KINDS = [
+    (ARCHIVE_MANUAL, "手动存档"),
+    (ARCHIVE_AUTO, "自动备份"),
+]
 
 
 # --------------------------------------------------------------------------- #

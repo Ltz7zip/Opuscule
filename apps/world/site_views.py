@@ -202,7 +202,15 @@ def home(request, slug):
     )
     keyword = (request.GET.get("q") or "").strip()
     hits = publish_service.search_documents(world, keyword) if keyword else []
-    context = _site_base(world, sections=publish_service.site_sections(world, documents=documents), request=request)
+    context = _site_base(
+        world,
+        # 筛选时不再塞「世界时间线」那一格：它不参与按类型 / 纪元过滤，
+        # 留在列表里会让"筛过了"的观感失真。
+        sections=publish_service.site_sections(
+            world, documents=documents, include_timeline=not active["active"]
+        ),
+        request=request,
+    )
     context.update({
         "cards": documents.filter(document_type=DOC_CARD)[:24],
         "total_documents": documents.count(),
@@ -276,6 +284,13 @@ def page(request, slug, doc_slug):
     gated = _gate(request, world)
     if gated:
         return gated
+
+    # 0.7.0：时间线不再是文档，但站点上仍要有 ``/s/<slug>/timeline/`` 这一页
+    if doc_slug == publish_service.TIMELINE_SITE_SLUG:
+        timeline = publish_service.world_timeline(world)
+        if timeline is not None:
+            return _timeline_page(request, world, timeline)
+
     document = publish_service.document_by_slug(world, doc_slug)
     if document is None:
         return _missing_document(request, world, doc_slug)
@@ -289,12 +304,34 @@ def page(request, slug, doc_slug):
         # 地图 / 关系树 / 图谱：站点上直接把工作区的只读画布嵌进来
         "canvas_embed": document.document_type in ("map", DOC_TREE, "graph"),   # 地图 / 关系树 / 图谱都嵌只读画布
         "events": document.events.all() if document.document_type == DOC_TIMELINE else [],
+        # 旧的时间线文档还能嵌工作区；世界总时间线的接口要登录，公开站点只给事件列表
+        "timeline_embed": (
+            f"/w/{world.slug}/timeline/{document.id}?readonly=1&paper=1"
+            if document.document_type == DOC_TIMELINE else ""
+        ),
     })
     if context["card"] is not None:
         context["properties"] = [
             entry for entry in context["card"].resolved_values().values()
             if entry.get("display")
         ]
+    return render(request, "site/page.html", context)
+
+
+def _timeline_page(request, world: World, timeline):
+    """站点上的世界总时间线：服务端把事件排好直接渲染（工作区接口要登录）。"""
+    context = _site_base(world, request=request)
+    context.update({
+        "document": publish_service.SiteTimeline(),
+        "card": None,
+        "related": [],
+        "is_timeline": True,
+        "canvas_embed": False,
+        "timeline_embed": "",
+        "events": publish_service.timeline_events(world),
+        "timeline": timeline,
+        "eras": publish_service.site_eras(world),
+    })
     return render(request, "site/page.html", context)
 
 

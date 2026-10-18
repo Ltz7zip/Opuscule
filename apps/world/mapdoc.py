@@ -37,8 +37,6 @@ MAP_VIEWS = (
 )
 
 DEFAULT_VIEW = "2d"
-#: 地图数据的读写接口前缀
-API_BASE = "/api/world/maps"
 
 
 def resolve_view(value: str) -> str:
@@ -47,15 +45,22 @@ def resolve_view(value: str) -> str:
     return value if value in {key for key, _label, _hint in MAP_VIEWS} else DEFAULT_VIEW
 
 
-def map_page(request, view: str = DEFAULT_VIEW):
+def map_page(request, view: str = DEFAULT_VIEW, world_slug=None):
     """地图页。``?doc=<id>`` 指名看哪一张，不带就挑世界里第一张地图。
+
+    世界由路径 ``/w/<slug>/map/<view>`` 指定（真解析在中间件里）；没有当前世界
+    就回世界选择页，进不去就让对方登录 / 404。
 
     * ``?embed=1``    被工作区面板 / 发布站点用 iframe 嵌进来：去掉外壳留白。
       ``embed`` 默认只读，要可编辑得显式给 ``readonly=0``。
     * ``?theme=``     只有世界主题显式设成浅色才是 light。
     """
     view = resolve_view(view)
-    world = world_views.current_world()
+    world = permissions.current_world_or_none()
+    if world is None:
+        return redirect("/w/")
+    if not world_views.world_page_allowed(request, world):
+        return world_views.world_page_denied(request, world)
 
     doc_id = as_int(request.GET.get("doc"), 0)
     document = None
@@ -76,6 +81,13 @@ def map_page(request, view: str = DEFAULT_VIEW):
     if theme_mode not in ("paper", "light", "dark"):
         theme_mode = "light" if theme.get("mode") == "light" else "dark"
 
+    # 三维联动（PLAN §4.4 B）：``?era=`` 过滤本时代的标注，``?focus=`` 高亮一张卡片。
+    # 纪元必须属于当前世界，否则当作没选。
+    era_id = as_int(request.GET.get("era"), 0)
+    if era_id and not world.eras.filter(id=era_id).exists():
+        era_id = 0
+    focus_card_id = as_int(request.GET.get("focus"), 0)
+
     embed = request.GET.get("embed", "") not in ("", "0", "false", "no")
     readonly = embed if "readonly" not in request.GET else (
         request.GET.get("readonly", "") not in ("0", "false", "no"))
@@ -93,8 +105,10 @@ def map_page(request, view: str = DEFAULT_VIEW):
         "readonly": readonly,
         "canEdit": can_edit,
         "theme": "light" if theme_mode == "light" else "dark",
-        "apiBase": API_BASE,
+        "apiBase": f"/w/{world.slug}/api/world/maps",
         "lang": "zh",
+        "eraId": era_id,
+        "focusCardId": focus_card_id,
     }
     # 顶栏是服务端渲染的（脚本被禁用时至少还能看到文档名与只读状态），
     # 所以这些字段单独给模板一份，不塞进 JSON。
@@ -102,7 +116,7 @@ def map_page(request, view: str = DEFAULT_VIEW):
     layer_count = document.map_layers.count() if document else 0
     marker_counts: dict[str, int] = {}
     if document:
-        for marker in document.map_markers.all():
+        for marker in world_views.markers_in_era(document, era_id):
             marker_counts[marker.kind] = marker_counts.get(marker.kind, 0) + 1
 
     stats = [f"{layer_count} 层"]
@@ -125,22 +139,33 @@ def map_page(request, view: str = DEFAULT_VIEW):
         "doc_id": doc_id,
         "doc_missing": bool(doc_id) and document is None,
         "can_edit": can_edit,
-        "home_url": "/world",
+        "home_url": f"/w/{world.slug}",
         "stats": " · ".join(stats),
         "maps": sibling_maps,
+        "era_id": era_id,
     }
     return render(
         request,
         "map/app.html",
-        {"map_ctx_json": json.dumps(ctx, ensure_ascii=False), "shell": shell},
+        {
+            "map_ctx_json": json.dumps(ctx, ensure_ascii=False),
+            "shell": shell,
+            # 首屏（样式与脚本之前）就要有正确的明暗档，否则浅色工作区里会先闪一块暗色画布。
+            "theme": ctx["theme"],
+        },
     )
 
 
 @require_safe
-def map_home(request):
-    """``/map``：进默认那一档。用 302 而不是直接渲染，免得两个地址各有一份页面。"""
+def map_home(request, world_slug=None):
+    """``/w/<slug>/map``：进默认那一档。用 302 而不是直接渲染，免得两个地址各有一份页面。"""
+    world = permissions.current_world_or_none()
+    if world is None:
+        return redirect("/w/")
+    if not world_views.world_page_allowed(request, world):
+        return world_views.world_page_denied(request, world)
     query = request.GET.urlencode()
-    target = f"/map/{DEFAULT_VIEW}"
+    target = f"/w/{world.slug}/map/{DEFAULT_VIEW}"
     if query:
         target = f"{target}?{query}"
     return redirect(target, permanent=False)

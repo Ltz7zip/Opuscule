@@ -26,17 +26,17 @@
 :root {
   --bg-opacity: 1 !important; /* 地图应用的"透明度"设置会改这个；宿主里不需要半透明面板 */
 
-  --bg-main: #121110 !important; /* 画布 */
-  --bg-lighter: #201f1c !important; /* 浮层 / 悬停 */
-  --bg-light: #1a1917 !important; /* 面板 / 卡片 */
-  --bg-disabled: #1a1917 !important; /* 停用（靠文字变暗区分，别再压一层色） */
-  --bg-dialogs: #1a1917 !important; /* 对话框 */
+  --bg-main: var(--tx-canvas) !important; /* 画布 */
+  --bg-lighter: var(--tx-canvas-raised) !important; /* 浮层 / 悬停 */
+  --bg-light: var(--tx-canvas-soft) !important; /* 面板 / 卡片 */
+  --bg-disabled: var(--tx-canvas-soft) !important; /* 停用（靠文字变暗区分，别再压一层色） */
+  --bg-dialogs: var(--tx-canvas-soft) !important; /* 对话框 */
 
-  --light-solid: #3d3a36 !important; /* "亮实色" = 我们的强发丝线 */
-  --dark-solid: #2c2a27 !important; /* "暗实色" = 我们的发丝线（地图应用把它用在边框上） */
+  --light-solid: var(--tx-hairline-strong) !important; /* "亮实色" = 我们的强发丝线 */
+  --dark-solid: var(--tx-hairline) !important; /* "暗实色" = 我们的发丝线（地图应用把它用在边框上） */
 
-  --header: #201f1c !important; /* 表头 / 悬停底 */
-  --header-active: #2c2a27 !important; /* 选中底 */
+  --header: var(--tx-canvas-raised) !important; /* 表头 / 悬停底 */
+  --header-active: var(--tx-hairline) !important; /* 选中底 */
 
   /* 机器语言用等宽、叙述用无衬线（地图应用常把它俩混着用） */
   --monospace: var(--tx-mono) !important;
@@ -1178,16 +1178,52 @@ input.tx-check[type="checkbox"] {
   .tx-rail {
     width: 260px;
   }
-  /* 左栏的同一条：要写成和它一样特异度才压得住 */
+  /* 左栏的同一条：要写成和它一样特异度才压得住。
+     注意地图应用启动时会给 #options 写内联 width:300px，内联样式压过普通声明，
+     所以这里的宽度必须带 !important，否则平板/手机上永远是 300px。 */
   body:has(> #tx-bar) #options {
-    width: 260px;
+    width: 260px !important;
   }
 }
 
-/* 窄屏：右栏先收（参数是次要信息），左栏保留 */
+/* 窄屏：右栏先收（参数是次要信息）；左栏改成抽屉（默认收起，由顶栏的「面板」按钮拉开） */
 @media (max-width: 980px) {
   .tx-rail {
     display: none;
+  }
+
+  /* 常驻 300px 的左栏在平板上会盖掉近半个地图、手机上几乎整张图。
+     这里改成从左边滑出的抽屉：收起时整体移出屏幕，顶栏按钮负责开合。
+     （顶栏高度已由上面的 top 让位，遮罩从顶栏下沿开始。） */
+  body:has(> #tx-bar) #options {
+    /* 同上：要压过 #options 的内联 width:300px */
+    width: min(320px, 84vw) !important;
+    z-index: 89;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.22s ease, visibility 0.22s;
+  }
+
+  body.tx-panel-open:has(> #tx-bar) #options {
+    transform: none;
+    visibility: visible;
+    box-shadow: 0 24px 48px rgb(0 0 0 / 0.24);
+  }
+
+  /* 抽屉遮罩：点空白处收起。顶栏 z-index 90 在它上面，仍可操作。 */
+  .tx-scrim {
+    position: fixed;
+    inset: var(--tx-h-bar) 0 0 0;
+    z-index: 88;
+    background: rgb(0 0 0 / 0.32);
+  }
+
+  /* 标注编辑卡片改贴左右两条边，别被抽屉挤到屏幕外 */
+  .tx-card {
+    left: var(--tx-3);
+    right: var(--tx-3);
+    width: auto;
+    max-width: none;
   }
 }
 

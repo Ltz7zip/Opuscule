@@ -1,9 +1,11 @@
 /* ==========================================================================
-   opuscule.css —— 深色优先的调色板重映射层
+   opuscule.css —— 极简（Minimalist）单色重映射层
    --------------------------------------------------------------------------
-   功能模块：一层可选皮肤，给全站换一套调色板（默认深色）。
-   定位：本文件**只做变量重映射**，不含任何选择器样式，不改变页面结构，
-   也不碰组件逻辑。
+   功能模块：一层可选皮肤，给全站换一套调色板（默认深色）+ 一套组件规格。
+   定位：本文件第 1~3 节只做变量重映射；第 4 节是**只补几何与字重**的组件规格层
+   （圆角 / 投影 / 选中态 / 表头 / 标题字距）；第 5 节是外壳几何层（把侧栏 /
+   工作区 / 顶栏恢复成画布的浮动圆角卡片）。三节都不改变页面结构、
+   不增删类名、不碰任何 JS 钩子与 Django 变量，因此功能面无风险。
 
    加载顺序与原理：terminal.css 已把全站 token（--mn-* / --ap-* / --panel /
    --line / --ink / --paper …）统一别名到 --tx-* 这一层原语。CSS 自定义属性
@@ -11,12 +13,22 @@
    全站组件就会跟着变——一处改动，全站生效。本文件因此必须排在各页面样式
    之后加载，否则会被反压回去；好处是换肤不必逐条覆写选择器。
 
-   取值来源：本层设计语言的实际采样值
-     [实测] = 真实采样值
-     [推导] = 按明暗阶梯推出来的，待补采
+   取值来源：design library「极简 / Minimalist」
+     （/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist）
+     brand 灰阶 50→900： #fafafa #f4f4f5 #e4e4e7 #d4d4d8 #a1a1aa
+                        #71717a #52525b #3f3f46 #27272a #18181b
 
-   本层刻意**不动字号/行高/字体**：typography 会牵动每一处布局，
-   需要逐页核对，暂不纳入本层。
+   设计语言：**单色**（monochrome）。除 success / warning / danger 三支语义色
+   外，界面不得出现任何彩色；强调色 = 深色底上的近白、浅色底上的近黑，
+   即设计库中的 `--primary: var(--brand-50)` / `--primary: var(--brand-900)`。
+   圆角对齐画布的三档：6px（--radius-sm，行内小件）、12px（--radius-md，控件 /
+   卡片 / 导航项）、16px（--radius-lg，模态 / 命令面板）；阴影取设计库的极轻档。
+   字重与字距按画布收敛（标题 600 + tracking-tight），但**不动 font-family 与
+   font-size**——字号会牵动每一处布局，需逐页核对，不在本轮范围。
+
+   注意：/legacy（templates/index.html）不加载 terminal.css，且 style.css 排在
+   本文件之后，故该页只保证第 1~3 节的变量重映射生效，第 4 节的选择器级规则
+   可能被 style.css 反压——属预期行为，不改动该页。
 
    回滚：从模板里删掉本文件的那一行 <link> 即可，无残留。
    ========================================================================== */
@@ -25,102 +37,115 @@
    1. 本层调色板（原语）
    ========================================================================== */
 :root {
-  /* —— 表面：三级台阶 —— */
-  --nb-canvas:        #191919;   /* [实测] 画布 */
-  --nb-canvas-soft:   #202020;   /* [实测] 侧边栏 / 面板（比画布亮一档） */
-  --nb-canvas-raised: #2c2c2b;   /* [实测] 芯片 / 浮层 */
-  --nb-canvas-sunken: #101010;   /* [推导] 写入框 */
+  /* —— 表面：三级台阶（brand-900 / 800 / 900 系）—— */
+  --nb-canvas:        #18181b;   /* brand-900  画布 */
+  --nb-canvas-soft:   #202023;   /* 推导航 侧边栏 / 面板（比画布亮一档） */
+  --nb-canvas-raised: #27272a;   /* brand-800  芯片 / 浮层 */
+  --nb-canvas-sunken: #0a0a0a;   /* 写入框 / 凹陷区 */
 
-  /* —— 线：本层的线是**暖调**，不是中性灰，这是手感的关键 —— */
-  --nb-hairline:        rgba(255, 255, 243, 0.082);  /* [实测] */
-  --nb-hairline-strong: rgba(255, 255, 243, 0.16);   /* [推导] */
-  --nb-hairline-soft:   rgba(255, 255, 243, 0.05);   /* [推导] */
+  /* —— 线：中性冷灰，不带暖调 —— */
+  --nb-hairline:        rgba(250, 250, 250, 0.10);
+  --nb-hairline-strong: rgba(250, 250, 250, 0.18);
+  --nb-hairline-soft:   rgba(250, 250, 250, 0.06);
 
-  /* —— 墨色 —— */
-  --nb-ink:  #f0efed;   /* [实测] 主文本 */
-  --nb-body: #ada9a3;   /* [实测] 次级 */
-  --nb-mute: #bcbab6;   /* [实测] 三级 */
-  --nb-dim:  #8a8680;   /* [推导] */
+  /* —— 墨色（brand-50 / 400 / 500 / 600）—— */
+  --nb-ink:  #fafafa;   /* brand-50   主文本 */
+  --nb-body: #a6a6ae;   /* brand-400 提亮半档：正文要压过 AAA 7:1（#a1a1aa 只有 6.91:1） */
+  --nb-mute: #71717a;   /* brand-500  三级 */
+  --nb-dim:  #52525b;   /* brand-600  最弱 */
 
-  /* —— 强调：本层只有一支蓝 —— */
-  --nb-accent:      #2383e2;                    /* [实测] 经典链接蓝 */
-  --nb-accent-hi:   #3b92e8;                    /* [推导] hover */
-  --nb-accent-lo:   #1a6fc2;                    /* [推导] press */
-  --nb-on-accent:   #ffffff;                    /* [实测] 蓝底白字 */
-  --nb-accent-wash: rgba(35, 131, 226, 0.2);    /* [实测] 文本选中高亮 */
-  --nb-accent-line: rgba(35, 131, 226, 0.4);    /* [推导] */
+  /* —— 强调：单色化的"唯一一支" = 近白 —— */
+  --nb-accent:      #fafafa;                    /* brand-50  近白 */
+  --nb-accent-hi:   #ffffff;                    /* hover 更亮 */
+  --nb-accent-lo:   #d4d4d8;                    /* press 更暗 */
+  --nb-on-accent:   #18181b;                    /* brand-900 近白底上的深字 */
+  --nb-accent-wash: rgba(250, 250, 250, 0.10);  /* 文本选中高亮 */
+  --nb-accent-line: rgba(250, 250, 250, 0.28);
 
-  /* —— 语义：本层未逐一采到，能实测的用实测，其余沿用旧值 —— */
-  --nb-success: #5ed4ad;   /* [实测] 薄荷绿 */
-  --nb-info:    #2383e2;   /* [实测] */
+  /* —— 聚焦环：单色下必须自己给一支，否则沿用强调色会失控 —— */
+  --nb-ring: #d4d4d8;   /* brand-300 */
 
-  /* —— 圆角：本层实测 3.5 / 4 / 6 / 12 / 胶囊，收敛成 5 档 —— */
-  --nb-r-xxs:  3.5px;    /* [实测] 小图标 */
-  --nb-r-sm:   4px;      /* [实测] 行内元素 */
-  --nb-r-md:   6px;      /* [实测] 按钮主档 */
-  --nb-r-card: 12px;     /* [实测] 卡片 / 菜单 */
-  --nb-r-pill: 9999px;   /* [实测] 胶囊 / 圆形 */
+  /* —— 语义：三支彩色 + 一支中性 info —— */
+  --nb-success: #22c55e;
+  --nb-warning: #fbbf24;
+  --nb-danger:  #ef4444;
+  --nb-info:    #a1a1aa;
 
-  /* —— 透明灰阶叠色档（沿用上游 token 名 --ca-palTraGra*）：hover / 选中 / 遮罩通用 —— */
-  --nb-alpha-75:  rgba(255, 255, 255, 0.016);
-  --nb-alpha-100: rgba(255, 255, 255, 0.03);
-  --nb-alpha-200: rgba(255, 255, 255, 0.055);  /* = hover / 当前页选中 */
-  --nb-alpha-300: rgba(255, 255, 255, 0.094);
-  --nb-alpha-400: rgba(255, 255, 255, 0.13);
+  /* —— 圆角：对齐画布的 rounded-sm / md / lg 三档 —— */
+  --nb-r-xxs:  4px;      /* 小图标、行内标记 */
+  --nb-r-sm:   6px;      /* 设计库 --radius-sm：极小的行内件 */
+  --nb-r-md:   12px;     /* 设计库 --radius-md（= --radius）：控件 / 卡片 / 导航项 */
+  --nb-r-lg:   16px;     /* 设计库 --radius-lg：模态 / 命令面板 / 大浮层 */
+  --nb-r-card: 12px;     /* 卡片档：与 md 同值，语义别名 */
+  --nb-r-pill: 9999px;   /* 胶囊 / 圆形 */
+
+  /* —— 透明灰阶叠色档：hover / 选中 / 遮罩通用 —— */
+  --nb-alpha-75:  rgba(255, 255, 255, 0.02);
+  --nb-alpha-100: rgba(255, 255, 255, 0.04);
+  --nb-alpha-200: rgba(255, 255, 255, 0.06);   /* = hover / 当前页选中 */
+  --nb-alpha-300: rgba(255, 255, 255, 0.10);
+  --nb-alpha-400: rgba(255, 255, 255, 0.14);
 
   /* 本层的 hover 与"当前页选中"同值，都取 200 档 */
   --nb-hover: var(--nb-alpha-200);
 
-  /* —— 阴影阶梯（--c-shaBas*）——
-     反直觉的一点：深色的 alpha 反而更重（.08 → .64），因为黑影压在深底上
-     需要更高不透明度才看得见。 */
-  --nb-shadow-sm: 0 2px 4px rgba(25, 25, 25, .08);
-  --nb-shadow-md: 0 4px 12px -2px rgba(25, 25, 25, .08);
-  --nb-shadow-lg: 0 14px 28px -6px rgba(25, 25, 25, .2), 0 2px 4px -1px rgba(25, 25, 25, .118);
-  --nb-shadow-xl: 0 24px 48px rgba(25, 25, 25, .64), 0 4px 12px rgba(25, 25, 25, .56);
+  /* —— 阴影阶梯：极轻；深色 alpha 更重，否则黑影压在深底上看不见 —— */
+  --nb-shadow-sm: 0 1px 2px rgba(0, 0, 0, .28), 0 1px 1px rgba(0, 0, 0, .16);
+  --nb-shadow-md: 0 2px 6px rgba(0, 0, 0, .32), 0 1px 2px rgba(0, 0, 0, .20);
+  --nb-shadow-lg: 0 10px 24px -6px rgba(0, 0, 0, .44), 0 2px 6px -2px rgba(0, 0, 0, .32);
+  --nb-shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, .56), 0 8px 20px -8px rgba(0, 0, 0, .44);
   /* Out 变体 = 基础影 + 一圈 1px 描边（描边色就是边框色） */
-  --nb-shadow-out-sm: 0 0 0 1px #383836, 0 2px 4px rgba(25, 25, 25, .08);
-  --nb-shadow-out-md: 0 0 0 1px #383836, 0 4px 12px -2px rgba(25, 25, 25, .08);
+  --nb-shadow-out-sm: 0 0 0 1px var(--nb-hairline-strong), 0 1px 2px rgba(0, 0, 0, .24);
+  --nb-shadow-out-md: 0 0 0 1px var(--nb-hairline-strong), 0 2px 6px rgba(0, 0, 0, .28);
 }
 
-/* 浅色：本层的两套主题严格明暗互逆 ——
-   浅色的分割线色 = 深色的主文本色；深色的分割线色 = 浅色的主文本色。 */
+/* 浅色：两套主题严格明暗互逆 ——
+   深色的主文本色（近白）= 浅色的强调色；浅色的主文本色（近黑）= 深色的强调色。 */
 :root[data-theme="light"] {
-  --nb-canvas:        #ffffff;   /* [实测] */
-  --nb-canvas-soft:   #f9f8f7;   /* [实测] 侧边栏 */
-  --nb-canvas-raised: #ffffff;   /* [实测] */
-  --nb-canvas-sunken: #f2f1ef;   /* [推导] */
+  --nb-canvas:        #ffffff;
+  --nb-canvas-soft:   #fafafa;   /* brand-50  侧边栏 */
+  --nb-canvas-raised: #ffffff;
+  --nb-canvas-sunken: #f5f5f5;   /* background-200 */
 
-  --nb-hairline:        rgba(42, 28, 0, 0.07);   /* [实测] 暖褐黑 */
-  --nb-hairline-strong: rgba(42, 28, 0, 0.14);   /* [推导] */
-  --nb-hairline-soft:   rgba(42, 28, 0, 0.05);   /* [推导] */
+  --nb-hairline:        #e4e4e7;   /* brand-200 */
+  --nb-hairline-strong: #d4d4d8;   /* brand-300 */
+  --nb-hairline-soft:   #f4f4f5;   /* brand-100 */
 
-  --nb-ink:  #2c2c2b;   /* [实测] */
-  --nb-body: #7d7a75;   /* [实测] */
-  --nb-mute: #a5a29c;   /* [推导] */
-  --nb-dim:  #b8b5af;   /* [推导] */
+  --nb-ink:  #18181b;   /* brand-900 */
+  --nb-body: #52525b;   /* brand-600 */
+  --nb-mute: #71717a;   /* brand-500 */
+  --nb-dim:  #a1a1aa;   /* brand-400 */
 
-  --nb-accent-wash: rgba(35, 131, 226, 0.12);   /* [推导] */
-  --nb-accent-line: rgba(35, 131, 226, 0.35);   /* [推导] */
+  --nb-accent:      #18181b;                  /* brand-900  近黑 */
+  --nb-accent-hi:   #27272a;                  /* hover 略亮 */
+  --nb-accent-lo:   #0a0a0a;                  /* press 更深 */
+  --nb-on-accent:   #fafafa;                  /* brand-50  近黑底上的浅字 */
+  --nb-accent-wash: rgba(24, 24, 27, 0.07);
+  --nb-accent-line: rgba(24, 24, 27, 0.22);
+
+  --nb-ring: #18181b;   /* brand-900 */
+
+  --nb-success: #16a34a;
+  --nb-warning: #b45309;
+  --nb-danger:  #dc2626;
+  --nb-info:    #52525b;
 
   /* —— 透明灰阶叠色档：与深色按同一档位对齐 —— */
-  --nb-alpha-75:  rgba(0, 0, 0, 0.05);
-  --nb-alpha-100: rgba(0, 0, 0, 0.06);
+  --nb-alpha-75:  rgba(0, 0, 0, 0.03);
+  --nb-alpha-100: rgba(0, 0, 0, 0.05);
   --nb-alpha-200: rgba(0, 0, 0, 0.07);   /* = hover / 当前页选中 */
-  --nb-alpha-300: rgba(0, 0, 0, 0.11);
-  --nb-alpha-400: rgba(0, 0, 0, 0.157);
+  --nb-alpha-300: rgba(0, 0, 0, 0.10);
+  --nb-alpha-400: rgba(0, 0, 0, 0.15);
 
-  /* 注：本层浅色的"按钮 hover"另有一支偏暖的 rgba(55,53,47,.06)（--ca-butHovBac）；
-     这里统一走中性叠加档，保持与深色对称。 */
   --nb-hover: var(--nb-alpha-200);
 
-  /* —— 阴影阶梯 —— */
-  --nb-shadow-sm: 0 4px 12px rgba(25, 25, 25, .027), 0 1px 2px rgba(25, 25, 25, .02);
-  --nb-shadow-md: 0 8px 12px rgba(25, 25, 25, .027), 0 2px 6px rgba(25, 25, 25, .027);
-  --nb-shadow-lg: 0 20px 24px rgba(25, 25, 25, .05), 0 5px 8px rgba(25, 25, 25, .027);
-  --nb-shadow-xl: 0 24px 48px rgba(25, 25, 25, .24), 0 4px 12px rgba(25, 25, 25, .14);
-  --nb-shadow-out-sm: 0 2px 4px rgba(0, 0, 0, .04), 0 0 0 1px rgba(42, 28, 0, .07);
-  --nb-shadow-out-md: 0 8px 12px rgba(25, 25, 25, .027), 0 2px 6px rgba(25, 25, 25, .027), 0 0 0 1px rgba(42, 28, 0, .07);
+  /* —— 阴影阶梯：设计库的极轻档 —— */
+  --nb-shadow-sm: 0 1px 2px rgba(24, 24, 27, .05), 0 1px 1px rgba(24, 24, 27, .04);
+  --nb-shadow-md: 0 2px 6px rgba(24, 24, 27, .06), 0 1px 2px rgba(24, 24, 27, .05);
+  --nb-shadow-lg: 0 12px 24px -8px rgba(24, 24, 27, .10), 0 4px 10px -4px rgba(24, 24, 27, .06);
+  --nb-shadow-xl: 0 24px 48px -12px rgba(24, 24, 27, .18), 0 8px 20px -8px rgba(24, 24, 27, .10);
+  --nb-shadow-out-sm: 0 0 0 1px var(--nb-hairline-strong), 0 1px 2px rgba(24, 24, 27, .05);
+  --nb-shadow-out-md: 0 0 0 1px var(--nb-hairline-strong), 0 2px 6px rgba(24, 24, 27, .06);
 }
 
 /* ==========================================================================
@@ -129,8 +154,9 @@
    必须同时命中 [data-theme="light"] 与 [data-theme="dark"]：
    terminal.css 里这两个选择器特异性更高（0,2,0），只用 :root 会被反压回去。
 
-   注意：变量名仍叫 --tx-green，值已经是本层的蓝——这正是别名层的本意：
-   全站组件问"界面唯一强调色是什么"，答案是 #2383e2。
+   注意：变量名仍叫 --tx-green，值已经是本层的单色强调——这正是别名层的本意：
+   全站组件问"界面唯一强调色是什么"，深色答案是近白，浅色答案是近黑。
+   （apple.css 的 --ap-blue 也别名到 --tx-green，故站点交互色一并翻转。）
    ========================================================================== */
 :root,
 :root[data-theme="light"],
@@ -153,7 +179,7 @@
   --tx-dim:      var(--nb-dim);
   --tx-ink-mono: var(--nb-ink);
 
-  /* 强调：终端绿 → 本层蓝 */
+  /* 强调：终端绿 → 本层单色 */
   --tx-green:       var(--nb-accent);
   --tx-green-hover: var(--nb-accent-hi);
   --tx-green-press: var(--nb-accent-lo);
@@ -162,8 +188,13 @@
   --tx-green-wash:  var(--nb-accent-wash);
   --tx-green-line:  var(--nb-accent-line);
 
-  /* 语义 */
+  /* 焦点环：原来派生自 --tx-green-wash，单色化后会近乎不可见，必须显式改写 */
+  --tx-focus-ring: 0 0 0 2px var(--nb-ring);
+
+  /* 语义（补齐 terminal.css 定义但本层原先漏掉的两支） */
   --tx-success: var(--nb-success);
+  --tx-warning: var(--nb-warning);
+  --tx-danger:  var(--nb-danger);
   --tx-info:    var(--nb-info);
 
   /* 圆角 */
@@ -172,9 +203,9 @@
   --tx-r-md:   var(--nb-r-md);
   --tx-r-pill: var(--nb-r-pill);
 
-  /* 卡片档：terminal.css 把 lg / xl 都压在 md(6px) 上，这里放回本层的 12px */
+  /* 卡片档：terminal.css 把 lg / xl 都压在 md 上，这里放回本层的 12px / 16px */
   --mn-radius-lg: var(--nb-r-card);
-  --mn-radius-xl: var(--nb-r-card);
+  --mn-radius-xl: var(--nb-r-lg);
 
   /* 模态档：终端语言的"唯一一道投影"换成本层的最大档 */
   --tx-shadow-modal: var(--nb-shadow-xl);
@@ -183,32 +214,1058 @@
 /* ==========================================================================
    3. 标签 / 块颜色色板（9 族 × 底 / 字）
    --------------------------------------------------------------------------
-   来源不是采样 UI，而是直接取自设计规范的 CSS token：
-   `:root` 明色与暗色两个块里的 --cd-palXxx50
-   （底色）与 --cd-palXxx700（字色）。共 9 族：灰 / 棕 / 橙 / 黄 / 绿 / 蓝 / 紫 / 粉 / 红。
+   单色语言下不再有 9 种彩色，改为**可区分的灰阶 ramp**：底由浅入深、
+   字由弱到强，仍保留 9 档以便区分不同标签类别。
    深色底是半透明叠加，会跟着画布走；浅色底是不透明实色。
    深色是默认（与 terminal.css 的约定一致），浅色走 [data-theme="light"] 覆盖。
    ========================================================================== */
 :root {
-  --nb-tag-gray-bg:   #191919;              --nb-tag-gray-fg:   #9b9b9b;
-  --nb-tag-brown-bg:  rgba(184, 101, 72, .08);  --nb-tag-brown-fg:  rgba(187, 125, 100, .91);
-  --nb-tag-orange-bg: rgba(233, 126, 40, .06);  --nb-tag-orange-fg: rgba(233, 126, 32, .91);
-  --nb-tag-yellow-bg: rgba(162, 105, 50, .1);   --nb-tag-yellow-fg: rgba(221, 154, 34, .91);
-  --nb-tag-green-bg:  rgba(45, 153, 100, .08);  --nb-tag-green-fg:  rgba(44, 167, 106, .91);
-  --nb-tag-blue-bg:   rgba(51, 126, 169, .08);  --nb-tag-blue-fg:   rgba(51, 126, 169, .91);
-  --nb-tag-purple-bg: rgba(155, 97, 211, .08);  --nb-tag-purple-fg: rgba(155, 97, 211, .91);
-  --nb-tag-pink-bg:   rgba(220, 76, 145, .06);  --nb-tag-pink-fg:   rgba(216, 87, 149, .91);
-  --nb-tag-red-bg:    rgba(222, 85, 88, .1);    --nb-tag-red-fg:    rgba(222, 85, 80, .91);
+  --nb-tag-gray-bg:   rgba(255, 255, 255, 0.05);  --nb-tag-gray-fg:   #8f8f97;
+  --nb-tag-brown-bg:  rgba(255, 255, 255, 0.06);  --nb-tag-brown-fg:  #9c9ca4;
+  --nb-tag-orange-bg: rgba(255, 255, 255, 0.07);  --nb-tag-orange-fg:  #a9a9b1;
+  --nb-tag-yellow-bg: rgba(255, 255, 255, 0.08);  --nb-tag-yellow-fg:  #b6b6be;
+  --nb-tag-green-bg:  rgba(255, 255, 255, 0.09);  --nb-tag-green-fg:   #c3c3cb;
+  --nb-tag-blue-bg:   rgba(255, 255, 255, 0.10);  --nb-tag-blue-fg:    #d0d0d8;
+  --nb-tag-purple-bg: rgba(255, 255, 255, 0.11);  --nb-tag-purple-fg:  #dddde5;
+  --nb-tag-pink-bg:   rgba(255, 255, 255, 0.12);  --nb-tag-pink-fg:    #eaeaef;
+  --nb-tag-red-bg:    rgba(255, 255, 255, 0.13);  --nb-tag-red-fg:     #fafafa;
 }
 
 :root[data-theme="light"] {
-  --nb-tag-gray-bg:   #f8f8f7;   --nb-tag-gray-fg:   #484743;
-  --nb-tag-brown-bg:  #f4eeee;   --nb-tag-brown-fg:  #613e2e;
-  --nb-tag-orange-bg: #fbecdd;   --nb-tag-orange-fg: #6a3b12;
-  --nb-tag-yellow-bg: #fbf3db;   --nb-tag-yellow-fg: #5f4023;
-  --nb-tag-green-bg:  #edf3ec;   --nb-tag-green-fg:  #1f4f3b;
-  --nb-tag-blue-bg:   #e7f3f8;   --nb-tag-blue-fg:   #1f4a68;
-  --nb-tag-purple-bg: #f8f3fc;   --nb-tag-purple-fg: #5a3872;
-  --nb-tag-pink-bg:   #fcf1f6;   --nb-tag-pink-fg:   #6f3151;
-  --nb-tag-red-bg:    #fdebec;   --nb-tag-red-fg:    #862120;
+  --nb-tag-gray-bg:   #f4f4f5;   --nb-tag-gray-fg:   #71717a;
+  --nb-tag-brown-bg:  #efeff1;   --nb-tag-brown-fg:  #66666e;
+  --nb-tag-orange-bg: #eaeaed;   --nb-tag-orange-fg: #5b5b63;
+  --nb-tag-yellow-bg: #e4e4e8;   --nb-tag-yellow-fg: #505058;
+  --nb-tag-green-bg:  #dfdfe4;   --nb-tag-green-fg:  #45454d;
+  --nb-tag-blue-bg:   #d9d9df;   --nb-tag-blue-fg:   #3a3a42;
+  --nb-tag-purple-bg: #d4d4db;   --nb-tag-purple-fg: #2f2f37;
+  --nb-tag-pink-bg:   #cfcfd7;   --nb-tag-pink-fg:   #26262d;
+  --nb-tag-red-bg:    #cacad3;   --nb-tag-red-fg:    #18181b;
+}
+
+/* ==========================================================================
+   4. 组件规格层：几何 / 选中态 / 投影 / 字重
+   --------------------------------------------------------------------------
+   第 1~3 节只重映射颜色；本节把画布（opuscule-redesign/pages/workspace.html）
+   与设计库 components.css 的**形状规格**落到真实页面：
+
+     · 圆角 —— 控件 / 输入 / 卡片对齐 --radius-md（12px），模态对齐
+       --radius-lg（16px）。例外：侧栏的密集列表行（.row，终端层
+       --tx-h-row = 30px）保持 6px——画布的 .item 是 34px 行配 12px
+       （≈35%），等比缩到 30px ≈ 10px，取更稳的 6px，也避免密排时
+       "颗颗都是小药丸"。
+     · 选中态 —— 统一"实心强调底 + 反色字"（设计库 Navigation / Sidebar 的
+       .active 规格），替换终端层的"洗底 + 左侧 2px 指示条"。
+     · 投影 —— 终端层把表面族投影一律归零；这里按"层级越高影越重"放回去
+       （卡片 sm / 菜单 md / 吐司 lg / 模态 xl）。
+     · 字重字距 —— 标题 500 → 600，字距收 -0.012em（画布的 tracking-tight）。
+
+   只写选择器级规则：不新增类名、不动 DOM、不改字号与字体族。
+   本节排在 terminal.css 之后，同特异性即可覆盖；.sb-pills / .panel-tabs
+   两处终端层用了更高的 (0,3,0)，这里按原值对齐写回。
+
+   本节第二遍（"结构性"一轮）把终端层剩下的非方角控件也收进设计库规格：
+     · .sb-pills 视图切换器：由"一排独立胶囊"改成设计库 Navigation 的
+       **分段控件**（容器 12px 圆角 + 1px 边 + 2px 内边距，见 4.5）。
+     · .sb-foot 底部两颗 40px 胶囊（.sb-new / .sb-compose）→ 12px。
+     · 顶栏 .user-chip（6px）与 .tb-btn.is-icon（10px）→ 12px。
+     · 刻意保留 .sb-world .world-chip 的胶囊形：它是"工作区切换器"，与下方的
+       视图分段控件刻意拉开形态差异（画布里两者也是不同描法）。
+
+   查证后确认属 no-op、故未改（原"刻意不动"清单里的另外两项）：
+     · .panel-tabs 的高度预算 —— terminal.css:1811 已有
+       `.panel-tabs { display: none !important }`（"没有标签栏"是显式设计声明），
+       tools/experience_probe.py 还断言它的 display 必须是 none，画布也无标签栏。
+     · .icon-btn 的"圆形" —— 全仓唯一使用点是 workspace.js:2372，且永远带
+       is-pill（minimal.css:579 的 999px 反压），改基础类不产生任何渲染差异。
+     · .era-pill / .era-chip 的 4px 是"内容标记"不是控件，4.1 已刻意排除。
+   ========================================================================== */
+
+/* —— 4.1 圆角：控件与输入 —— */
+
+/* 工具条与面板里的按钮：终端层的 6px 提到 12px。
+   排除"非方角控件"：.icon-btn（全仓只用 is-pill，见节 4 头注）、
+   .era-pill / .badge（4px 行内标记与胶囊状态标记，不是控件）。
+   终端层另有几支按钮用 (0,2,0) 另写了圆角，分组选择器（0,1,0）压不过，
+   在本节末尾按原值写回。 */
+.mini-btn, .tb-btn, .insert-btn, .link-btn,
+.tl-mini, .sel-btn, .tl-frame-bar button, .tree-bar button,
+.map-bar button, .rt-btn, .rt-tool, .te-btn, .pager-btn, .fc-btn,
+.table-tool, .board-add, .rt-relation-btn, .rt-add-relation,
+.comment-actions button, .md-body button, .seg-btn, .empty-btn,
+.sb-icon {
+  border-radius: var(--tx-r-md);
+}
+
+/* 输入框：与按钮同一档，写入框才像"组件"而不是"框图" */
+.mini-input, .mini-select, .prop-input, .prop-select,
+.tl-field input, .tl-field select,
+.tl-event-card input, .tl-event-card select, .tl-event-card textarea,
+.sb-search, .sb-search input, .nav-search input,
+.picker-head input, .pl-box input, .fb-wrap input,
+.list-input, .map-bar input, .tree-bar input {
+  border-radius: var(--tx-r-md);
+}
+
+/* 终端层还有一条兜底规则：input:not([type=checkbox]):not([type=radio]):
+   not([type=range]), select, textarea —— 它是 (0,3,1)，比特异性压过本层
+   任何 (0,1,0) 的类名选择器（.prop-table 单元格里的 .mini-input 就是这么
+   被按回 6px 的）。这里照抄同一组选择器写回：同特异性 + 靠后加载即可胜出。 */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  border-radius: var(--tx-r-md);
+}
+
+/* 终端层用 (0,2,0) 另写圆角的四支控件：分组选择器（0,1,0）压不过，按原值写回。
+   · .sb-foot 底部两颗 40px 胶囊 —— .sb-new（terminal.css:1848，与 L1737 同值）、
+     .sb-compose（workspace.css:299）。设计库 .btn 是 12px，画布脚部也是
+     `.btn primary w-full`，不是胶囊。
+   · 顶栏 .user-chip（terminal.css:582 给 6px）与 .tb-btn.is-icon
+     （minimal.css:811 给 10px）—— 与其余控件对齐到 --radius-md。 */
+.sb-foot .sb-new,
+.sb-foot .sb-compose,
+.topbar .tb-btn.is-icon,
+.topbar .user-chip {
+  border-radius: var(--tx-r-md);
+}
+
+/* —— 4.2 选中态：实心强调底 + 反色字 —— */
+
+/* 侧栏文档树 / 列表行（含 polish.css 的 ::before 指示条——
+   它与底同色，实心底上自然隐去，无需另写规则） */
+.row.is-active {
+  background: var(--nb-accent);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--nb-on-accent);
+  font-weight: 500;
+}
+.row.is-active:hover {
+  background: var(--nb-accent-hi);
+  color: var(--nb-on-accent);
+}
+/* 实心底上，图标与行内元信息必须一并反色，否则是"白底白字" */
+.row.is-active .r-icon { color: var(--nb-on-accent); }
+
+/* 标签条当前页签 */
+.panel-tabs .tab.is-active {
+  background: var(--nb-accent);
+  border-color: transparent;
+  border-bottom-color: transparent;
+  color: var(--nb-on-accent);
+  box-shadow: none;
+}
+.panel-tabs .tab.is-active .t-icon { color: var(--nb-on-accent); }
+.panel-tabs .tab.is-active .t-close { color: var(--nb-on-accent); opacity: .65; }
+.panel-tabs .tab.is-active .t-close:hover {
+  background: var(--nb-accent-lo);
+  color: var(--nb-on-accent);
+  opacity: 1;
+}
+
+/* 侧栏视图切换器（世界 / 维基 …）：终端层给的是 alpha 洗底，这里换实心
+   （设计库 Navigation 的 .active）。它的**形状**在 4.5 里改成分段控件。 */
+.sb-pills .tb-view.is-active {
+  background: var(--nb-accent);
+  border-color: transparent;
+  color: var(--nb-on-accent);
+  box-shadow: none;
+}
+.sb-pills .tb-view.is-active > span { color: var(--nb-on-accent); }
+
+/* —— 4.3 表面：圆角 + 投影 —— */
+
+/* 卡片族：12px + 最轻一档影（终端层 L833 把这一族的投影全部归零过） */
+.table-scroll,
+.board-col, .board-card, .media-card, .dice-card,
+.guide-card, .tile, .embed-card, .store-utility-card {
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--nb-shadow-sm);
+}
+
+/* 菜单 / 命令条：12px + 中档影 */
+.fb-menu, .format-bar, .fb-actions, .mention-pop, .date-pop,
+.block-menu, .rt-menu, .rt-card-tools, .insert-bar, .fc-menu {
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--nb-shadow-md);
+}
+/* 右键菜单层级更高（盖在内容之上），给大档 */
+.ctx {
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--nb-shadow-lg);
+}
+/* 吐司与两条"弹在行内之上"的浮层 */
+.toast, .rt-toast { border-radius: var(--tx-r-md); box-shadow: var(--nb-shadow-lg); }
+.comment-pop, .rt-relations-pop { border-radius: var(--tx-r-md); }
+
+/* 模态档：对齐画布的 rounded-lg（16px）——命令面板与模态都是 16px */
+.md-box, .pl-box, .picker-box { border-radius: var(--nb-r-lg); }
+
+/* 数据表头：设计库是 .06em 而不是终端层的 1.2px 眉标字距 */
+.table-grid th { letter-spacing: .06em; font-weight: 600; }
+
+/* —— 4.4 字重与字距：标题立起来（画布 tracking-tight）—— */
+
+.card-title,
+.tool-name,
+.md-head h2,
+.hit-name,
+.ee-title,
+.tile-name,
+.hero h1,
+.page-head h1,
+.empty-hint h2,
+.empty-title {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+/* 文档主标题是 40px 展示级，负字距可以再重一点（画布 .value 用 -0.03em） */
+.card-view .card-title { letter-spacing: -0.02em; }
+
+/* —— 4.5 侧栏视图切换器：一排独立胶囊 → 设计库的分段控件 —— */
+
+/* 设计库 Navigation（components.css:38）：容器 = 4px 间隙 + 4px 内边距 + 1px 边
+   + --radius-md；条目 = --radius-md 圆角、min-height 32px、padding 0 12px；
+   选中 = 实心 primary + 反色字（4.2 已写）。
+   画布（workspace.html L605-608）也是拿设计库的 .topbar 当这个容器用。
+
+   两个必须偏离设计库原稿的地方：
+     · 保持**块级 display:flex**，不能用设计库的 inline-flex —— JS 会往 #tbNav
+       注入一颗搜索药丸（workspace.js:6247-6259），靠 `margin-left:auto` 推到
+       行尾（terminal.css:1836）。inline-flex 收缩到内容宽后 auto 外边距失效，
+       搜索药丸会贴住「维基」。
+     · flex-wrap 显式收成 nowrap —— workspace.css:210 给的是 wrap，一旦折行
+       容器就不再像一块控件。
+   容器底色用 --tx-canvas-raised（与 .sb-search / .world-chip 同档）；
+   不能用 --tx-canvas-soft，那正是 .sidebar 自己的底色，框就看不见了。
+   内圆角取 calc(容器圆角 − 内边距) 做同心圆角，否则四角会咬出月牙。 */
+.sb-pills {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  margin: 0 0 8px;   /* 顶替 terminal.css:1806 的 padding: 0 0 8px，保住下方间距 */
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas-raised);
+}
+
+.sb-pills .tb-view {
+  border-radius: calc(var(--tx-r-md) - 2px);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+/* 悬停"换底不换边"（设计库 .topbar a:hover = 换底 + 换字色）。
+   带 :not(.is-active) 是必要的：4.2 的选中态与这条同为 (0,3,0) 且排在前面，
+   否则一悬停就把选中项的实心底洗掉。 */
+.sb-pills .tb-view:not(.is-active):hover {
+  background: var(--tx-canvas-soft);
+  border-color: transparent;
+  color: var(--tx-ink);
+}
+
+/* ==========================================================================
+   5. 外壳几何：把「齐平贴边」换回画布的「浮动圆角卡片」
+   --------------------------------------------------------------------------
+   画布（opuscule-redesign/pages/workspace.html L589-654）的外壳是：
+     · 外壳留白 + 卡片之间留缝（两张卡不共边）
+     · 侧栏 = 圆角 12px 的浮动卡片；工作区 = 同一档圆角 + 细边 + 轻投影
+   这套几何 shell.css 早就写好了，而且**全部走 --shell-* 自定义属性**：
+     .app{padding:var(--shell-pad); gap:var(--shell-gap)}
+     .sidebar{...; border-radius:var(--shell-radius); box-shadow:var(--shell-shadow),var(--shell-rim)}
+   terminal.css 第 13 节（L1640-1666）把这套变量全线归零，变成"贴边 + 一道发丝线"
+   的终端语言。所以本节只做两件事：
+
+     ① 把归零的 --shell-* 恢复成画布那一档；
+     ② 把 terminal.css 用**显式选择器**另写的三处几何补回来 —— 它归零变量之后
+        又逐条写了 `border:0; border-radius:0; box-shadow:none`，光恢复变量不够。
+
+   本节排在 terminal.css 之后，同特异性即可胜出。rail 布局（JS 把 .sidebar
+   提到 .app 层并打上 html.has-rail-sidebar，见 workspace.js:5949）下终端层
+   用 `html.has-rail-sidebar .topbar`(0,2,1) 单独压过左边框，那条比特异性更高，
+   按原值写回。
+
+   环境光（第三项，已确认开启）：shell.css 在页面底画两团很淡的径向渐变做纵深。
+   terminal.css 除了把 --shell-glow 归零，还额外用 `body{background-image:none}`
+   (L1652) 把这两团光整条删掉——所以只恢复变量不够，本节末尾再把那条
+   background-image 按 shell.css L55-57 的原式写回。写回规则只命中 /world
+   （沿用 experience.css:1334 已有的 `body[data-surface='workspace']` 锚点，
+   并排除 is-embed），避免溢到只读站点等页面。世界主题自带背景图时
+   workspace.js:445 会写行内 background-image，行内优先级更高，光自然让位。
+
+   刻意保留的两件事（都属"结构性大改"，已确认不做）：
+     · 不引入画布的 1200px 居中宽度上限 —— /world 的图谱 / 时间轴 / 画布类工具
+       需要整幅宽度，压窄会切掉视口。
+     · 不改侧栏宽度（248 / 270 / 280 三档带几何预算断言，见 terminal.css L1730；
+       换成画布的 224px 会让 .sb-foot 三个动作折行）。
+
+   选择器写成三支合一而不是单个 :root：shell.css L41-45 有一条
+   `:root[data-theme="dark"]`（特异性 0,2,0），会把单支 :root（0,1,0）的
+   --shell-shadow / --shell-rim / --shell-glow 反压回去；浅色下因为 shell.css
+   没有对应的 light 块才侥幸生效。这里沿用第 2 节已确立的同一手法。
+   ========================================================================== */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --shell-pad: 10px;                    /* 卡片离窗口边缘 */
+  --shell-gap: 10px;                    /* 卡片之间的缝 */
+  --shell-radius: var(--nb-r-md);       /* 大面片：12px，对齐设计库 --radius-md */
+  --shell-radius-sm: var(--nb-r-sm);    /* 卡片里的小面片：6px */
+  --shell-shadow: var(--nb-shadow-sm);  /* 卡片投影：极轻一档 */
+  --shell-glow: 18%;                    /* 环境光强度：同 shell.css L39 */
+}
+/* 深色底要更亮一点才看得出层次（同 shell.css L44）。
+   这条 (0,2,0) 排在上一组三支之后，深色下胜出。 */
+:root[data-theme="dark"] { --shell-glow: 30%; }
+
+/* 页面底的环境光：terminal.css L1652 把它整条删成 none，这里按 shell.css L55-57
+   的原式写回（repeat / attachment 仍由 shell.css L58-59 提供，不重复）。
+   唯一改动：shell.css 第二团的强度写死 70%、不随变量走，深色下是一块偏亮的
+   近白光斑；这里统一改成 var(--shell-glow)，两团随主题同步淡出。
+   只命中 /world —— 别处要么 --shell-glow 为 0%（terminal.css L1647），要么根本
+   没定义，都不该长出这层装饰。is-embed 另由 shell.css L352 关掉。
+   打印同样要关（shell.css L359 那条被本文件最后加载反压，故自己再写一遍）。 */
+body[data-surface="workspace"]:not(.is-embed) {
+  background-image:
+    radial-gradient(46% 42% at 8% 2%, color-mix(in srgb, var(--mn-accent) var(--shell-glow), transparent), transparent 72%),
+    radial-gradient(44% 40% at 96% 98%, color-mix(in srgb, var(--mn-accent) var(--shell-glow), transparent), transparent 74%);
+}
+@media print {
+  body[data-surface="workspace"] { background-image: none; }
+}
+
+/* 侧栏 / 工作区：两张浮起来的圆角卡片（终端的发丝线由 10px 缝隙代替） */
+.sidebar,
+.workspace {
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--nb-shadow-sm);
+}
+.sidebar { border: 1px solid var(--tx-hairline); }
+.workspace { border: 0; }
+.panels { border-radius: var(--tx-r-md); }
+
+/* 顶栏：与两张卡同一档——圆角 + 细边 + 轻影，不再是一条横贯到底的分割线 */
+.topbar {
+  background: var(--tx-canvas);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--nb-shadow-sm);
+}
+html.has-rail-sidebar .topbar { border-left: 1px solid var(--tx-hairline); }
+
+/* 嵌入站点（iframe）时不套壳：外面已经有纸面容器了（与 shell.css L353 同一处理） */
+body.is-embed .sidebar,
+body.is-embed .topbar {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* 响应式台阶：与 shell.css L296-341 同值。本节排在最后，必须自己再写一遍，
+   否则上面那条无条件规则会把小屏的收窄覆盖掉。媒体查询不增加特异性，所以
+   这里的 :root 同样要写成三支，才能压低上面那条 :root[data-theme="dark"]。 */
+@media (max-width: 1023px) {
+  :root,
+  :root[data-theme="light"],
+  :root[data-theme="dark"] { --shell-pad: 8px; --shell-gap: 8px; }
+  .sidebar, .workspace, .topbar { border-radius: var(--shell-radius-sm); }
+}
+@media (max-width: 639px) {
+  :root,
+  :root[data-theme="light"],
+  :root[data-theme="dark"] { --shell-pad: 6px; --shell-gap: 6px; }
+}
+
+/* ==========================================================================
+   节 6：关系树整页布局（/relationship 编辑屏）
+   --------------------------------------------------------------------------
+   把「浮在桌面上的编辑器卡片」改成整页应用壳体：
+     顶栏（返回 + 面包屑 + 标题 + 工具） / 筛选条 / 画布 / 右侧详情 / 底部导航
+   结构由 templates/relationship.html 给出，这里只负责把它画成极简设计库的样子。
+   全部取值走 --nb-*，浅色 / 深色 / 嵌入态共用一套。
+   ========================================================================== */
+
+/* ---------------------------------------------------------- 6.1 外壳 */
+.rt-app {
+  /* 点阵取值与经典时间线画布（style.css 的 --dot）逐位对齐 */
+  --rt-dot: rgba(24, 24, 27, 0.085);
+  --rt-edge: var(--nb-hairline-strong);
+  --rt-edge-strong: var(--nb-hairline-strong);
+  --rt-card: var(--nb-canvas);
+  --rt-hover: var(--nb-alpha-200);
+}
+:root[data-theme="dark"] .rt-app {
+  --rt-dot: rgba(255, 255, 243, 0.09);
+}
+
+/* 编辑屏：整页应用壳——灰底 + 8px 内边距，编辑器本身是一张圆角白卡 */
+.rt-app:has(> .rt-screen--editor:not([hidden])) {
+  padding: 8px;
+  height: 100vh;
+  gap: 0;
+  overflow: hidden;
+  background: var(--nb-canvas-sunken);
+}
+.rt-app:has(> .rt-screen--editor:not([hidden])) > .rt-screen--editor {
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-lg);
+  background: var(--nb-canvas);
+  box-shadow: var(--nb-shadow-sm);
+}
+/* 嵌进工作区 / 发布站点时不套壳：8px 应用壳内衬归零，画布直接贴住宿主面板。
+   浅色嵌入由 relationship.css 的同名规则处理，这里补齐深色（is-paper）一档 */
+.rt-body.is-embed .rt-app:has(> .rt-screen--editor:not([hidden])) {
+  padding: 0;
+  background: var(--nb-canvas);
+}
+.rt-body.is-embed .rt-app:has(> .rt-screen--editor:not([hidden])) > .rt-screen--editor {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.rt-screen--editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--nb-canvas);
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+.rt-editor-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 16px;
+  overflow: hidden;
+}
+.rt-editor-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------------------------------------------------------- 6.2 顶栏 */
+.rt-topbar {
+  flex: none;
+  height: auto;
+  min-height: 56px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--nb-canvas);
+  border-bottom: 1px solid var(--nb-hairline);
+}
+.rt-topbar-back {
+  flex: none;
+  width: auto;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--nb-r-md);
+  color: var(--nb-body);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.rt-topbar-back:hover {
+  background: var(--nb-alpha-200);
+  border-color: transparent;
+  color: var(--nb-ink);
+}
+
+.rt-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--nb-mute);
+}
+.rt-crumbs a {
+  padding: 0 8px 0 0;
+  color: var(--nb-mute);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rt-crumbs a:hover { color: var(--nb-ink); }
+.rt-crumbs .sep { padding: 0 6px 0 0; color: var(--nb-dim); }
+.rt-crumbs .current { color: var(--nb-ink); white-space: nowrap; }
+
+.rt-topbar-title { gap: 8px; }
+.rt-topbar-title strong { font-size: 14px; font-weight: 600; color: var(--nb-ink); }
+.rt-chip {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--nb-r-pill);
+  background: var(--nb-accent);
+  color: var(--nb-on-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+.rt-topbar-tools { gap: 6px; }
+.rt-tool {
+  height: 32px;
+  padding: 0 12px;
+  gap: 6px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+  color: var(--nb-body);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.rt-tool:hover {
+  background: var(--nb-alpha-200);
+  border-color: var(--nb-hairline-strong);
+  color: var(--nb-ink);
+}
+.rt-tool .icon { color: currentColor; }
+.rt-tool--ghost { border-color: transparent; background: transparent; }
+.rt-tool--ghost:hover { border-color: var(--nb-hairline); background: var(--nb-alpha-200); }
+.rt-tool-sep { width: 1px; height: 20px; background: var(--nb-hairline); margin: 0 3px; }
+.rt-save { font-size: 11.5px; color: var(--nb-mute); }
+
+/* ------------------------------------------------------ 6.3 筛选条 */
+.rt-filters {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rt-search {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+  color: var(--nb-mute);
+}
+.rt-search:focus-within { border-color: var(--nb-hairline-strong); }
+.rt-search input,
+#rtSearch {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--nb-ink);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+#rtSearch::placeholder { color: var(--nb-mute); }
+#rtSearch::-webkit-search-cancel-button { -webkit-appearance: none; }
+.rt-search-filter {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 6px;
+  border-left: 1px solid var(--nb-hairline);
+  color: var(--nb-body);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.rt-filter-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.rt-filter {
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: var(--nb-r-md);
+  background: transparent;
+  color: var(--nb-body);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rt-filter:hover { background: var(--nb-alpha-200); color: var(--nb-ink); }
+.rt-filter.is-active {
+  background: var(--nb-accent);
+  border-color: var(--nb-accent);
+  color: var(--nb-on-accent);
+}
+.rt-filter .icon { color: currentColor; }
+
+/* --------------------------------------------------------- 6.4 画布 */
+.rt-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  /* 底色、点径、虚边与经典时间线画布（style.css 的 --canvas-bg / .bg-grid）逐位对齐 */
+  background-color: var(--nb-canvas);
+  background-image: radial-gradient(circle at center, var(--rt-dot) 1px, transparent 1.3px);
+  background-size: var(--rt-grid) var(--rt-grid);
+}
+.rt-body.is-embed .rt-canvas-wrap { margin: 0; }
+.rt-body.is-embed .rt-topbar { padding: 8px 12px; }
+
+.rt-zoom {
+  right: 12px;
+  top: 12px;
+  bottom: auto;
+  flex-direction: row;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+  box-shadow: var(--nb-shadow-sm);
+}
+.rt-zoom button {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--nb-r-sm);
+  color: var(--nb-body);
+}
+.rt-zoom button:hover { background: var(--nb-alpha-200); color: var(--nb-ink); }
+
+.rt-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+  color: var(--nb-body);
+  font-size: 11.5px;
+}
+.rt-legend-line {
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  margin-right: 6px;
+  background: var(--rt-edge-strong);
+  vertical-align: middle;
+}
+.rt-legend-line--dashed {
+  height: 0;
+  border-top: 1px dashed var(--rt-edge-strong);
+  background: none;
+}
+.rt-hint { flex: none; margin: 0; font-size: 11.5px; color: var(--nb-mute); }
+.rt-hint b { color: var(--nb-body); font-weight: 600; }
+.rt-empty-hint { font-size: 12.5px; color: var(--nb-dim); }
+.rt-empty-hint b { color: var(--nb-body); }
+
+/* 关系线：结构安静，统一发丝线 */
+.rt-edge { stroke: var(--rt-edge); stroke-width: 1.5; }
+.rt-edge:hover { stroke: var(--nb-ink); stroke-width: 2; }
+.rt-edge--strong { stroke: var(--rt-edge-strong); stroke-width: 1.5; }
+.rt-edge--dashed { stroke-dasharray: 6 4; }
+.rt-edge-label { fill: var(--nb-mute); stroke: var(--nb-canvas-sunken); }
+
+/* --------------------------------------------- 6.5 人物卡：横向三行 */
+.rt-node { width: 168px; height: 84px; }
+.rt-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+  box-shadow: var(--nb-shadow-sm);
+  overflow: hidden;
+  cursor: grab;
+}
+.rt-eyebrow {
+  color: var(--nb-mute);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.rt-name {
+  position: static;
+  transform: none;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--nb-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-meta {
+  color: var(--nb-mute);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 悬停不再放大：整卡缩放会破坏三行信息的排版 */
+.rt-node .rt-card { transition: border-color 120ms ease, box-shadow 120ms ease; }
+.rt-node:hover .rt-card,
+.rt-node.is-selected .rt-card,
+.rt-node.is-drop-target .rt-card { transform: none; }
+.rt-node:hover .rt-card { border-color: var(--nb-hairline-strong); }
+.rt-node.is-selected .rt-card {
+  border-color: var(--nb-accent);
+  box-shadow: 0 0 0 2px var(--nb-accent);
+}
+.rt-node.is-drop-target .rt-card {
+  border-color: var(--nb-accent);
+  border-style: dashed;
+  background: var(--nb-canvas);
+}
+.rt-node.is-dim { opacity: 0.28; }
+#rtEdges .rt-edge.is-dim { opacity: 0.18; }
+
+/* 空卡：虚线 + 中间文字，去掉旧的大加号 */
+.rt-node.is-empty .rt-card {
+  display: flex;
+  place-items: initial;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--nb-hairline-strong);
+  box-shadow: none;
+}
+.rt-node.is-empty .rt-card::after { display: none; }
+.rt-node.is-empty .rt-name { color: var(--nb-dim); }
+
+/* 已故：姓名划掉 */
+.rt-node.is-deceased .rt-name { color: var(--nb-mute); text-decoration: line-through; }
+
+/* 备注：便签 */
+.rt-node.is-note .rt-card {
+  display: block;
+  justify-content: flex-start;
+  padding: 10px 12px 24px;
+  background: var(--nb-canvas-soft);
+}
+.rt-note-body {
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  color: var(--nb-body);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rt-node.is-note .rt-name {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  transform: none;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--nb-mute);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* 四向手柄：小一圈，贴着卡片边 */
+.rt-handle {
+  width: 18px;
+  height: 18px;
+  border-color: var(--nb-hairline-strong);
+  background: var(--nb-canvas);
+  color: var(--nb-mute);
+  font-size: 11px;
+  box-shadow: var(--nb-shadow-sm);
+}
+.rt-handle:hover { border-color: var(--nb-ink); color: var(--nb-ink); }
+
+/* 行内改名 / 备注编辑 */
+.rt-name-input {
+  left: 12px;
+  right: 12px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  width: auto;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--nb-hairline-strong);
+  border-radius: var(--nb-r-sm);
+  background: var(--nb-canvas);
+  color: var(--nb-ink);
+  font-size: 13px;
+  text-align: left;
+  box-shadow: 0 0 0 2px var(--nb-accent-wash);
+}
+.rt-note-input {
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  bottom: 8px;
+  width: auto;
+  padding: 6px;
+  border: 1px solid var(--nb-hairline-strong);
+  border-radius: var(--nb-r-sm);
+  background: var(--nb-canvas);
+  color: var(--nb-ink);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------ 6.6 右侧详情 */
+.rt-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+  box-shadow: var(--nb-shadow-sm);
+  overflow-y: auto;
+}
+.rt-detail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 8px;
+  color: var(--nb-mute);
+  text-align: center;
+}
+.rt-detail-empty strong { color: var(--nb-body); font-size: 13px; font-weight: 600; }
+.rt-detail-empty p { margin: 0; max-width: 220px; font-size: 12px; line-height: 1.55; }
+
+.rt-detail-head { display: flex; align-items: center; gap: 12px; }
+.rt-detail-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--nb-canvas-sunken);
+  color: var(--nb-ink);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+}
+.rt-detail-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rt-detail-id { flex: 1; min-width: 0; }
+.rt-detail-id h2 {
+  margin: 0;
+  color: var(--nb-ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-detail-sub {
+  display: block;
+  color: var(--nb-mute);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-detail-state {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: var(--nb-r-md);
+  background: var(--nb-accent);
+  color: var(--nb-on-accent);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.rt-detail-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rt-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas);
+}
+.rt-metric strong {
+  color: var(--nb-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.rt-metric .rt-meta {
+  color: var(--nb-mute);
+  font-size: 11px;
+  white-space: normal;
+}
+
+.rt-detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.rt-detail-rows > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rt-detail-rows dt { flex: none; color: var(--nb-mute); }
+.rt-detail-rows dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--nb-ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.rt-detail-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rt-detail-chips span {
+  padding: 2px 8px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-sm);
+  color: var(--nb-body);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.rt-detail-chips--links span { color: var(--nb-mute); }
+.rt-detail-note {
+  margin: 0;
+  color: var(--nb-body);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rt-detail-actions {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--nb-hairline);
+}
+.rt-detail-btn {
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: transparent;
+  color: var(--nb-body);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rt-detail-btn:hover { background: var(--nb-alpha-200); color: var(--nb-ink); }
+.rt-detail-btn.is-primary {
+  background: var(--nb-accent);
+  border-color: var(--nb-accent);
+  color: var(--nb-on-accent);
+}
+.rt-detail-btn.is-primary:hover { background: var(--nb-accent-hi); border-color: var(--nb-accent-hi); }
+.rt-detail-btn.is-danger { margin-left: auto; color: var(--nb-danger); }
+.rt-detail-btn.is-danger:hover { background: var(--nb-alpha-200); color: var(--nb-danger); }
+
+/* ------------------------------------------------------ 6.7 底部导航 */
+.rt-bottomnav {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--nb-hairline);
+  background: var(--nb-canvas);
+}
+.rt-bottomnav-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  background: var(--nb-canvas-sunken);
+}
+.rt-bottomnav-tabs a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--nb-r-md);
+  color: var(--nb-body);
+  font-size: 12.5px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rt-bottomnav-tabs a:hover { background: var(--nb-alpha-200); color: var(--nb-ink); }
+.rt-bottomnav-tabs a.is-active {
+  background: var(--nb-accent);
+  color: var(--nb-on-accent);
+}
+.rt-bottomnav-meta { color: var(--nb-mute); font-size: 11.5px; }
+
+/* 嵌入态：宿主管导航，这里只留画布与详情 */
+.rt-body.is-embed .rt-crumbs,
+.rt-body.is-embed .rt-bottomnav { display: none; }
+
+/* -------------------------------------------------------- 6.8 响应式 */
+@media (max-width: 1180px) {
+  .rt-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 12px;
+  }
+  .rt-detail { max-height: 42vh; }
+}
+@media (max-width: 860px) {
+  .rt-crumbs { display: none; }
+  .rt-search-filter { display: none; }
+  .rt-topbar { padding: 8px 12px; }
+  .rt-editor-body { padding: 10px; }
+  .rt-hint { display: none; }
 }

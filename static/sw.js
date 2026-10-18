@@ -49,13 +49,18 @@ function isVersionedAsset(url) {
     && url.searchParams.has('v');
 }
 
+/** 世界级接口挂在 /w/<slug>/api/world 下，和 /api/ 一样是实时数据。 */
+function isApiPath(pathname) {
+  return pathname.startsWith('/api/') || /^\/w\/[^/]+\/api\//.test(pathname);
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;      // 别人的东西不碰
-  if (url.pathname.startsWith('/api/')) return;         // 实时数据不缓存
+  if (isApiPath(url.pathname)) return;                  // 实时数据不缓存
 
   // 1) 版本化静态资源：cache-first（后台顺手刷新一次，几乎不会变）
   if (isVersionedAsset(url)) {

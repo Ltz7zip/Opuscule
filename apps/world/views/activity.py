@@ -93,7 +93,7 @@ def activity(request):
             "when": version.created_at.isoformat() if version.created_at else "",
             "by": who,
             "doc": version.document_id,
-            "url": f"/world#doc={version.document_id}",
+            "url": f"/w/{world.slug}#doc={version.document_id}",
         })
         if len(seen_docs) >= 6:
             break
@@ -131,7 +131,7 @@ def activity(request):
                 "what": f"还有 {len(spare)} 个邀请码没用出去",
                 "when": spare[0].created_at.isoformat() if spare[0].created_at else "",
                 "by": "",
-                "url": "/world",
+                "url": f"/w/{world.slug}",
             })
 
     def sort_key(row):

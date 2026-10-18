@@ -1,6 +1,6 @@
 # Opuscule · 项目计划书（0.5.2 → 0.8.0）
 
-> **文档版本：0.5.2-dev**
+> **文档版本：0.7.0-dev**
 >
 > 这是项目的**单一计划书**：把「现在有什么（现状盘点）」与「接下来四个版本要做什么（计划）」写在一处。
 > 本文吸收了此前四份文档的全部有效内容并取而代之：
@@ -18,9 +18,9 @@
 | 版本 | 主题 | 目标（一句话） | 详见 |
 | --- | --- | --- | --- |
 | **0.5.1** | 体检后修复轮 | 前端体检问题收口 | — |
-| **0.5.2** | **布局与 UI 大改** | 重做工作区布局与整体视觉语言；正文编辑器引入 React 孤岛（**当前版本**） | [§二](#二052--布局与-ui-大改) |
+| **0.5.2** | **布局与 UI 大改** | 重做工作区布局与整体视觉语言；正文编辑器引入 React 孤岛 | [§二](#二052--布局与-ui-大改) |
 | **0.6.0** | **AI** | 引入 AI 横切层（BYOK 代理转发），作用于所有模块之上 | [§三](#三060--ai) |
-| **0.7.0** | **时间线 · 时代 · 存档** | 总时间线 / 时代=命名时间段 / 世界存档（已拍板） | [§四](#四070--时间线--时代--存档) |
+| **0.7.0** | **时间线 · 时代 · 存档** | 总时间线 / 时代=命名时间段 / 世界存档（**当前版本**） | [§四](#四070--时间线--时代--存档) |
 | **0.8.0** | **地图功能全面优化** | 地图模块的全面重构与能力升级 | [§五](#五080--地图功能全面优化) |
 
 **关于版本归属：** 上面四个主题由用户明确指定。各版本之下的**具体条目**，
@@ -40,7 +40,7 @@
 
 | 面孔 | 地址 | 谁在用 | 干什么 | 返回什么 |
 | --- | --- | --- | --- | --- |
-| **工作区** | `/world` | 作者（登录） | 建卡、写正文、排时间线、画关系树、标地图、发布 | 一个空壳页面 + 一堆 `/api/world/*` JSON 接口 |
+| **工作区** | `/w/<world_slug>` | 作者（登录） | 建卡、写正文、排时间线、画关系树、标地图、发布 | 一个空壳页面 + 一堆 `/w/<slug>/api/world/*` JSON 接口 |
 | **只读站点** | `/s/<短码>/` | 读者（公开 / 密码） | 像读维基一样浏览已发布的内容 | 服务端渲染好的 HTML |
 
 外加一条**次线**：经典横向时间轴 `/legacy`（由 `timeline` 应用提供，可被工作区用 iframe 嵌进"时间线"文档里用）。
@@ -217,15 +217,15 @@ app label 取 `name` 的末段名（`apps.world` → `world`），迁移记录�
 
 **待办 checklist：**
 
-- [ ] 1. 世界解析改成"URL 优先"：新增 `world_from_path(request, world_slug)`，`resolve_active_world` 顺序改为 **路径 slug → 会话选定 → 自己的第一个世界 → 全场第一个世界**（改在 [permissions.py](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/apps/world/permissions.py#L236-L266)）。
-- [ ] 2. 路由改造（[总路由](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/worldbuilding_timeline/urls.py#L45-L55)）：`/w` 由 RedirectView 改成真实入口；新增 `/w/<str:world_slug>` 与三条次线子路径；旧路径保留 RedirectView（`permanent=False`）。
-- [ ] 3. 视图接收 `world_slug`：`workspace`、`relationship_page`、`map_home`/`map_page`、`timeline.index` 增加形参，**进页面前先 `can_access` 校验**，不通过给 404 / 登录提示。
-- [ ] 4. 次线改名：`/legacy` → `/timeline`、`/relationship` → `/relation`；**旧地址 302 保留**。
-- [ ] 5. 前端链接补 slug：`static/workspace.js` 等里所有硬编码 `/relationship`、`/map`、`/world/timeline/<id>` 都要带上 `world_slug`。
-- [ ] 6. `/api/world/*` 是否也路径化（拍板 ③）。
-- [ ] 7. Service Worker 复查：`sw.js` 从根路径发（作用域问题），路径变了要重看 scope 与缓存键。
-- [ ] 8. `robots.txt` 把新路径补进屏蔽名单。
-- [ ] 9. 测试：[apps/world/tests.py](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/apps/world/tests.py) 里所有 `reverse(...)` 与硬编码路径要跟着改。
+- [x] 1. 世界解析改成"URL 优先"：新增 `world_from_path(request, world_slug)`，`resolve_active_world` 顺序改为 **路径 slug → 会话选定 → 自己的第一个世界 → 全场第一个世界**（改在 [permissions.py](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/apps/world/permissions.py#L236-L266)）。
+- [x] 2. 路由改造（[总路由](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/worldbuilding_timeline/urls.py#L45-L55)）：`/w` 由 RedirectView 改成真实入口；新增 `/w/<str:world_slug>` 与三条次线子路径；旧路径保留 RedirectView（`permanent=False`）。
+- [x] 3. 视图接收 `world_slug`：`workspace`、`relationship_page`、`map_home`/`map_page`、`timeline.index` 增加形参，**进页面前先 `can_access` 校验**，不通过给 404 / 登录提示。
+- [x] 4. 次线改名：`/legacy` → `/timeline`、`/relationship` → `/relation`；**旧地址 302 保留**。
+- [x] 5. 前端链接补 slug：`static/workspace.js` 等里所有硬编码 `/relationship`、`/map`、`/world/timeline/<id>` 都要带上 `world_slug`。
+- [x] 6. `/api/world/*` 路径化到 `/w/<slug>/api/world/*`（拍板 ③：全部路径化）。
+- [x] 7. Service Worker 复查：`sw.js` 从根路径发（作用域问题），路径变了要重看 scope 与缓存键。
+- [x] 8. `robots.txt` 把新路径补进屏蔽名单。
+- [x] 9. 测试：[apps/world/tests.py](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/apps/world/tests.py) 里所有 `reverse(...)` 与硬编码路径要跟着改。
 
 **必须记住的坑：**
 
@@ -263,15 +263,26 @@ app label 取 `name` 的末段名（`apps.world` → `world`），迁移记录�
 | **H. AI 助手** | ① 基于已有实体**补全**（"写一下这个城镇的历史" → 生成时间线事件 + 卡片）；② **生成**随机实体（地名/人物/组织）；③ 为一致性检查给**修复建议** | 原文档标注为 **0.6.0 主要方向** |
 | **C. 一致性检查** | 事件依赖校验（A 是 B 前置则 B 不能早于 A）；人物生卒 vs 参与事件；时代区间校验（必须是总时间线的非空真子集）；地图 vs 时间线（某国不该出现在尚未成立那年的地图上） | 原文档标注"**适合 AI 做**" |
 
-### 3.3 待拍板
+### 3.3 已拍板
 
-| # | 问题 | 备选 |
+| # | 问题 | 结论 |
 | --- | --- | --- |
-| ① | 模型 / 供应商 | 单一默认 / 多家可切 / 由用户自选 |
-| ② | BYOK 的 Key 存哪、怎么用 | 服务端加密存储 / 仅会话内 / 环境变量 |
-| ③ | 代理转发的边界 | 只做纯转发 / 加统一 prompt 与工具调用编排 |
-| ④ | AI 写入数据的权限与审阅 | 直接落库 / 先出草稿再确认 / 走变更集 |
-| ⑤ | 与 [§六](#六其他已登记事项归属待确认) 中「协作增强 · 变更集」的关系 | 复用变更集做 AI 改动的审阅通道 |
+| ① | 模型 / 供应商 | **多家可切**：OpenAI 兼容 / Anthropic / Gemini / 自定义兼容端点，凭据可配多条并指定默认 |
+| ② | BYOK 的 Key 存哪、怎么用 | **服务端加密存储**（Encrypt-then-MAC，密钥由 `SECRET_KEY` 派生；接口只回 `key_hint`） |
+| ③ | 代理转发的边界 | **编排 + 工具调用**：服务端拼 system prompt、组织上下文、执行只读工具并回传结果（最多 6 轮） |
+| ④ | AI 写入数据的权限与审阅 | **走变更集**：AI 只生成 `AiChangeSet` / `AiChange`，用户确认后由服务端应用 |
+| ⑤ | 与 [§六](#六其他已登记事项归属待确认) 中「协作增强 · 变更集」的关系 | **复用变更集**做 AI 改动的审阅通道 |
+
+### 3.4 实施清单
+
+- [x] 1. 新建 `apps/ai`：`crypto`（stdlib Encrypt-then-MAC）、`models`（凭据 / 会话 / 消息 / 变更集 / 变更项）、`providers`（四家适配 + `urllib` 调用）、`tools`（7 只读 + 3 提议）、`services`（system prompt / 工具循环 / 变更集收集）、`views`（9 个接口）。
+- [x] 2. 路由与权限：`/w/<slug>/api/world/ai/*` 九条；`OPEN_WRITE_PREFIXES` 放行中间件写闸门，视图内用 `can_read` / `can_edit` 复核；凭据接口进 `PUBLIC_READ_PATHS` 后自行校验登录。
+- [x] 3. 限流：固定窗口 `django.core.cache`，默认 20 次 / 60 秒，超限 429。
+- [x] 4. 变更集应用：新建文档 / 改名与追加正文（`blocks_doc` 权威）/ 新建时间线事件；部分失败标记 `failed`，重复处理 409，viewer 403。
+- [x] 5. 前端：顶栏 `AI` 入口 + 右侧抽屉（聊天 / 变更集审阅 / 供应商设置），`static/ai.css` + `static/ai.js`，只读成员可聊天、应用变更集时才校验写权限。
+- [x] 6. 会话上下文：会话可绑定当前打开的文档，服务端在 system prompt 里提示先 `get_document` 读取。
+- [x] 7. 测试：`apps/ai/tests.py` 45 条（加密 / 供应商 / 工具 / 凭据 / 会话 / 聊天 / 变更集 / 服务层），全量回归通过。
+
 
 ---
 
@@ -396,6 +407,15 @@ linked_cards = M2M(self)
 | ⑤ | 地图 | **子地图**"对应父图哪片区域"的字段（见 [§五](#五080--地图功能全面优化)） |
 | ⑥ | 地图·未来 | 兵棋推演引擎 / FMG 超级魔改 / 画笔编辑器（尚未动工） |
 
+### 4.7 实施清单
+
+- [x] 1. 模型层：`WorldTimeline`（每世界唯一 / `origin_year` / `calendar` / `settings`）、`Era` 起止 + 精度 + 派生长度、`Calendar` 生效区间 + `covers()`、`TimelineEvent` 挂总时间线 + 确信度/区间、`TreeEdge` 有效区间、`WorldArchive`。
+- [x] 2. 迁移 0004：为每个世界建总时间线、归并旧时间线文档的事件、回填时代起止、按「抽出数据后删除文档」删除旧时间线文档。
+- [x] 3. 后端：总时间线状态接口、经典适配层、世界级路由（`/w/<slug>/api/world/timeline/*`、`eras`）。
+- [x] 4. 存档 / 读档：`create_archive` / `restore_archive` / `prune_archives`；手动 + 读档前自动备份、上限 20；整包含 `map_data`，与 `DocumentVersion` 独立全量。
+- [x] 5. 前端：侧栏固定行与深链打开世界时间线、时代起止编辑、存档面板、`?era=` 进 URL 的联动（只过滤 + 高亮，不改数据）。
+- [x] 6. 收尾：`seed_demo` / `import_timeline` 改用 `WorldTimeline`；`APP_VERSION` → `0.7.0`；`apps.world` 全量 402 条测试通过。
+
 ---
 
 ## 五、0.8.0 —— 地图功能全面优化
@@ -412,7 +432,7 @@ linked_cards = M2M(self)
 | 标注（图钉 / 区域 / 文字） | `MapLayer` + `MapMarker` 两张表 | 完整管理 |
 | 底图设置（背景图、缩放、偏移） | `Document.settings`（JSON） | 存取一段配置 |
 
-页面入口：工作区面板（`/world` 内 iframe）+ 独立页 `/map/2d`（平面）/ `/map/3d`（地形）；
+页面入口：工作区面板（`/w/<slug>` 内 iframe）+ 独立页 `/w/<slug>/map/2d`（平面）/ `/w/<slug>/map/3d`（地形）；
 独立页用 `?doc=<id>` 指定看哪张，不带就挑世界里的第一张。
 底层引擎 = **Azgaar Fantasy Map Generator**（源码 vendored 在 `third_party/fantasy-map-generator`，构建产物入库，运行时不需要 Node；运行包在 [static/map/vendor/](file:///Users/ltz2024/PycharmProjects/worldbuilding_timeline/static/map/vendor)）。
 

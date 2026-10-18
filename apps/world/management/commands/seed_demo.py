@@ -18,14 +18,13 @@ from apps.world.models import (
     DOC_CARD,
     DOC_FOLDER,
     DOC_MAP,
-    DOC_TIMELINE,
     DOC_TREE,
     EntityType,
     PropertyDef,
     World,
 )
 from apps.world.normalize import blocks_to_text, normalize_blocks
-from apps.documents.models import Calendar, Card, Document, Era, TimelineEvent
+from apps.documents.models import Calendar, Card, Document, Era, TimelineEvent, WorldTimeline
 from apps.graph.models import TreeEdge, TreeNode, TreeVariant
 from apps.maps.models import MapLayer, MapMarker
 
@@ -363,14 +362,15 @@ class Command(BaseCommand):
             )
         return eras
 
-    def _timeline(self, world: World, calendar: Calendar, eras: dict, cards: dict) -> Document:
-        document = Document.objects.create(
-            world=world, document_type=DOC_TIMELINE, name="世界时间线", position=3,
-            settings={"calendar": calendar.id, "view_start": -20.0, "view_end": 520.0},
-        )
+    def _timeline(self, world: World, calendar: Calendar, eras: dict, cards: dict) -> WorldTimeline:
+        # 0.7.0 起时间线是世界的总时间线：不再建「时间线文档」，事件直接挂上去
+        timeline = WorldTimeline.for_world(world)
+        timeline.calendar = calendar
+        timeline.settings = {"view_start": -20.0, "view_end": 520.0}
+        timeline.save()
         for index, (title, era_name, year, linked) in enumerate(EVENTS, start=1):
             event = TimelineEvent.objects.create(
-                document=document, title=title, precision="year", year=year, month=1, day=1,
+                timeline=timeline, title=title, precision="year", year=year, month=1, day=1,
                 era=eras.get(era_name), position=index, row=index % 3,
                 description=f"{era_name} · 第 {year} 年",
             )
@@ -382,4 +382,4 @@ class Command(BaseCommand):
             if first is not None:
                 event.featured_card = first
                 event.save(update_fields=["featured_card"])
-        return document
+        return timeline

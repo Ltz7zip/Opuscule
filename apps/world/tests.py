@@ -28,6 +28,7 @@ from .models import (
     DOC_TREE,
     EntityType,
     InviteCode,
+    MAX_ARCHIVES,
     MAX_OWNED_WORLDS,
     MemberEvent,
     Membership,
@@ -45,6 +46,8 @@ from apps.documents.models import (
     Era,
     Presence,
     TimelineEvent,
+    WorldArchive,
+    WorldTimeline,
 )
 from apps.maps.models import MapMarker
 from .normalize import (
@@ -979,12 +982,14 @@ class ExploreTests(BaseWorldCase):
         from django.contrib.auth.models import User
 
         user = User.objects.create_user("owner", password="very-secret-1")
+        self.world.owner = user
+        self.world.save(update_fields=["owner"])
         self.client.force_login(user)
-        self.assertEqual(self.client.get("/world").status_code, 200)
+        self.assertEqual(self.client.get(f"/w/{self.world.slug}").status_code, 200)
 
     def test_first_install_workspace_is_open(self):
         # 一个用户都没有：首次安装例外，放行让人进来把世界建起来
-        self.assertEqual(self.client.get("/world").status_code, 200)
+        self.assertEqual(self.client.get(f"/w/{self.world.slug}").status_code, 200)
 
 
 class TreeTests(BaseWorldCase):
@@ -1091,16 +1096,20 @@ class TreeTests(BaseWorldCase):
 
 
 class RelationshipPageTests(BaseWorldCase):
-    """独立的「关系树」页（/relationship）：模版目录 / 按模版建树 / 关系清单 / 网格。"""
+    """独立的「关系树」页（/w/<slug>/relation）：模版目录 / 按模版建树 / 关系清单 / 网格。"""
+
+    def setUp(self):
+        super().setUp()
+        self.page = f"/w/{self.world.slug}/relation"
 
     def test_page_renders_and_accepts_doc_id(self):
-        page = self.client.get("/relationship")
+        page = self.client.get(self.page)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "选择您要构建的树的类型")
         self.assertContains(page, 'data-doc="0"')
 
         document = self._new_tree("family")["document"]
-        with_doc = self.client.get(f"/relationship?doc={document['id']}")
+        with_doc = self.client.get(f"{self.page}?doc={document['id']}")
         self.assertContains(with_doc, f'data-doc="{document["id"]}"')
 
     def test_empty_tree_asks_for_a_template_before_showing_the_canvas(self):
@@ -1150,63 +1159,64 @@ class RelationshipPageTests(BaseWorldCase):
 
     def test_missing_document_does_not_look_like_a_new_tree(self):
         """指名要的那篇打不开时，页面得说"打不开"，而不是掉回模版选择。"""
-        missing = self.client.get("/relationship?doc=999999")
+        missing = self.client.get(f"{self.page}?doc=999999")
         self.assertContains(missing, 'data-doc="999999"')
         self.assertContains(missing, 'data-doc-missing="1"')
 
         # 正常打开的一篇：没有这个标记
         created = self._new_tree("family", with_demo=False)
-        alive = self.client.get(f"/relationship?doc={created['document']['id']}")
+        alive = self.client.get(f"{self.page}?doc={created['document']['id']}")
         self.assertContains(alive, 'data-doc-missing="0"')
 
         # 进了回收站也算"打不开"（这正是当初看着像"树变成了新建向导"的那次）
         document = Document.objects.get(pk=created["document"]["id"])
         document.deleted_at = timezone.now()
         document.save(update_fields=["deleted_at"])
-        trashed = self.client.get(f"/relationship?doc={document.id}")
+        trashed = self.client.get(f"{self.page}?doc={document.id}")
         self.assertContains(trashed, 'data-doc-missing="1"')
 
         # 不带 ?doc= 的裸页面不算
-        self.assertContains(self.client.get("/relationship"), 'data-doc-missing="0"')
+        self.assertContains(self.client.get(self.page), 'data-doc-missing="0"')
 
     def test_embed_and_readonly_flags(self):
         """面板 / 站点是用 iframe 嵌这一页的：embed 去外壳，且默认只读。"""
-        plain = self.client.get("/relationship")
+        plain = self.client.get(self.page)
         self.assertContains(plain, 'data-embed="0"')
         # 没账号（首次安装）时任何人都能编辑，所以这里不是只读
         self.assertContains(plain, 'data-readonly="0"')
 
-        embedded = self.client.get("/relationship?embed=1")
+        embedded = self.client.get(f"{self.page}?embed=1")
         self.assertContains(embedded, "rt-body is-embed")
         self.assertContains(embedded, 'data-embed="1"')
         self.assertContains(embedded, 'data-readonly="1"')     # embed 默认只读
 
-        editable = self.client.get("/relationship?embed=1&readonly=0")
+        editable = self.client.get(f"{self.page}?embed=1&readonly=0")
         self.assertContains(editable, 'data-readonly="0"')
 
         # 嵌入态（发布站点 / 工作区面板）都是暗色终端外壳：
         # theme=paper 这个老参数保留着（老链接不失效），但终端设计语言里
         # 没有浅色纸面，它落到暗色；真要浅色得显式传 theme=light。
-        paper = self.client.get("/relationship?embed=1&theme=paper")
+        paper = self.client.get(f"{self.page}?embed=1&theme=paper")
         self.assertContains(paper, "is-paper")
         self.assertContains(paper, 'data-theme="dark"')
 
-        forced = self.client.get("/relationship?theme=light")
+        forced = self.client.get(f"{self.page}?theme=light")
         self.assertContains(forced, 'data-theme="light"')
 
-    def test_guest_gets_a_readonly_canvas(self):
-        """有账号之后，游客 / 只读成员拿到的一定是只读画布。"""
+    def test_guest_is_sent_to_login(self):
+        """有账号之后，游客拿不到页面：先送去登录，登录后带 next 回来。"""
         from django.contrib.auth.models import User
         User.objects.create_user("owner", password="dev-password-1")
-        guest = self.client.get("/relationship")
-        self.assertContains(guest, 'data-readonly="1"')
+        response = self.client.get(self.page)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("/login?next="))
 
     def test_workspace_embeds_the_same_editor(self):
         """工作区的关系树面板必须嵌这一页，而不是自己那套旧简版。"""
         sheet = (pathlib.Path(__file__).resolve().parents[2] / "static" / "workspace.js")
         script = sheet.read_text(encoding="utf-8")
         self.assertIn("function renderTreeFrame(entry)", script)
-        self.assertIn("/relationship?doc=", script)
+        self.assertIn("/relation?doc=", script)
         self.assertNotIn("function renderTreeTool(entry)", script)   # 旧简版已经拆掉
         self.assertNotIn("function fitTree(", script)
         # 嵌入的 iframe 不能在面板重绘时被销毁，否则画布状态每次都丢
@@ -1214,16 +1224,18 @@ class RelationshipPageTests(BaseWorldCase):
         self.assertIn("function parkLiveEmbeds(", script)
 
     def test_page_follows_the_minimal_design_language(self):
-        """外观必须跟工作区同一套语言：加载 minimal.css、明暗跟世界主题、图标走公共图标集。"""
-        page = self.client.get("/relationship")
+        """外观必须跟工作区同一套语言：加载 minimal.css、整页浅色、图标走公共图标集。"""
+        page = self.client.get(self.page)
         self.assertContains(page, "minimal.css")
         self.assertContains(page, "icons.js")
-        # 明暗由 world.theme.mode 决定，非 light 即 dark（和工作区 applyTheme 同一条规则）
-        self.assertContains(page, 'data-theme="dark"')
+        # 整页壳固定浅色（对齐设计稿），不再跟随世界主题；
+        # 嵌进工作区时仍跟宿主同色，所以暗色世界下 iframe 是 dark。
+        self.assertContains(page, 'data-theme="light"')
+        self.assertContains(self.client.get(f"{self.page}?embed=1"), 'data-theme="dark"')
 
         self.world.theme_config = {**(self.world.theme_config or {}), "mode": "light"}
         self.world.save(update_fields=["theme_config"])
-        self.assertContains(self.client.get("/relationship"), 'data-theme="light"')
+        self.assertContains(self.client.get(self.page), 'data-theme="light"')
 
         # 样式表得真的吃 Minimal 的 token，而不是自己另起一套配色
         sheet = (pathlib.Path(__file__).resolve().parents[2] / "static" / "relationship.css")
@@ -1699,21 +1711,24 @@ class ClassicAdapterTests(BaseWorldCase):
         self.assertEqual(again["start"], 455.0)
 
     def test_embedded_page_injects_adapter(self):
-        page = self.client.get(f"/world/timeline/{self.timeline_id}")
+        page = self.client.get(f"/w/{self.world.slug}/timeline/{self.timeline_id}")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, f"/api/world/timelines/{self.timeline_id}/classic")
         self.assertContains(page, "/static/script.js")
 
-        plain = self.client.get("/legacy")
-        self.assertNotContains(plain, "/classic")     # 经典页面本身没被改动
+        # 0.7.0：独立页就是世界总时间线，指向世界级 classic 基址（不带 doc_id）
+        plain = self.client.get(f"/w/{self.world.slug}/timeline")
+        self.assertContains(plain, f"/w/{self.world.slug}/api/world/timeline/classic")
+        self.assertNotContains(plain, f"/api/world/timelines/{self.timeline_id}/classic")
 
     def test_root_and_old_workspace_path_redirect(self):
         for path in ("/", "/w"):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 302)
-            self.assertEqual(response["Location"], "/world")
-        self.assertEqual(self.client.get("/world").status_code, 200)
-        self.assertEqual(self.client.get("/legacy").status_code, 200)
+            self.assertEqual(response["Location"], "/w/")
+        self.assertEqual(self.client.get("/world")["Location"], f"/w/{self.world.slug}")
+        self.assertEqual(self.client.get("/legacy")["Location"], f"/w/{self.world.slug}/timeline")
+        self.assertEqual(self.client.get(f"/w/{self.world.slug}").status_code, 200)
 
     def test_endpoints_reject_non_timeline_document(self):
         card_doc, _ = self.make_card(name="卡片")
@@ -2177,6 +2192,65 @@ class ExchangeTests(BaseWorldCase):
         self.post_json("/api/world/import", {"mode": "backup", "content": json.dumps(backup)})
         self.assertGreater(Document.objects.count(), before)
         self.assertEqual(Document.objects.filter(name="Isarra Thornveil").count(), 2)
+
+    def test_world_zip_includes_the_world_timeline(self):
+        """0.7.0：时间线不再是文档，Markdown 导出里也要有它的一页。"""
+        import io
+        import zipfile
+
+        era = Era.objects.create(world=self.world, name="青铜纪", start_year=0, end_year=120)
+        TimelineEvent.objects.create(timeline=WorldTimeline.for_world(self.world), title="城门落成",
+                                     year=12, era=era)
+        response = self.client.get("/api/world/export")
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            self.assertIn("timeline.md", archive.namelist())
+            body = archive.read("timeline.md").decode()
+        self.assertIn("城门落成", body)
+        self.assertIn("青铜纪", body)
+
+    def test_backup_round_trip_keeps_the_world_timeline(self):
+        """备份要带上总时间线的原点 / 事件（确信度、范围、时代、关联卡片），导入后能对上号。"""
+        era = Era.objects.create(world=self.world, name="青铜纪", start_year=0, end_year=120)
+        timeline = WorldTimeline.for_world(self.world)
+        timeline.origin_year = -50
+        timeline.save(update_fields=["origin_year", "updated_at"])
+        event = TimelineEvent.objects.create(timeline=timeline, title="城门落成", year=12, era=era,
+                                             confidence="circa", range_years=5)
+        event.linked_cards.set([self.card])
+
+        backup = self.client.get("/api/world/export?format=json").json()
+        self.assertEqual(backup["timeline"]["origin_year"], -50)
+        self.assertEqual([row["title"] for row in backup["timeline"]["events"]], ["城门落成"])
+
+        self.post_json("/api/world/import", {"mode": "backup", "content": json.dumps(backup)})
+
+        copies = TimelineEvent.objects.filter(title="城门落成").exclude(pk=event.pk)
+        self.assertEqual(copies.count(), 1)
+        copy = copies.get()
+        self.assertEqual(copy.timeline.world, self.world)
+        self.assertIsNone(copy.document)                  # 总时间线事件不挂文档
+        self.assertEqual(copy.era.name, "青铜纪")
+        self.assertEqual(copy.confidence, "circa")
+        self.assertEqual(copy.range_years, 5)
+        self.assertTrue(copy.linked_cards.exists())
+        # 同名时代沿用现有的，不重复堆一份
+        self.assertEqual(Era.objects.filter(world=self.world, name="青铜纪").count(), 1)
+
+    def test_import_backup_restores_document_events_once(self):
+        """事件既在总时间线又在旧文档的 events 里；导入只落一份，且仍挂在那份文档上。"""
+        legacy = Document.objects.create(world=self.world, document_type=DOC_TIMELINE, name="旧时间线")
+        TimelineEvent.objects.create(document=legacy, title="旧事", year=7)
+        backup = self.client.get("/api/world/export?format=json").json()
+        legacy_item = next(item for item in backup["documents"] if item["type"] == DOC_TIMELINE)
+        self.assertEqual(len(legacy_item["events"]), 1)
+        self.assertEqual(len(backup["timeline"]["events"]), 1)
+
+        self.post_json("/api/world/import", {"mode": "backup", "content": json.dumps(backup)})
+
+        self.assertEqual(TimelineEvent.objects.filter(title="旧事").count(), 2)   # 原有的 + 导入的一份
+        copy = TimelineEvent.objects.filter(title="旧事").exclude(document_id=legacy.id).get()
+        self.assertEqual(copy.document.document_type, DOC_TIMELINE)
+        self.assertEqual(copy.document.name, "旧时间线")
 
 
 class AuthAndPermissionTests(BaseWorldCase):
@@ -4091,6 +4165,45 @@ class SiteEraAndPreviewTests(BaseWorldCase):
         self.assertIn("发布之后才写的", names)
 
 
+class SiteWorldTimelineTests(BaseWorldCase):
+    """0.7.0：世界总时间线在只读站点上也有一页（事件由服务端排好）。"""
+
+    def setUp(self):
+        super().setUp()
+        self.world = World.objects.first()
+        self.era = Era.objects.create(world=self.world, name="青铜纪", theme="teal",
+                                      start_year=0, end_year=120)
+        timeline = WorldTimeline.for_world(self.world)
+        TimelineEvent.objects.create(timeline=timeline, title="城门落成", era=self.era,
+                                     precision="year", year=12)
+        TimelineEvent.objects.create(timeline=timeline, title="无关的事", precision="year", year=90)
+        publish.publish(self.world, audience="public")
+        self.slug = self.world.published_slug
+
+    def test_home_has_a_timeline_section(self):
+        home = self.client.get(f"/s/{self.slug}/").content.decode()
+        self.assertIn("世界时间线", home)
+
+    def test_timeline_page_lists_events_without_embedding_the_workspace(self):
+        page = self.client.get(f"/s/{self.slug}/timeline/")
+        self.assertEqual(page.status_code, 200)
+        body = page.content.decode()
+        self.assertIn("城门落成", body)
+        self.assertIn("无关的事", body)
+        # 公开站点不能 iframe 工作区（接口要登录），只给服务端排好的事件列表
+        self.assertNotIn('id="timelineFrame"', body)
+
+    def test_timeline_events_can_be_searched(self):
+        found = self.client.get(f"/s/{self.slug}/search?q=城门").content.decode()
+        self.assertIn("世界时间线", found)
+        self.assertIn("城门落成", found)
+
+    def test_era_page_handles_events_without_a_document(self):
+        page = self.client.get(f"/s/{self.slug}/era/{self.era.id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("城门落成", page.content.decode())
+
+
 class PublishLogAndRankingTests(BaseWorldCase):
     """发布记录、搜索排序、近似名字建议。"""
 
@@ -4237,14 +4350,14 @@ class GraphVisibilityTests(BaseWorldCase):
         from django.test import override_settings
 
         with override_settings(SW_ENABLED=False):
-            body = self.client.get("/world").content.decode()
+            body = self.client.get(f"/w/{self.world.slug}").content.decode()
             self.assertIn('data-sw="0"', body)
-            forced = self.client.get("/world?sw=1").content.decode()
+            forced = self.client.get(f"/w/{self.world.slug}?sw=1").content.decode()
             self.assertIn('data-sw="1"', forced)
         with override_settings(SW_ENABLED=True):
-            body = self.client.get("/world").content.decode()
+            body = self.client.get(f"/w/{self.world.slug}").content.decode()
             self.assertIn('data-sw="1"', body)
-            off = self.client.get("/world?nosw=1").content.decode()
+            off = self.client.get(f"/w/{self.world.slug}?nosw=1").content.decode()
             self.assertIn('data-sw="0"', off)
 
     def test_site_search_uses_load_more(self):
@@ -4543,6 +4656,7 @@ class MapPageTests(TestCase):
 
     def setUp(self):
         self.world = World.objects.create(name="地图世界")
+        self.base = f"/w/{self.world.slug}/map"
         self.map_doc = Document.objects.create(
             world=self.world, document_type="map", name="世界地图")
         self.card = Document.objects.create(
@@ -4558,65 +4672,66 @@ class MapPageTests(TestCase):
 
     # ------------------------------------------------------------ 路由
     def test_map_redirects_to_2d(self):
-        response = self.client.get("/map")
+        response = self.client.get(self.base)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], "/map/2d")
+        self.assertEqual(response["Location"], f"{self.base}/2d")
 
     def test_map_redirect_keeps_query(self):
-        response = self.client.get(f"/map?doc={self.map_doc.id}")
+        response = self.client.get(f"{self.base}?doc={self.map_doc.id}")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], f"/map/2d?doc={self.map_doc.id}")
+        self.assertEqual(response["Location"], f"{self.base}/2d?doc={self.map_doc.id}")
 
     def test_2d_page_renders_the_engine(self):
-        response = self.client.get(f"/map/2d?doc={self.map_doc.id}")
+        response = self.client.get(f"{self.base}/2d?doc={self.map_doc.id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._ctx(response)["view"], "2d")
         # 引擎入口是构建产物，base 必须落在我们的静态挂载点
         self.assertContains(response, "/static/map/vendor/index-")
 
     def test_3d_page_renders(self):
-        response = self.client.get(f"/map/3d?doc={self.map_doc.id}")
+        response = self.client.get(f"{self.base}/3d?doc={self.map_doc.id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._ctx(response)["view"], "3d")
 
     def test_unknown_view_falls_back_to_2d(self):
-        response = self.client.get(f"/map/太阳系?doc={self.map_doc.id}")
+        response = self.client.get(f"{self.base}/太阳系?doc={self.map_doc.id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._ctx(response)["view"], "2d")
 
     # ------------------------------------------------------------ 挑文档
     def test_picks_first_map_when_no_doc(self):
-        ctx = self._ctx(self.client.get("/map/2d"))
+        ctx = self._ctx(self.client.get(f"{self.base}/2d"))
         self.assertEqual(ctx["docId"], self.map_doc.id)
         self.assertEqual(ctx["docName"], "世界地图")
 
     def test_non_map_document_is_reported_missing(self):
-        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.card.id}"))
+        ctx = self._ctx(self.client.get(f"{self.base}/2d?doc={self.card.id}"))
         self.assertTrue(ctx["docMissing"])
         # 原样留着请求的 id：前端要说"这一篇不在了"，而不是悄悄换一张
         self.assertEqual(ctx["docId"], self.card.id)
 
     def test_missing_document_is_reported_missing(self):
-        self.assertTrue(self._ctx(self.client.get("/map/2d?doc=999999"))["docMissing"])
+        self.assertTrue(self._ctx(self.client.get(f"{self.base}/2d?doc=999999"))["docMissing"])
 
     # ------------------------------------------------------------ 嵌入 / 只读
     def test_embed_is_readonly_by_default(self):
-        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1"))
+        ctx = self._ctx(self.client.get(f"{self.base}/2d?doc={self.map_doc.id}&embed=1"))
         self.assertTrue(ctx["embed"])
         self.assertTrue(ctx["readonly"])
 
     def test_embed_can_opt_into_editing(self):
-        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
+        ctx = self._ctx(self.client.get(f"{self.base}/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
         self.assertTrue(ctx["embed"])
         self.assertFalse(ctx["readonly"])
 
-    def test_visitor_cannot_edit(self):
-        """没登录 + 库里已经有别人：画布必须只读（``readonly=0`` 也不作数）。"""
+    def test_visitor_is_sent_to_login(self):
+        """没登录 + 库里已经有别人：页面本身也不给看，先送去登录。"""
         from django.contrib.auth import get_user_model
 
         get_user_model().objects.create_user("房主", password="secret-pass-1")
-        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
-        self.assertTrue(ctx["readonly"], "游客拿到的必须是只读画布")
+        response = self.client.get(f"{self.base}/2d?doc={self.map_doc.id}&embed=1&readonly=0")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("/login?next="))
 
     def test_viewer_member_cannot_edit(self):
         """登录了但这张世界里只是「只读成员」：同样只读。"""
@@ -4627,12 +4742,12 @@ class MapPageTests(TestCase):
         user = get_user_model().objects.create_user("看客", password="secret-pass-1")
         Membership.objects.create(world=self.world, user=user, role=ROLE_VIEWER)
         self.client.force_login(user)
-        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
+        ctx = self._ctx(self.client.get(f"{self.base}/2d?doc={self.map_doc.id}&embed=1&readonly=0"))
         self.assertTrue(ctx["readonly"])
 
     # ------------------------------------------------------------ 主题
     def test_paper_theme_falls_back_to_dark(self):
-        ctx = self._ctx(self.client.get(f"/map/2d?doc={self.map_doc.id}&theme=paper"))
+        ctx = self._ctx(self.client.get(f"{self.base}/2d?doc={self.map_doc.id}&theme=paper"))
         self.assertEqual(ctx["theme"], "dark")
 
 
@@ -5161,3 +5276,118 @@ class AppVersionTests(TestCase):
 
         self.assertEqual(version.version_string("0.5.0", "release", "", "7"), "0.5.0+build.7")
         self.assertEqual(version.version_string("0.5.0", "alpha", "2", "9"), "0.5.0-alpha.2+build.9")
+
+
+class WorldArchiveTests(BaseWorldCase):
+    """世界存档：整包快照、列表、读档回滚（含引用重映射）、自动备份与剪枝。"""
+
+    def _archive(self, name="手动存档", note=""):
+        return self.post_json("/api/world/archives", {"name": name, "note": note})
+
+    def test_create_archive_reports_summary_and_size(self):
+        self.make_card(name="存档里的卡")
+        response = self._archive(name="起点")
+        self.assertEqual(response.status_code, 201)
+        archive = response.json()["archive"]
+        self.assertEqual(archive["name"], "起点")
+        self.assertEqual(archive["kind"], "manual")
+        self.assertGreater(archive["size"], 0)
+        self.assertIn("1 篇文档", archive["summary"])
+
+        listed = self.client.get("/api/world/archives").json()
+        self.assertEqual(len(listed["archives"]), 1)
+        self.assertEqual(listed["max"], MAX_ARCHIVES)
+        self.assertNotIn("payload", listed["archives"][0])   # 列表不塞整包
+
+    def test_detail_can_include_payload(self):
+        archive_id = self._archive().json()["archive"]["id"]
+        without = self.client.get(f"/api/world/archives/{archive_id}").json()["archive"]
+        self.assertNotIn("payload", without)
+
+        with_body = self.client.get(f"/api/world/archives/{archive_id}?body=1").json()["archive"]
+        self.assertEqual(with_body["payload"]["format"], "worldbuilding-timeline/archive")
+        self.assertIn("documents", with_body["payload"])
+
+    def test_delete_archive(self):
+        archive_id = self._archive().json()["archive"]["id"]
+        removed = self.client.delete(f"/api/world/archives/{archive_id}")
+        self.assertEqual(removed.status_code, 200)
+        self.assertFalse(WorldArchive.objects.filter(pk=archive_id).exists())
+
+    def test_restore_rebuilds_world_and_keeps_a_backup(self):
+        folder = Document.objects.create(world=self.world, document_type=DOC_FOLDER, name="人物")
+        target, _ = self.make_card(name="被引用的角色")
+        source, _card = self.make_card(
+            name="引用者", values={str(self.p_faction.id): target.id})
+        source.parent = folder
+        source.save(update_fields=["parent"])
+
+        calendar = Calendar.objects.create(world=self.world, name="大陆历")
+        era = Era.objects.create(world=self.world, name="第一纪", start_year=1, end_year=100)
+        timeline = WorldTimeline.for_world(self.world)
+        timeline.calendar = calendar
+        timeline.settings = {"calendar": calendar.id, "era_spans": {str(era.id): {"start": 1}}}
+        timeline.save()
+        event = TimelineEvent.objects.create(timeline=timeline, title="开端", year=1, era=era)
+        event.linked_cards.set([target])
+
+        archive_id = self._archive(name="读档点").json()["archive"]["id"]
+        Document.objects.filter(world=self.world).update(deleted_at=timezone.now())
+
+        restored = self.client.post(f"/api/world/archives/{archive_id}/restore")
+        self.assertEqual(restored.status_code, 200)
+        body = restored.json()
+        self.assertEqual(body["restored_from"]["id"], archive_id)
+        self.assertEqual(body["backup"]["kind"], "auto")     # 读档前自动备份
+
+        # 文档树与父级回来了
+        folder_new = Document.objects.get(world=self.world, name="人物")
+        source_new = Document.objects.get(world=self.world, name="引用者")
+        self.assertEqual(source_new.parent_id, folder_new.id)
+        self.assertIsNone(source_new.deleted_at)
+
+        # 引用型属性值改指新文档，而不是快照里的旧 id
+        target_new = Document.objects.get(world=self.world, name="被引用的角色")
+        faction = PropertyDef.objects.get(entity_type__world=self.world, name="阵营")
+        self.assertEqual(source_new.card.values[str(faction.id)], target_new.id)
+
+        # 时代 / 历法 / 事件同样重建，era_spans 的键换成新时代 id
+        era_new = Era.objects.get(world=self.world, name="第一纪")
+        timeline_new = WorldTimeline.objects.get(world=self.world)
+        self.assertEqual(timeline_new.calendar.name, "大陆历")
+        self.assertEqual(list(timeline_new.settings["era_spans"]), [str(era_new.id)])
+        event_new = TimelineEvent.objects.get(timeline=timeline_new, title="开端")
+        self.assertEqual([card.id for card in event_new.linked_cards.all()], [target_new.id])
+
+        self.assertEqual(WorldArchive.objects.filter(world=self.world).count(), 2)
+
+    def test_restore_rejects_empty_payload(self):
+        archive = WorldArchive.objects.create(world=self.world, name="空档", payload={})
+        response = self.client.post(f"/api/world/archives/{archive.id}/restore")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("没有内容", response.json()["error"])
+
+    def test_archives_are_pruned_to_the_limit(self):
+        for index in range(MAX_ARCHIVES + 1):
+            self.assertEqual(self._archive(name=f"存档 {index}").status_code, 201)
+        self.assertEqual(WorldArchive.objects.filter(world=self.world).count(), MAX_ARCHIVES)
+        self.assertFalse(WorldArchive.objects.filter(name="存档 0").exists())
+
+    def test_archive_needs_login_and_edit_right(self):
+        from django.contrib.auth.models import User
+
+        owner = User.objects.create_user("owner", password="very-secret-1")
+        viewer = User.objects.create_user("viewer", password="very-secret-2")
+        Membership.objects.get_or_create(world=self.world, user=owner, defaults={"role": "owner"})
+        Membership.objects.get_or_create(world=self.world, user=viewer, defaults={"role": "viewer"})
+
+        anonymous = self._archive(name="偷偷存")
+        self.assertEqual(anonymous.status_code, 401)
+
+        self.client.force_login(viewer)
+        denied = self._archive(name="只读也想存")
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_login(owner)
+        self.assertEqual(self._archive(name="正经存").status_code, 201)
+

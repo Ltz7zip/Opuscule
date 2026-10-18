@@ -45,10 +45,13 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 5;
 }
-.nav-brand { font-family: var(--site-heading); font-size: 21px; font-style: italic; color: var(--ink); }
-.nav-links { display: flex; gap: 16px; font-size: 14px; }
-.nav-links a { color: var(--ink-soft); }
-.nav-search { margin-left: auto; }
+.nav-brand {
+  font-family: var(--site-heading); font-size: 21px; font-style: italic; color: var(--ink);
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nav-links { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; }
+.nav-links a { color: var(--ink-soft); white-space: nowrap; }
+.nav-search { margin-left: auto; min-width: 0; }
 .nav-search input, .search-inline input {
   font: inherit; font-size: 14px;
   background: transparent; border: 1px solid var(--line);
@@ -56,17 +59,40 @@ a:hover { text-decoration: underline; }
 }
 .nav-search input:focus, .search-inline input:focus { border-color: var(--site-primary); }
 
-/* 窄屏：导航一排挤不下（品牌 + 分区链接 + 筛选 chip + 搜索框），390px 下会横向溢出
-   近一个屏幕宽（2026-10-15 体检实测：scrollWidth 779 vs clientWidth 390）。
-   这里让它换行：第一行品牌 + 分区 + 筛选，搜索框单独占满一行。 */
+/* 平板（721–1024）：品牌 + 分区链接 + 筛选 chip + 搜索框挤在一排会横向溢出
+   （2026-10-18 体检：1024 溢出 74px、768 溢出 49px，品牌被压成三行、中文导航项竖排）。
+   拆成两行：第一行品牌 / 筛选 / 搜索，第二行分区链接整行铺开。 */
+@media (max-width: 1024px) {
+  .nav { flex-wrap: wrap; gap: 10px 16px; padding: 12px 20px; }
+  .nav-brand { order: 1; max-width: 46%; font-size: 19px; }
+  .filter-chip { order: 2; margin-left: auto; margin-right: 0; }
+  .nav-search { order: 2; flex: 1 1 250px; margin-left: 0; }
+  .nav-search input { min-width: 0; width: 100%; }
+  .nav-links { order: 3; flex: 1 1 100%; gap: 6px 16px; }
+  body.site .nav-links a { font-size: 13px; }
+}
+
+/* 手机（≤720）：品牌与筛选同排，分区链接、搜索框各占一行。
+   （2026-10-15 体检：390px 下原布局横向溢出近一个屏幕宽。） */
 @media (max-width: 720px) {
   .nav { flex-wrap: wrap; gap: 10px 12px; padding: 12px 16px; }
-  .nav-brand { order: 1; margin-right: auto; font-size: 18px; }
-  .nav-links { order: 3; flex-wrap: wrap; gap: 10px 14px; font-size: 13px; }
-  .filter-chip { order: 2; margin-right: 0; }
+  .nav-brand { order: 1; max-width: 100%; margin-right: auto; font-size: 18px; }
+  .nav-links { order: 3; flex-wrap: wrap; gap: 8px 14px; }
+  .filter-chip { order: 2; margin-left: 0; margin-right: 0; }
   .nav-search { order: 4; flex: 1 1 100%; margin-left: 0; }
   .nav-search input { min-width: 0; width: 100%; }
 }
+
+/* 页头装饰网格横向外扩 10vw（experience.css: inset:-40px -10vw auto），
+   平板区间会把文档撑宽 49–74px。只裁横向，纵向浮层不受影响（clip 不会把另一轴变成 auto）。 */
+@media (max-width: 1024px) {
+  body.site .hero,
+  body.site .era-head,
+  body.site .page-head { overflow-x: clip; }
+}
+
+/* 手机正文：收紧留白、标题降级、属性表与时间线条目改为纵向堆叠
+   （放在本文件末尾，确保能覆盖前面同特异性的基础规则） */
 
 .wrap { max-width: 1040px; margin: 0 auto; padding: 34px 28px 60px; }
 
@@ -322,3 +348,22 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
   z-index: 40;
 }
 .canvas-hint.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ----------------------------------------------------------------- 手机正文 */
+@media (max-width: 640px) {
+  .wrap { padding: 24px 16px 48px; }
+  .hero { padding: 18px 0 8px; }
+  body.site .hero h1 { font-size: clamp(30px, 8.5vw, 40px); }
+  .page-head { flex-direction: column; gap: 14px; }
+  body.site .page-head h1 { font-size: 30px; }
+  .page-cover { inline-size: 100%; block-size: 172px; }
+  .props th { width: 96px; padding-right: 8px; }
+  .timeline-read li { flex-direction: column; gap: 2px; }
+  .ev-date { flex: none; }
+  .search-inline { flex-wrap: wrap; }
+  .search-inline input { flex: 1 1 100%; min-width: 0; }
+  .te-bar { flex-wrap: wrap; }
+  .gate { margin: 10vh auto; }
+  .gate form { flex-wrap: wrap; }
+  .gate input { flex: 1 1 160px; min-width: 0; }
+}

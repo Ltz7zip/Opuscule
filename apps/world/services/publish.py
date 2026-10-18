@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
 from ..normalize import blocks_to_text
@@ -48,6 +47,47 @@ SITE_DOC_TYPES = (DOC_CARD, DOC_TIMELINE, DOC_MAP, DOC_GRAPH, DOC_CANVAS, DOC_NO
 
 SITE_DOC_TYPE_SET = set(SITE_DOC_TYPES)
 
+#: 站点上世界总时间线的地址段（``/s/<slug>/timeline/``）
+TIMELINE_SITE_SLUG = "timeline"
+
+
+class SiteTimeline:
+    """站点列表里的「世界时间线」。
+
+    0.7.0 起时间线不是文档了，但站点首页仍需要它占一格——这个轻量对象只提供
+    模板与搜索需要的最小字段，不落库。
+    """
+
+    id = TIMELINE_SITE_SLUG
+    name = "世界时间线"
+    slug = TIMELINE_SITE_SLUG
+    document_type = DOC_TIMELINE
+    entity_type = None
+    era = None
+    preview = ""
+    cover_safe = ""
+
+    def get_document_type_display(self) -> str:
+        return "时间线"
+
+
+def world_timeline(world: World):
+    """世界的总时间线；还没有就返回 ``None``（站点只读，不顺手创建）。"""
+    return getattr(world, "timeline", None)
+
+
+def timeline_events(world: World, era=None):
+    """总时间线上的事件（可选只看某个时代）。"""
+    timeline = world_timeline(world)
+    if timeline is None:
+        return TimelineEvent.objects.none()
+    query = timeline.events.select_related("document", "featured_card").order_by(
+        "year", "month", "day", "hour", "id"
+    )
+    if era is not None:
+        query = query.filter(era=era)
+    return query
+
 AUDIENCE_LABELS = {
     AUDIENCE_PUBLIC: "任何人可读",
     AUDIENCE_UNLISTED: "仅持链接可见",
@@ -74,14 +114,18 @@ def filter_documents(documents, *, type_slug: str = "", era_id: int = 0):
     * ``type_slug``：名字叫 slug，实际传进来的是实体类型的 id
       （``EntityType`` 没有 slug 字段），按它过滤卡片；
     * ``era_id``：文档自己挂在这个纪元下，或者它的卡片在纪元里可见
-      （``era_mode`` 为 ``universal``，或 ``era_ids`` 里含这个纪元）。
+      ——后者只问 ``Card.visible_in_era``，与工作区、地图、关系树同一口径。
     """
     if type_slug:
         documents = documents.filter(entity_type_id=type_slug)
     if era_id:
-        documents = documents.filter(
-            Q(era_id=era_id) | Q(card__era_mode="universal") | Q(card__era_ids__contains=[era_id])
-        )
+        visible_ids = [
+            document.id for document in documents.select_related("card")
+            if document.era_id == era_id
+            or (getattr(document, "card", None) is not None
+                and document.card.visible_in_era(era_id))
+        ]
+        documents = documents.filter(id__in=visible_ids)
     return documents
 
 
@@ -161,6 +205,29 @@ def search_documents(world: World, keyword: str, limit: int = 400) -> list[dict]
         })
         if len(hits) >= limit:
             break
+
+    # 总时间线的事件不再挂在文档上，单独给「世界时间线」一个搜索命中
+    timeline = world_timeline(world)
+    if timeline is not None and len(hits) < limit:
+        event_titles = [
+            title for title in timeline.events.values_list("title", flat=True)
+            if lowered in (title or "").lower()
+        ][:3]
+        if event_titles:
+            snippet = "、".join(event_titles)
+            hits.append({
+                "document": SiteTimeline(),
+                "score": 35,
+                "name": SiteTimeline.name,
+                "name_hit": False,
+                "type_label": "时间线",
+                "type_name": "",
+                "era_name": "",
+                "snippet": snippet,
+                "parts": split_parts(snippet),
+                "matched_events": event_titles,
+            })
+
     hits.sort(key=lambda item: (-item["score"], item["name"]))
     return hits
 
@@ -175,6 +242,8 @@ def suggest_similar(world: World, keyword: str, limit: int = 5) -> list[dict]:
     names = {}
     for document in site_documents(world):
         names[document.name] = document
+    if world_timeline(world) is not None:
+        names[SiteTimeline.name] = SiteTimeline()
     close = difflib.get_close_matches(keyword, list(names), n=limit, cutoff=0.6)
     if not close:
         lowered = keyword.lower()
@@ -235,13 +304,8 @@ def publish_preview(world: World) -> dict:
 
 def era_summary(world: World, era) -> dict:
     """一个纪元在站点上的样子：说明、颜色、以及按时间排好的事件。"""
-    events = (
-        TimelineEvent.objects.filter(document__world=world, era=era)
-        .select_related("document", "featured_card")
-        .order_by("year", "month", "day", "hour", "id")
-    )
     rows = []
-    for event in events:
+    for event in timeline_events(world, era):
         rows.append({
             "id": event.id,
             "title": event.title,
@@ -254,8 +318,7 @@ def era_summary(world: World, era) -> dict:
         document for document in site_documents(world)
         if document.era_id == era.id
         or (getattr(document, "card", None) is not None
-            and getattr(document.card, "era_mode", "") == "only"
-            and era.id in (document.card.era_ids or []))
+            and document.card.visible_in_era(era.id))
     ]
     return {"era": era, "events": rows, "documents": linked_documents[:24]}
 
@@ -265,7 +328,7 @@ def site_eras(world: World) -> list[dict]:
     counts = {item["id"]: item["count"] for item in site_filters(world)["eras"]}
     rows = []
     for era in world.eras.order_by("position", "id"):
-        events = TimelineEvent.objects.filter(document__world=world, era=era).count()
+        events = timeline_events(world, era).count()
         if era.id in counts or events:
             rows.append({"id": era.id, "name": era.name, "theme": era.theme,
                          "description": era.description, "cover": era.cover,
@@ -299,9 +362,18 @@ def site_filters(world: World) -> dict:
     }
 
 
-def site_sections(world: World, documents=None) -> list[dict]:
-    """把站点文档按类型分组：时间线归一节，其余按卡片类型名各归一节（站点列表分栏用）。"""
+def site_sections(world: World, documents=None, include_timeline: bool = True) -> list[dict]:
+    """把站点文档按类型分组：时间线归一节，其余按卡片类型名各归一节（站点列表分栏用）。
+
+    0.7.0 起时间线不再是文档，而是每世界唯一的总时间线；只要它有事件，就在
+    「时间线」分区里放一个 ``SiteTimeline`` 占位。``include_timeline=False`` 用于
+    调用方已经在别处展示时间线的情况。
+    """
     sections: dict[str, dict] = {}
+    if include_timeline:
+        timeline = world_timeline(world)
+        if timeline is not None and timeline.events.exists():
+            sections["timeline"] = {"key": "timeline", "title": "时间线", "documents": [SiteTimeline()]}
     for document in (documents if documents is not None else site_documents(world)):
         if document.document_type == DOC_TIMELINE:
             key, title = "timeline", "时间线"

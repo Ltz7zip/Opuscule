@@ -17,6 +17,8 @@ from django.db import models
 
 from apps.world.models.constants import (
     CAL_EARTH,
+    CONFIDENCE_EXACT,
+    CONFIDENCES,
     DOC_CARD,
     DOC_FOLDER,
     DOC_TYPES,
@@ -40,12 +42,24 @@ from apps.world.models.world import World
 
 
 class Era(models.Model):
-    """纪元：世界的「版本分支 / 时代」，每个纪元都从 0 年起算一套自己的时间。"""
+    """时代：总时间线上的一段**命名区间**（可重叠 / 可嵌套）。
+
+    0.7.0 之前它是「独立坐标系」——每个纪元从 0 年起算，靠 ``position`` 首尾相连。
+    现在它只是总时间线上的 ``[start_year, end_year]``：共用同一根轴，天然允许重叠。
+    ``start_year`` / ``end_year`` 为空表示「还没摆放」/「开放式」，此时仍然可以按
+    ``position`` + ``length_years`` 顺序铺开（兼容旧数据与旧接口）。
+    """
 
     world = models.ForeignKey(World, on_delete=models.CASCADE, related_name="eras")
     name = models.CharField("名称", max_length=80, default="新纪元")
     position = models.PositiveIntegerField("顺序", default=0)
-    length_years = models.FloatField("长度（年）", default=0.0)  # 0 = 开放式
+    #: 总时间线上的起止年份；start 为空 = 还没摆放，end 为空 = 开放式（至今 / 无尽头）
+    start_year = models.FloatField("起始年", null=True, blank=True, default=None)
+    end_year = models.FloatField("结束年", null=True, blank=True, default=None)
+    start_precision = models.CharField("起始精度", max_length=8, choices=PRECISIONS, default=PRECISION_YEAR)
+    end_precision = models.CharField("结束精度", max_length=8, choices=PRECISIONS, default=PRECISION_YEAR)
+    #: 由起止推出的长度；保留成真列是为了兼容旧前端与旧接口（0 = 开放式）
+    length_years = models.FloatField("长度（年）", default=0.0)
     theme = models.CharField("配色", max_length=16, default="blue")
     theme_config = models.JSONField("纪元主题", default=dict, blank=True)
     icon = models.CharField("图标", max_length=40, blank=True, default="")
@@ -61,16 +75,51 @@ class Era(models.Model):
     def __str__(self):
         return self.name
 
-    @property
-    def start_year(self) -> float:
-        """纪元在自己的坐标系里从 0 开始。"""
-        return 0.0
+    def save(self, *args, **kwargs):
+        # 起止是真值来源；长度只是派生列。只摆了一端（start 有、end 空）算开放式。
+        if self.start_year is not None:
+            self.length_years = (
+                round(float(self.end_year) - float(self.start_year), 4)
+                if self.end_year is not None and self.end_year > self.start_year
+                else 0.0
+            )
+        super().save(*args, **kwargs)
 
-    @property
-    def end_year(self) -> float | None:
-        return self.length_years or None
+    def resolved_span(self) -> tuple[float, float] | None:
+        """这条时代在轴上的区间：没摆放时返回 ``None``（由调用方决定怎么铺开）。"""
+        if self.start_year is None:
+            return None
+        start = float(self.start_year)
+        if self.end_year is None or self.end_year <= start:
+            end = start + (float(self.length_years or 0) or 50.0)
+        else:
+            end = float(self.end_year)
+        return (start, end)
 
-    def to_payload(self) -> dict:
+    def filter_span(self) -> tuple[float, float | None] | None:
+        """过滤用的区间：``None`` 表示还没摆到轴上（不参与过滤）。
+
+        与 ``resolved_span()`` 的区别在开放端：绘制时代色带时开放端要有个可视
+        长度（兜底 +50 年），但判断"某条关系在这个时代里是否有效"时，开放端
+        就是**不封顶**——否则"至今"的时代会在 50 年后凭空失效。
+        """
+        if self.start_year is None:
+            return None
+        start = float(self.start_year)
+        if self.end_year is None or self.end_year <= start:
+            return (start, None)
+        return (start, float(self.end_year))
+
+    def to_payload(self, origin: float = 0.0) -> dict:
+        """``origin`` 是展示坐标的原点（显示年 = 存储年 − origin）。
+
+        默认 0 保持世界坐标——备份 / 导出依赖这个口径；只有 UI 接口传原点。
+        """
+        def display(value):
+            if value is None or not origin:
+                return value
+            return round(float(value) - origin, 4)
+
         return {
             "id": self.id,
             "name": self.name,
@@ -81,8 +130,11 @@ class Era(models.Model):
             "description": self.description,
             "cover": self.cover,
             "theme_config": self.theme_config if isinstance(self.theme_config, dict) else {},
-            "start_year": self.start_year,
-            "end_year": self.end_year,
+            "start_year": display(self.start_year),
+            "end_year": display(self.end_year),
+            "start_precision": self.start_precision,
+            "end_precision": self.end_precision,
+            "open_end": self.end_year is None,
         }
 
 
@@ -344,7 +396,11 @@ class Card(models.Model):
 
 
 class Calendar(models.Model):
-    """自定义日历：定义一年有几个月、每月几天、每天几小时，以及卫星（月亮）。"""
+    """自定义日历：定义一年有几个月、每月几天、每天几小时，以及卫星（月亮）。
+
+    0.7.0 起一本历法可以只在一段年份里生效（``start_year`` / ``end_year`` 为空 =
+    无限），用来表达「A 历 → 某事件后切 B 历」；切换点因此落在历法自己身上。
+    """
 
     world = models.ForeignKey(World, on_delete=models.CASCADE, related_name="calendars")
     name = models.CharField("名称", max_length=80, default="地球历")
@@ -354,6 +410,9 @@ class Calendar(models.Model):
     moons = models.JSONField("卫星", default=list, blank=True)
     open_past = models.BooleanField("开放过去", default=False)
     default_precision = models.CharField("默认精度", max_length=8, choices=PRECISIONS, default=PRECISION_YEAR)
+    #: 这本历法的生效区间；为空 = 不设限（旧数据即如此）
+    start_year = models.FloatField("生效起始年", null=True, blank=True, default=None)
+    end_year = models.FloatField("生效结束年", null=True, blank=True, default=None)
     is_preset = models.BooleanField("日历预设", default=False)
     created_at = models.DateTimeField("创建于", auto_now_add=True)
 
@@ -365,6 +424,18 @@ class Calendar(models.Model):
 
     def __str__(self):
         return self.name
+
+    def covers(self, year) -> bool:
+        """这一年是否归这本历法管（区间为空的一端表示不设限）。"""
+        try:
+            value = float(year)
+        except (TypeError, ValueError):
+            return True
+        if self.start_year is not None and value < self.start_year:
+            return False
+        if self.end_year is not None and value > self.end_year:
+            return False
+        return True
 
     # -- 历法计算 ---------------------------------------------------------- #
     def month_list(self) -> list[dict]:
@@ -426,13 +497,80 @@ class Calendar(models.Model):
             "default_precision": self.default_precision,
             "is_preset": self.is_preset,
             "days_per_year": self.days_per_year,
+            "start_year": self.start_year,
+            "end_year": self.end_year,
+        }
+
+
+class WorldTimeline(models.Model):
+    """每个世界唯一的「总时间线」：时间点与时间段共用的一根轴。
+
+    0.7.0 之前时间线是文档（``document_type="timeline"``），一个世界可以有好几份。
+    现在时间线脱离文档树成为一个世界级实体：``origin_year`` 定义「0 年」落在哪，
+    ``calendar`` 指向默认历法，``settings`` 存视野与旧版 ``era_spans`` 兼容数据。
+    """
+
+    world = models.OneToOneField(World, on_delete=models.CASCADE, related_name="timeline")
+    #: 「0 年」对应哪一年：改它就是迁轴（与历法切换是两件事）
+    origin_year = models.FloatField("坐标原点", default=0.0)
+    calendar = models.ForeignKey(Calendar, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="timelines")
+    settings = models.JSONField("设置", default=dict, blank=True)
+    created_at = models.DateTimeField("创建于", auto_now_add=True)
+    updated_at = models.DateTimeField("更新于", auto_now=True)
+
+    class Meta:
+        db_table = "world_timeline"
+        verbose_name = "总时间线"
+        verbose_name_plural = "总时间线"
+
+    def __str__(self):
+        return f"{self.world.name} · 总时间线"
+
+    @classmethod
+    def for_world(cls, world: World) -> "WorldTimeline":
+        """取世界的时间线；没有就自动生成一根（每世界唯一，拍板 ①/⑤）。"""
+        timeline = cls.objects.filter(world=world).first()
+        if timeline is not None:
+            if timeline.calendar_id is None:
+                timeline.calendar = world.calendars.order_by("id").first()
+                timeline.save(update_fields=["calendar", "updated_at"])
+            return timeline
+        return cls.objects.create(world=world, calendar=world.calendars.order_by("id").first())
+
+    @property
+    def name(self) -> str:
+        """经典适配层与文档同形：模板里直接拿它当标题。"""
+        return "世界时间线"
+
+    def to_payload(self) -> dict:
+        settings_ = self.settings if isinstance(self.settings, dict) else {}
+        return {
+            "id": self.id,
+            "world": self.world_id,
+            "name": self.name,
+            "origin_year": self.origin_year,
+            "calendar": self.calendar_id,
+            "settings": settings_,
+            "view": settings_.get("view") or {
+                "start": float(settings_.get("view_start", -100.0) or -100.0),
+                "end": float(settings_.get("view_end", 900.0) or 900.0),
+            },
         }
 
 
 class TimelineEvent(models.Model):
-    """时间线上的事件：年 / 月 / 日 / 时四级精度，可归属一个纪元、关联若干卡片。"""
+    """时间线上的事件：年 / 月 / 日 / 时四级精度，可归属一个时代、关联若干卡片。
 
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="events")
+    0.7.0 起事件挂在世界的总时间线上（``timeline``）。``document`` 保留成可空外键，
+    只为兼容旧接口与旧的「时间线文档」数据：文档内的事件照样能读写，同时也会出现在
+    总时间线上。
+    """
+
+    timeline = models.ForeignKey(WorldTimeline, null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="events")
+    document = models.ForeignKey(Document, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="events")
     title = models.CharField("名称", max_length=160, default="未命名事件")
     precision = models.CharField("精度", max_length=8, choices=PRECISIONS, default=PRECISION_YEAR)
     year = models.IntegerField("年", default=0)
@@ -444,6 +582,9 @@ class TimelineEvent(models.Model):
     cover = models.TextField("封面", blank=True, default="")
     row = models.PositiveIntegerField("行", default=0)
     position = models.PositiveIntegerField("排序", default=0)
+    #: 模糊 / 相对时间（§4.4 E）：确信度 + 区间半径（0 = 精确单点）
+    confidence = models.CharField("确信度", max_length=8, choices=CONFIDENCES, default=CONFIDENCE_EXACT)
+    range_years = models.FloatField("不确定范围（±年）", default=0.0)
     # 事件自己的零碎设置（标记 / 颜色一类），不进正式字段免得每加一个就迁移一次
     settings = models.JSONField("设置", default=dict, blank=True)
     linked_cards = models.ManyToManyField(Document, blank=True, related_name="linked_events")
@@ -462,6 +603,20 @@ class TimelineEvent(models.Model):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        # 旧路径（按文档建事件）自动挂到世界总时间线上，两个入口看到的是同一批事件。
+        if self.timeline_id is None and self.document_id and not kwargs.get("raw"):
+            self.timeline = WorldTimeline.for_world(self.document.world)
+        super().save(*args, **kwargs)
+
+    @property
+    def world_id(self):
+        if self.timeline_id:
+            return self.timeline.world_id
+        if self.document_id:
+            return self.document.world_id
+        return None
+
     @property
     def sort_key(self) -> tuple:
         """按精度取排序键：精度不到就不参与更细粒度的排序。"""
@@ -475,20 +630,49 @@ class TimelineEvent(models.Model):
             self.id or 0,
         )
 
-    def date_label(self) -> str:
-        calendar = self.document.settings.get("calendar") if isinstance(self.document.settings, dict) else None
-        cal = Calendar.objects.filter(pk=calendar).first() if calendar else None
-        cal = cal or Calendar.objects.filter(world_id=self.document.world_id).first()
-        if cal is None:
-            return f"Year {self.year}"
-        return cal.format_date(self.year, self.month, self.day, self.hour, self.precision)
+    def _calendar(self):
+        """按事件所在年份挑历法：总时间线默认 → 生效区间覆盖这一年的 → 世界第一本。"""
+        world_id = self.world_id
+        if not world_id:
+            return None
+        preferred = self.timeline.calendar if self.timeline_id else None
+        if preferred is not None and preferred.covers(self.year):
+            return preferred
+        calendars = list(Calendar.objects.filter(world_id=world_id).order_by("id"))
+        for calendar in calendars:
+            if calendar.covers(self.year):
+                return calendar
+        if preferred is not None:
+            return preferred
+        if self.document_id:
+            settings_ = self.document.settings if isinstance(self.document.settings, dict) else {}
+            chosen = next((c for c in calendars if c.pk == settings_.get("calendar")), None)
+            if chosen is not None:
+                return chosen
+        return calendars[0] if calendars else None
 
-    def to_payload(self) -> dict:
+    def date_label(self, origin: float = 0.0) -> str:
+        cal = self._calendar()
+        year = self.year if not origin else round(self.year - origin, 4)
+        if cal is None:
+            return f"Year {year}"
+        return cal.format_date(year, self.month, self.day, self.hour, self.precision)
+
+    def to_payload(self, origin: float = 0.0) -> dict:
+        """``origin`` 是展示坐标的原点（显示年 = 存储年 − origin）。
+
+        默认 0 保持世界坐标——备份 / 导出依赖这个口径；只有 UI 接口传原点。
+        """
+        year = self.year if not origin else round(self.year - origin, 4)
+        sort_key = list(self.sort_key)
+        sort_key[0] = year
         return {
             "id": self.id,
+            "timeline": self.timeline_id,
+            "document": self.document_id,
             "title": self.title,
             "precision": self.precision,
-            "year": self.year,
+            "year": year,
             "month": self.month,
             "day": self.day,
             "hour": self.hour,
@@ -497,8 +681,10 @@ class TimelineEvent(models.Model):
             "cover": self.cover,
             "row": self.row,
             "position": self.position,
-            "sort_key": list(self.sort_key),
-            "date_label": self.date_label(),
+            "confidence": self.confidence,
+            "range_years": self.range_years,
+            "sort_key": sort_key,
+            "date_label": self.date_label(origin),
             "linked_cards": [
                 {"id": d.id, "name": d.name, "type": d.document_type}
                 for d in self.linked_cards.all()

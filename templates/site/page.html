@@ -23,7 +23,7 @@
 
     {% if canvas_embed %}
       <section class="canvas-embed">
-        <iframe src="/world?embed={{ document.id }}&readonly=1"
+        <iframe src="/w/{{ world.slug }}?embed={{ document.id }}&readonly=1"
                 title="{{ document.name }}" loading="lazy"></iframe>
       </section>
     {% endif %}
@@ -45,19 +45,21 @@
             <button type="button" class="te-btn" id="timelineFullBtn">全屏</button>
           </div>
         </div>
-        <div class="te-frame-wrap">
-          <iframe class="te-frame" id="timelineFrame"
-                  src="/world/timeline/{{ document.id }}?readonly=1&paper=1"
-                  title="{{ document.name }} 时间线" loading="lazy"></iframe>
-          <div class="te-dock" role="toolbar" aria-label="时间线操作">
-          <button type="button" class="te-dock-btn" data-view="out" aria-label="缩小">−</button>
-          <button type="button" class="te-dock-btn" data-view="in" aria-label="放大">＋</button>
-          <button type="button" class="te-dock-btn" data-view="fit" aria-label="适应内容">适应</button>
-          <span class="te-dock-sep"></span>
-          <button type="button" class="te-dock-btn" id="timelineListBtn2">列表</button>
-          <button type="button" class="te-dock-btn" id="timelineFullBtn2">全屏</button>
-        </div>
-        </div>
+        {% if timeline_embed %}
+          <div class="te-frame-wrap">
+            <iframe class="te-frame" id="timelineFrame"
+                    src="{{ timeline_embed }}"
+                    title="{{ document.name }} 时间线" loading="lazy"></iframe>
+            <div class="te-dock" role="toolbar" aria-label="时间线操作">
+            <button type="button" class="te-dock-btn" data-view="out" aria-label="缩小">−</button>
+            <button type="button" class="te-dock-btn" data-view="in" aria-label="放大">＋</button>
+            <button type="button" class="te-dock-btn" data-view="fit" aria-label="适应内容">适应</button>
+            <span class="te-dock-sep"></span>
+            <button type="button" class="te-dock-btn" id="timelineListBtn2">列表</button>
+            <button type="button" class="te-dock-btn" id="timelineFullBtn2">全屏</button>
+          </div>
+          </div>
+        {% endif %}
         {% if events %}
           <details class="te-list">
             <summary>用列表看这 {{ events|length }} 个事件</summary>

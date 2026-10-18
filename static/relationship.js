@@ -7,7 +7,7 @@
    页面是一条三屏流程：选模版 → 看模版关系 → 进画布编辑。
 
    画布上有两条铁律，其余都好商量：
-   1. **人物卡片的边框严格贴网格**。卡宽高都是整数格（5 × 8），落点也永远吸附到
+   1. **人物卡片的边框严格贴网格**。卡宽高都是整数格（6 × 3），落点也永远吸附到
       网格整数倍，所以边框天然落在网格线上——不会出现"差两像素"的毛边。
    2. **关系线不贴网格**。线怎么走由几何算（正交 + 圆角），只在需要时经过中点，
       不为了对齐网格把线拗成奇怪的形状。
@@ -21,7 +21,8 @@
   var app = document.getElementById('rtApp');
   if (!app) return;
 
-  var API = '/api/world';
+  var API = app.dataset.apiBase || '/api/world';
+  var PAGE = app.dataset.pageBase || '/w';
   var $ = function (id) { return document.getElementById(id); };
 
   /* ---------------------------------------------------------------- 状态 */
@@ -31,12 +32,17 @@
   var EMBED = app.dataset.embed === '1';
 
   var S = {
-    grid: { grid: 28, card_cols: 5, card_rows: 8, col_step: 8, row_step: 12 },
+    grid: { grid: 28, card_cols: 6, card_rows: 3, col_step: 7, row_step: 5 },
     templates: [],
     trees: [],
     pickTemplate: 'family',
     draftRelations: [],       // 模版自带的关系清单（还没落库）
     docId: parseInt(app.dataset.doc, 10) || 0,
+    eraId: parseInt(app.dataset.era, 10) || 0,   // ?era=<id>：只过滤，不改数据
+    focusCardId: parseInt(app.dataset.focus, 10) || 0,  // ?focus=<card>：只高亮，不跳转
+    eras: [],                 // 世界里的时代区间（载入关系树时一起回来）
+    eraHidden: {},            // {时代 id: [看不见的 card(document) id]}，服务端算好
+    eraEdges: {},             // {时代 id: [该时代有效的边 id]}，服务端算好
     pendingDoc: 0,            // 已经建好、但还没选模版的那棵树（面板里选完就地配置它）
     doc: null,
     variant: null,
@@ -424,7 +430,7 @@
       row.className = 'rt-existing-row';
       row.innerHTML = '<b>' + esc(tree.name) + '</b><span>' +
         tree.people + ' 人 · ' + tree.kind_label + '</span>';
-      row.addEventListener('click', function () { location.href = '/relationship?doc=' + tree.id; });
+      row.addEventListener('click', function () { location.href = PAGE + '/relation?doc=' + tree.id; });
       host.appendChild(row);
     });
   }
@@ -534,7 +540,7 @@
         method: 'PUT', body: { relations: S.draftRelations }
       }).then(function () { return data; });
     }).then(function (data) {
-      location.href = '/relationship?doc=' + data.document.id;
+      location.href = PAGE + '/relation?doc=' + data.document.id;
     }).catch(function (err) {
       button.disabled = false;
       toast(friendly(err, '创建失败'), 4000);
@@ -644,6 +650,10 @@
   }
 
   /* ==================================================== 编辑区：载入与渲染 */
+  function openFullUrl(docId) {
+    return PAGE + '/relation?doc=' + docId + (S.eraId ? '&era=' + S.eraId : '');
+  }
+
   /* 打开一篇关系树。**没选过模版的空树先给模版选择**——不管是在独立页打开，
      还是在工作区面板里打开，都不该把人直接丢到一片空画布上。 */
   function openEditor(docId) {
@@ -655,7 +665,7 @@
         S.doc = data.document;
         S.grid = data.grid || S.grid;
         $('rtDocName').textContent = S.doc.name;
-        $('rtOpenFull').href = '/relationship?doc=' + docId;
+        $('rtOpenFull').href = openFullUrl(docId);
         renderPicker();
         showScreen('picker');
         return;
@@ -667,19 +677,27 @@
       S.variant = data.variant;
       S.nodes = (data.variant.nodes || []).map(normalizeNode);
       S.edges = data.variant.edges || [];
+      S.eras = data.eras || [];
+      S.eraHidden = data.era_hidden || {};
+      S.eraEdges = data.era_edges || {};
       S.relations = (data.variant.relations || []);
       S.labels = data.variant.resolved_labels || {};
       S.relationKinds = data.relation_kinds || [];
 
       $('rtDocName').textContent = S.doc.name;
       $('rtKindChip').textContent = S.variant.kind_label || '';
-      $('rtOpenFull').href = '/relationship?doc=' + S.docId;
+      $('rtOpenFull').href = openFullUrl(S.docId);
       if (READONLY) {
         $('rtEmptyHint').innerHTML = '这棵关系树还没有人物';
       }
       showScreen('editor');
       render();
       fit();
+      // ?focus= 只在首次载入时用一次，之后的重载不能把用户的选择顶掉
+      if (!focusApplied) {
+        focusApplied = true;
+        focusCard(S.focusCardId);
+      }
     }).catch(function (err) {
       // 打不开就明说打不开。以前这里悄悄退回模版选择，看着像"我的树
       // 变成了新建向导"——文档只是进了回收站而已，不该这么演。
@@ -702,6 +720,7 @@
       id: node.id, x: snap(node.x || 0), y: snap(node.y || 0),
       name: node.name || '', note: node.note || '',
       kind: node.kind || 'person',
+      generation: node.generation == null ? 0 : node.generation,
       card: node.card, card_name: node.card_name, card_slug: node.card_slug,
       image: node.image || '', subtitle: node.subtitle || '',
       deceased: !!node.deceased, favourite: !!node.favourite
@@ -711,6 +730,34 @@
   function nodeById(id) {
     for (var i = 0; i < S.nodes.length; i++) if (S.nodes[i].id === id) return S.nodes[i];
     return null;
+  }
+
+  /* ------------------------------------------------------------ 时代过滤 */
+  /* §4.5 的统一口径：显不显示只认服务端算好的结果，前端不再自己比区间——
+     否则"开放端到底算到哪一年"会有第二份实现。这里只过滤显示，不改数据。 */
+  function nodeHidden(node) {
+    if (!S.eraId || !node.card) return false;   // 备注节点不属于任何时代，始终显示
+    var hidden = S.eraHidden[String(S.eraId)];
+    return !!hidden && hidden.indexOf(node.card) >= 0;
+  }
+
+  function visibleNodes() {
+    return S.nodes.filter(function (node) { return !nodeHidden(node); });
+  }
+
+  function edgeActiveInEra(edge) {
+    if (!S.eraId) return true;
+    var list = S.eraEdges[String(S.eraId)];
+    if (!list) return true;   // 时代还没摆到轴上：不过滤
+    return list.indexOf(edge.id) >= 0;
+  }
+
+  function visibleEdges() {
+    var shown = Object.create(null);
+    visibleNodes().forEach(function (node) { shown[node.id] = true; });
+    return S.edges.filter(function (edge) {
+      return edgeActiveInEra(edge) && shown[edge.source] && shown[edge.target];
+    });
   }
 
   function applyView() {
@@ -729,7 +776,10 @@
     renderEdges();
     renderNodes();
     applyView();
-    $('rtEmptyHint').hidden = S.nodes.length > 0;
+    $('rtEmptyHint').hidden = visibleNodes().length > 0;
+    renderDetail();
+    updateStats();
+    applyFilter();
   }
 
   function labelOf(kind, label) {
@@ -756,7 +806,7 @@
     while (layer.firstChild) layer.removeChild(layer.firstChild);
     var ns = 'http://www.w3.org/2000/svg';
 
-    S.edges.forEach(function (edge) {
+    visibleEdges().forEach(function (edge) {
       var a = nodeById(edge.source), b = nodeById(edge.target);
       if (!a || !b) return;
       var path = document.createElementNS(ns, 'path');
@@ -788,7 +838,7 @@
   function renderNodes() {
     var host = $('rtNodes');
     host.innerHTML = '';
-    S.nodes.forEach(function (node) { host.appendChild(nodeElement(node)); });
+    visibleNodes().forEach(function (node) { host.appendChild(nodeElement(node)); });
   }
 
   function initial(name) {
@@ -797,6 +847,219 @@
     // 拉丁字母取首字母，中文取头一个字
     var first = text[0];
     return /[a-zA-Z]/.test(first) ? first.toUpperCase() : first;
+  }
+
+  /* ------------------------------------------------------ 关系派生（详情栏用） */
+  var BLOOD_KINDS = { parent: 1, child: 1, sibling: 1, half_sibling: 1, adoptive: 1, step: 1 };
+  var MARRIAGE_KINDS = { spouse: 1, ex: 1 };
+  var CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+
+  function edgesOf(id) {
+    return visibleEdges().filter(function (edge) { return edge.source === id || edge.target === id; });
+  }
+
+  function otherEnd(edge, id) { return edge.source === id ? edge.target : edge.source; }
+
+  /* 边的语义：kind 描述 source 相对 target 的身份（见 static/relationship.js 顶部说明） */
+  function childrenOf(id) {
+    var out = [];
+    visibleEdges().forEach(function (edge) {
+      if (edge.kind === 'parent' && edge.source === id) out.push(edge.target);
+      else if (edge.kind === 'child' && edge.target === id) out.push(edge.source);
+    });
+    return out;
+  }
+
+  function parentsOf(id) {
+    var out = [];
+    visibleEdges().forEach(function (edge) {
+      if (edge.kind === 'parent' && edge.target === id) out.push(edge.source);
+      else if (edge.kind === 'child' && edge.source === id) out.push(edge.target);
+    });
+    return out;
+  }
+
+  function spousesOf(id) {
+    return edgesOf(id)
+      .filter(function (edge) { return MARRIAGE_KINDS[edge.kind]; })
+      .map(function (edge) { return otherEnd(edge, id); });
+  }
+
+  function nameOf(id) {
+    var node = nodeById(id);
+    return node ? (node.name || '未命名') : '未命名';
+  }
+
+  function roleOf(node) {
+    if (node.kind === 'note') return '备注';
+    if (node.favourite) return '主角';
+    if (childrenOf(node.id).length) return '家长';
+    if (spousesOf(node.id).length) return '配偶';
+    if (parentsOf(node.id).length) return '子女';
+    return '人物';
+  }
+
+  function generationOf(node) {
+    var value = node.generation == null ? rowIndex(node.y) : Number(node.generation);
+    if (!isFinite(value)) value = 0;
+    value = Math.max(0, Math.round(value));
+    return { index: value, label: CN_NUM[value] || String(value + 1) };
+  }
+
+  /* ------------------------------------------------------ 右侧详情栏 */
+  function renderDetail() {
+    var host = $('rtNodeDetail');
+    if (!host) return;
+    var node = S.selected != null ? nodeById(S.selected) : null;
+    if (!node) {
+      host.innerHTML = '<div class="rt-detail-empty">'
+        + '<span data-icon="users" data-icon-size="20" aria-hidden="true"></span>'
+        + '<strong>还没有选中人物</strong>'
+        + '<p>点一张卡片，这里会显示它的人物信息与关系。</p>'
+        + '</div>';
+      hydrateIcons(host);
+      return;
+    }
+
+    var edges = edgesOf(node.id);
+    var kids = childrenOf(node.id);
+    var parents = parentsOf(node.id);
+    var spouses = spousesOf(node.id);
+    var generation = generationOf(node);
+    var role = roleOf(node);
+    var avatar = node.image
+      ? '<img src="' + esc(node.image) + '" alt="" />'
+      : esc(initial(node.name));
+    var subtitle = [role, node.card_name || (S.doc && S.doc.name)].filter(Boolean).join(' · ');
+
+    var html = '<div class="rt-detail-head">'
+      + '<span class="rt-detail-avatar" aria-hidden="true">' + avatar + '</span>'
+      + '<div class="rt-detail-id">'
+      + '<h2>' + esc(node.name || '未命名人物') + '</h2>'
+      + '<span class="rt-detail-sub">' + esc(subtitle) + '</span>'
+      + '</div>'
+      + '<span class="rt-detail-state">已选中</span>'
+      + '</div>';
+
+    if (node.kind === 'note') {
+      html += '<p class="rt-detail-note">' + esc(node.note || '还没有写内容') + '</p>';
+    } else {
+      html += '<div class="rt-detail-metrics">'
+        + '<article class="rt-metric"><span class="rt-eyebrow">直接关系</span>'
+        + '<strong>' + (kids.length + parents.length + spouses.length) + '</strong>'
+        + '<span class="rt-meta">子女 ' + kids.length + ' · 配偶 ' + spouses.length + '</span></article>'
+        + '<article class="rt-metric"><span class="rt-eyebrow">世代</span>'
+        + '<strong>' + esc(generation.label) + '</strong>'
+        + '<span class="rt-meta">第 ' + (generation.index + 1) + ' 代</span></article>'
+        + '</div>'
+        + '<dl class="rt-detail-rows">'
+        + '<div><dt>归属卡片</dt><dd>' + esc(node.card_name || (S.doc && S.doc.name) || '未关联') + '</dd></div>'
+        + '<div><dt>父母</dt><dd>' + esc(namesOrEmpty(parents)) + '</dd></div>'
+        + '<div><dt>子女</dt><dd>' + esc(namesOrEmpty(kids)) + '</dd></div>'
+        + '<div><dt>状态</dt><dd>' + (node.deceased ? '已故' : '在世') + '</dd></div>'
+        + '</dl>'
+        + '<div class="rt-detail-chips">'
+        + '<span>' + esc(role) + '</span>'
+        + (node.card_name ? '<span>' + esc(node.card_name) + '</span>' : '')
+        + '<span>' + (node.deceased ? '已故' : '在世') + '</span>'
+        + '</div>';
+    }
+
+    var relationChips = edges.map(function (edge) {
+      var text = labelOf(edge.kind, edge.label) || '关系';
+      return '<span>' + esc(text) + ' · ' + esc(nameOf(otherEnd(edge, node.id))) + '</span>';
+    }).join('');
+    if (relationChips) html += '<div class="rt-detail-chips rt-detail-chips--links">' + relationChips + '</div>';
+
+    if (!READONLY) {
+      html += '<div class="rt-detail-actions">'
+        + '<button type="button" class="rt-detail-btn is-primary" data-detail-action="edit">'
+        + '<span data-icon="pen-line" data-icon-size="14"></span> 编辑</button>'
+        + (node.kind === 'note' ? '' :
+          '<button type="button" class="rt-detail-btn" data-detail-action="link">'
+          + '<span data-icon="arrow-right" data-icon-size="14"></span> 关联人物</button>')
+        + '<button type="button" class="rt-detail-btn is-danger" data-detail-action="delete" aria-label="删除">'
+        + '<span data-icon="trash-2" data-icon-size="14"></span> 删除</button>'
+        + '</div>';
+    }
+
+    host.innerHTML = html;
+    hydrateIcons(host);
+  }
+
+  function namesOrEmpty(ids) {
+    if (!ids.length) return '—';
+    return ids.map(nameOf).join('、');
+  }
+
+  /* ------------------------------------------------------ 搜索 / 筛选 */
+  var filterState = { query: '', kind: 'all' };
+
+  function nodeMatches(node) {
+    var query = filterState.query;
+    if (query) {
+      var hay = [node.name, node.note, node.subtitle, node.card_name].join(' ').toLowerCase();
+      var viaEdge = edgesOf(node.id).some(function (edge) {
+        var text = (labelOf(edge.kind, edge.label) + ' ' + nameOf(otherEnd(edge, node.id))).toLowerCase();
+        return text.indexOf(query) >= 0;
+      });
+      if (hay.indexOf(query) < 0 && !viaEdge) return false;
+    }
+    var kind = filterState.kind;
+    if (kind === 'all') return true;
+    if (kind === 'favourite') return !!node.favourite;
+    var pool = kind === 'blood' ? BLOOD_KINDS : MARRIAGE_KINDS;
+    return edgesOf(node.id).some(function (edge) { return !!pool[edge.kind]; });
+  }
+
+  function edgeMatches(edge) {
+    var kind = filterState.kind;
+    if (kind === 'blood' && !BLOOD_KINDS[edge.kind]) return false;
+    if (kind === 'marriage' && !MARRIAGE_KINDS[edge.kind]) return false;
+    if (kind === 'favourite') return true;
+    var query = filterState.query;
+    if (!query) return true;
+    var hay = (labelOf(edge.kind, edge.label) + ' ' + nameOf(edge.source) + ' ' + nameOf(edge.target)).toLowerCase();
+    return hay.indexOf(query) >= 0;
+  }
+
+  function applyFilter() {
+    var active = filterState.kind !== 'all' || !!filterState.query;
+    var matched = Object.create(null);
+    var any = false;
+    S.nodes.forEach(function (node) {
+      if (nodeMatches(node)) { matched[node.id] = true; any = true; }
+    });
+    // 筛到一个人都不剩时退回"全部"——空画布比失焦更让人困惑
+    if (active && !any) matched = null;
+
+    Array.prototype.forEach.call(document.querySelectorAll('#rtNodes .rt-node'), function (el) {
+      el.classList.toggle('is-dim', !!matched && !matched[Number(el.dataset.node)]);
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('#rtEdges .rt-edge'), function (el) {
+      var edge = edgeById(el.getAttribute('data-edge'));
+      var ok = edge ? edgeMatches(edge) : true;
+      if (ok && edge && matched) ok = !!(matched[edge.source] || matched[edge.target]);
+      if (!edge) ok = true;
+      el.classList.toggle('is-dim', active && !ok && !!matched);
+    });
+  }
+
+  function edgeById(id) {
+    for (var i = 0; i < S.edges.length; i++) {
+      if (String(S.edges[i].id) === String(id)) return S.edges[i];
+    }
+    return null;
+  }
+
+  function updateStats() {
+    var host = $('rtTreeStats');
+    if (!host) return;
+    var people = visibleNodes().filter(function (node) { return node.kind !== 'note'; }).length;
+    var active = visibleEdges().length;
+    host.textContent = '共 ' + people + ' 位人物 · ' + active + ' 条关系'
+      + (S.eraId && active !== S.edges.length ? '（本时代）' : '');
   }
 
   function nodeElement(node) {
@@ -815,16 +1078,14 @@
       body = '<div class="rt-card"><div class="rt-note-body">' + esc(node.note || '点两下写点什么') + '</div>' +
         '<div class="rt-name">备注</div></div>';
     } else {
-      if (node.name || node.image) {
-        // 有名字（或有头像）才画"人像"，否则留空 —— 空卡就该是那张虚线框加号卡
-        var portrait = node.image
-          ? '<img src="' + esc(node.image) + '" alt="" draggable="false" />'
-          : esc(initial(node.name));
-        body = '<div class="rt-card"><div class="rt-portrait">' + portrait + '</div></div>';
-      } else {
-        body = '<div class="rt-card"></div>';
-      }
-      body += '<div class="rt-name">' + esc(node.name || '添加名称') + '</div>';
+      // 横向三行信息卡：眉标（身份）→ 姓名 → 元信息（归属 · 状态）
+      var meta = [node.card_name || (S.doc && S.doc.name), node.deceased ? '已故' : '在世']
+        .filter(Boolean).join(' · ');
+      body = '<div class="rt-card">'
+        + '<span class="rt-eyebrow">' + esc(roleOf(node)) + '</span>'
+        + '<span class="rt-name">' + esc(node.name || '添加名称') + '</span>'
+        + '<span class="rt-meta">' + esc(meta) + '</span>'
+        + '</div>';
     }
     el.innerHTML = body;
 
@@ -880,6 +1141,20 @@
       el.classList.toggle('is-selected', Number(el.dataset.node) === id);
     });
     renderCardTools();
+    renderDetail();
+  }
+
+  /* §4.5 联动：把一张卡对应的节点选中。只改高亮，不缩放、不跳转——
+     工作区里翻到哪张卡，这边就亮哪个人，正在看的树不会被拽走。 */
+  var focusApplied = false;
+
+  function focusCard(cardId) {
+    if (!cardId) return false;
+    var nodes = visibleNodes();
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].card === cardId) { select(nodes[i].id); return true; }
+    }
+    return false;
   }
 
   /* -------------------------------------------------------- 平移 / 缩放 */
@@ -925,15 +1200,16 @@
     var wrap = $('rtCanvasWrap');
     var rect = wrap.getBoundingClientRect();
     if (!rect.width) { requestAnimationFrame(fit); return; }
-    if (!S.nodes.length) {
+    var nodes = visibleNodes();
+    if (!nodes.length) {
       S.view = { x: 40, y: 40, z: 1 };
       applyView();
       return;
     }
-    var minX = Math.min.apply(null, S.nodes.map(function (n) { return n.x; }));
-    var minY = Math.min.apply(null, S.nodes.map(function (n) { return n.y; }));
-    var maxX = Math.max.apply(null, S.nodes.map(function (n) { return n.x + cardW(); }));
-    var maxY = Math.max.apply(null, S.nodes.map(function (n) { return n.y + cardH(); }));
+    var minX = Math.min.apply(null, nodes.map(function (n) { return n.x; }));
+    var minY = Math.min.apply(null, nodes.map(function (n) { return n.y; }));
+    var maxX = Math.max.apply(null, nodes.map(function (n) { return n.x + cardW(); }));
+    var maxY = Math.max.apply(null, nodes.map(function (n) { return n.y + cardH(); }));
     var pad = 70;
     var scale = Math.min(
       (rect.width - pad * 2) / (maxX - minX),
@@ -1389,7 +1665,9 @@
         saveNode(node, { name: value });
       } else if (!save) {
         renderNodes();
+        applyFilter();
       }
+      renderDetail();
     }
     input.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') { event.preventDefault(); commit(true); }
@@ -1469,6 +1747,8 @@
       }).then(function (data) {
         node.card = data.node.card;
         node.card_name = data.document.name;
+        render();
+        renderCardTools();
         toast('已创建卡片「' + data.document.name + '」');
       }).catch(function (err) { toast(err.message || '创建卡片失败'); });
       return;
@@ -1479,7 +1759,7 @@
         if (url === null) return;
         node.image = url.trim();
         saveNode(node, { image: node.image });
-        renderNodes();
+        render();
         renderCardTools();
       });
       return;
@@ -1487,29 +1767,36 @@
     if (tool === 'deceased') {
       node.deceased = !node.deceased;
       saveNode(node, { deceased: node.deceased });
-      renderNodes();
+      render();
       renderCardTools();
       return;
     }
     if (tool === 'favourite') {
       node.favourite = !node.favourite;
       saveNode(node, { favourite: node.favourite });
+      renderNodes();
       renderCardTools();
+      renderDetail();
+      applyFilter();
       return;
     }
-    if (tool === 'delete') {
-      if (!window.confirm('删除「' + (node.name || '这张卡') + '」？连在它上面的关系也会一起删掉。')) return;
-      api(API + '/tree-nodes/' + node.id, { method: 'DELETE' }).then(function () {
-        S.nodes = S.nodes.filter(function (item) { return item.id !== node.id; });
-        S.edges = S.edges.filter(function (edge) {
-          return edge.source !== node.id && edge.target !== node.id;
-        });
-        S.selected = null;
-        render();
-        renderCardTools();
-      }).catch(function (err) { toast(err.message || '删除失败'); });
-    }
+    if (tool === 'delete') { removeNode(node); }
   });
+
+  /* 删除人物 / 备注：卡片工具条与右侧详情栏共用同一条路径 */
+  function removeNode(node) {
+    if (!node) return;
+    if (!window.confirm('删除「' + (node.name || '这张卡') + '」？连在它上面的关系也会一起删掉。')) return;
+    api(API + '/tree-nodes/' + node.id, { method: 'DELETE' }).then(function () {
+      S.nodes = S.nodes.filter(function (item) { return item.id !== node.id; });
+      S.edges = S.edges.filter(function (edge) {
+        return edge.source !== node.id && edge.target !== node.id;
+      });
+      S.selected = null;
+      render();
+      renderCardTools();
+    }).catch(function (err) { toast(err.message || '删除失败'); });
+  }
 
   function assignCard(node) {
     pickDocument('分配哪张现有卡片？输入名字（留空看全部）').then(function (picked) {
@@ -1546,6 +1833,13 @@
     }, window.location.origin);
   }
 
+  /* 工作区选中一张卡时广播过来：这边只负责把它亮起来。 */
+  window.addEventListener('message', function (event) {
+    if (event.origin !== window.location.origin) return;
+    var data = event.data || {};
+    if (data.type === 'ws-focus-card') focusCard(Number(data.cardId) || 0);
+  });
+
   /* ------------------------------------------------------------ 落库 */
   var pendingTimers = Object.create(null);
 
@@ -1566,6 +1860,23 @@
       .catch(function (err) { saveState('没存上', 'error'); toast(err.message || '保存失败'); });
   }
 
+  function spanTextOf(edge) {
+    if (edge.start_year == null && edge.end_year == null) return '';
+    return (edge.start_year == null ? '' : edge.start_year)
+      + ' ~ ' + (edge.end_year == null ? '' : edge.end_year);
+  }
+
+  function parseSpanText(text) {
+    var parts = String(text == null ? '' : text).split(/[,，~～]/);
+    var toYear = function (raw) {
+      var value = String(raw == null ? '' : raw).trim();
+      if (!value) return null;
+      var num = parseFloat(value);
+      return isNaN(num) ? null : num;
+    };
+    return { start: toYear(parts[0]), end: toYear(parts[1]) };
+  }
+
   function editEdge(edge) {
     var current = labelOf(edge.kind, edge.label);
     askText({ label: '这条关系叫什么？（留空即删除这条关系）', value: current }).then(function (value) {
@@ -1579,12 +1890,27 @@
         }).catch(function (err) { toast(err.message || '删除失败'); });
         return;
       }
-      api(API + '/tree-edges/' + edge.id, { method: 'PUT', body: { label: label } })
-        .then(function (data) {
+      // 有效区间（§4.4 D）：留空 = 一直有效；只填一端 = 那一端不设限。
+      askText({
+        label: '有效区间：起始年, 结束年（留空 = 一直有效）',
+        value: spanTextOf(edge)
+      }).then(function (spanInput) {
+        if (spanInput === null) return;
+        var span = parseSpanText(spanInput);
+        if (span.start != null && span.end != null && span.start > span.end) {
+          toast('起始年不能晚于结束年');
+          return;
+        }
+        api(API + '/tree-edges/' + edge.id, {
+          method: 'PUT',
+          body: { label: label, start_year: span.start, end_year: span.end }
+        }).then(function (data) {
           edge.label = data.label;
+          edge.start_year = data.start_year;
+          edge.end_year = data.end_year;
           render();
-        })
-        .catch(function (err) { toast(err.message || '改名失败'); });
+        }).catch(function (err) { toast(err.message || '保存失败'); });
+      });
     });
   }
 
@@ -1626,6 +1952,52 @@
     if (button.dataset.action === 'zoom-out') zoomBy(1 / 1.15);
     if (button.dataset.action === 'fit') fit();
   });
+
+  /* ------------------------------------------- 搜索 / 筛选 / 右侧详情栏 */
+  var searchInput = $('rtSearch');
+  if (searchInput) {
+    var runSearch = function () {
+      filterState.query = searchInput.value.trim().toLowerCase();
+      applyFilter();
+    };
+    searchInput.addEventListener('input', runSearch);
+    searchInput.addEventListener('search', runSearch);
+  }
+
+  var filterGroup = document.querySelector('.rt-filter-group');
+  if (filterGroup) {
+    filterGroup.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-filter]');
+      if (!button) return;
+      filterState.kind = button.dataset.filter || 'all';
+      Array.prototype.forEach.call(filterGroup.querySelectorAll('[data-filter]'), function (other) {
+        var on = other === button;
+        other.classList.toggle('is-active', on);
+        other.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      applyFilter();
+    });
+  }
+
+  var detailHost = $('rtNodeDetail');
+  if (detailHost) {
+    detailHost.addEventListener('click', function (event) {
+      if (READONLY) return;
+      var button = event.target.closest('[data-detail-action]');
+      if (!button) return;
+      var node = S.selected != null ? nodeById(S.selected) : null;
+      if (!node) return;
+      var action = button.dataset.detailAction;
+      if (action === 'delete') { removeNode(node); return; }
+      var el = document.querySelector('.rt-node[data-node="' + node.id + '"]');
+      if (action === 'edit') {
+        if (!el) return;
+        if (node.kind === 'note') editNote(node, el); else editName(node, el);
+        return;
+      }
+      if (action === 'link') openRelations(node.id, 'e');
+    });
+  }
 
   /* 关系清单编辑器：和第二步那个左栏是同一套数据，只是搬到了编辑区里 */
   function openRelationEditor() {

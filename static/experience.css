@@ -149,6 +149,10 @@ html.xp-splash .osplash {
   to   { translate: 0 100vh; opacity: 0; }
 }
 .osplash-mark { width: 56px; height: 56px; display: block; }
+/* 标记本身也要跟着明暗档走：浅色启动屏上不能留一圈近白描边 */
+.osplash-mark .osm-ring { stroke: var(--tx-ink); }
+.osplash-mark .osm-tri { stroke: var(--tx-green); }
+.osplash-mark .osm-node { fill: var(--tx-green); }
 /* 整枚标记要在启动屏收掉之前画完：三段加起来约 370ms，
    配合 experience.js 的 MIN_MS=460，人看到的是"画完 → 停一拍 → 揭开"。 */
 .osplash-mark .osm-ring {

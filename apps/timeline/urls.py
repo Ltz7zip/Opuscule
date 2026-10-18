@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """时间轴的 URL 表（所有路径结尾都不带斜杠）。
 
-``/legacy`` 是独立成页的入口，``/world/timeline/<doc_id>`` 是被工作区嵌入的
-同一套编辑器，其余 ``/api/*`` 是它自身的 JSON 接口。
+页面入口（``/w/<slug>/timeline`` 与嵌入版）由项目总路由接管，因为要带世界 slug；
+这里只剩它自身的 ``/api/*`` JSON 接口。
 """
 
 from django.urls import path, re_path
@@ -13,11 +13,6 @@ from . import views
 app_name = "timeline"
 
 urlpatterns = [
-    # 独立成页的经典时间轴挪到 /legacy：首页现在跳工作区，工作区里嵌的是同一个模板
-    path("legacy", views.index, name="index"),
-    # 工作区里嵌入的经典编辑器（接口走 world 的时间线文档）
-    path("world/timeline/<int:doc_id>", views.classic_embedded, name="classic-embedded"),
-
     path("api/timeline", views.timeline, name="timeline"),
     path("api/items", views.item_collection, name="item-collection"),
     path("api/items/<int:item_id>", views.item_detail, name="item-detail"),

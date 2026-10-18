@@ -30,7 +30,11 @@
         <li class="era-event">
           <span class="ee-date">{{ row.date_label }}</span>
           <span class="ee-body">
-            <a class="ee-title" href="{% url 'site:page' world.published_slug row.document.slug %}">{{ row.title }}</a>
+            {% if row.document %}
+              <a class="ee-title" href="{% url 'site:page' world.published_slug row.document.slug %}">{{ row.title }}</a>
+            {% else %}
+              <span class="ee-title">{{ row.title }}</span>
+            {% endif %}
             {% if row.description %}<span class="ee-desc">{{ row.description }}</span>{% endif %}
             {% if row.cards %}
               <span class="ee-cards">

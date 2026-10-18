@@ -1,5 +1,5 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN" data-theme="{{ theme_mode }}">
+<html lang="zh-CN" data-theme="{% if embed %}{{ theme_mode }}{% else %}light{% endif %}"{% if not embed %} class="rt-shell"{% endif %}>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,14 +20,18 @@
   <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射 --tx-* 等变量、不含选择器；靠"变量使用时求值"在最后统一改写取值。删掉即回滚 -->
   <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
 </head>
-<body class="rt-body{% if embed %} is-embed{% endif %}{% if paper %} is-paper{% endif %}">
+<body class="rt-body{% if embed %} is-embed{% endif %}{% if embed and paper %} is-paper{% endif %}">
   <div class="rt-app" id="rtApp"
        data-doc="{{ doc_id }}"
        data-doc-missing="{{ doc_missing|yesno:'1,0' }}"
+       data-era="{{ era_id }}"
+       data-focus="{{ focus_card }}"
        data-embed="{{ embed|yesno:'1,0' }}"
        data-readonly="{{ readonly|yesno:'1,0' }}"
-       data-templates-url="/api/world/relationship/templates"
-       data-trees-url="/api/world/relationship/trees">
+       data-api-base="{{ api_base }}"
+       data-page-base="{{ page_base }}"
+       data-templates-url="{{ api_base }}/relationship/templates"
+       data-trees-url="{{ api_base }}/relationship/trees">
 
     <!-- ================= 第一步：选模版（图1） ================= -->
     <section class="rt-screen rt-screen--picker" data-screen="picker">
@@ -102,9 +106,16 @@
     <!-- ================= 第三步：编辑区（图4-图7） ================= -->
     <section class="rt-screen rt-screen--editor" data-screen="editor" hidden>
       <header class="rt-topbar">
-        <a class="rt-topbar-back" href="/relationship" title="回到模版选择">
-          <span data-icon="chevron-left" data-icon-size="18"></span>
+        <a class="rt-topbar-back" href="{{ page_base }}" title="返回工作台">
+          <span data-icon="arrow-left" data-icon-size="16"></span> 工作台
         </a>
+        <nav class="rt-crumbs" aria-label="面包屑">
+          <a href="{{ page_base }}">工作台</a>
+          <span class="sep" aria-hidden="true">/</span>
+          <a href="{{ page_base }}">世界观</a>
+          <span class="sep" aria-hidden="true">/</span>
+          <span class="current" aria-current="page">关系树</span>
+        </nav>
         <div class="rt-topbar-title">
           <strong id="rtDocName">关系树</strong>
           <span class="rt-chip" id="rtKindChip">家庭</span>
@@ -123,32 +134,75 @@
              title="在新标签页里全屏编辑" aria-label="在新标签页里全屏编辑">
             <span data-icon="external-link" data-icon-size="15"></span>
           </a>
-          <span class="rt-save" id="rtSaveState">已保存</span>
+          <span class="rt-save" id="rtSaveState" role="status" aria-live="polite">已保存</span>
         </div>
       </header>
 
-      <div class="rt-canvas-wrap" id="rtCanvasWrap">
-        <div class="rt-grid" id="rtGrid" data-grid-canvas>
-          <svg class="rt-edges" id="rtEdges" aria-hidden="true"></svg>
-          <div class="rt-nodes" id="rtNodes"></div>
-          <svg class="rt-edges rt-edges--live" id="rtLive" aria-hidden="true"></svg>
-        </div>
+      <div class="rt-editor-body">
+        <section class="rt-editor-main" aria-label="关系图画布">
+          <div class="rt-filters">
+            <label class="rt-search" for="rtSearch">
+              <span data-icon="search" data-icon-size="15" aria-hidden="true"></span>
+              <input type="search" id="rtSearch" placeholder="搜索人物、关系…"
+                     aria-label="搜索人物或关系" autocomplete="off" />
+              <span class="rt-search-filter" aria-hidden="true">
+                <span data-icon="funnel" data-icon-size="14"></span> 筛选
+              </span>
+            </label>
+            <div class="rt-filter-group" role="group" aria-label="关系类型筛选">
+              <button type="button" class="rt-filter is-active" data-filter="all" aria-pressed="true">全部</button>
+              <button type="button" class="rt-filter" data-filter="blood" aria-pressed="false">血缘</button>
+              <button type="button" class="rt-filter" data-filter="marriage" aria-pressed="false">婚姻</button>
+              <button type="button" class="rt-filter" data-filter="favourite" aria-pressed="false">
+                <span data-icon="star" data-icon-size="13"></span> 重点
+              </button>
+            </div>
+          </div>
 
-        <div class="rt-zoom">
-          <button type="button" data-action="zoom-in" title="放大" aria-label="放大">
-            <span data-icon="zoom-in" data-icon-size="16"></span>
-          </button>
-          <button type="button" data-action="zoom-out" title="缩小" aria-label="缩小">
-            <span data-icon="zoom-out" data-icon-size="16"></span>
-          </button>
-          <button type="button" data-action="fit" title="缩放到适应" aria-label="缩放到适应">
-            <span data-icon="maximize" data-icon-size="16"></span>
-          </button>
-        </div>
+          <div class="rt-canvas-wrap" id="rtCanvasWrap">
+            <div class="rt-grid" id="rtGrid" data-grid-canvas>
+              <svg class="rt-edges" id="rtEdges" aria-hidden="true"></svg>
+              <div class="rt-nodes" id="rtNodes"></div>
+              <svg class="rt-edges rt-edges--live" id="rtLive" aria-hidden="true"></svg>
+            </div>
 
-        <p class="rt-empty-hint" id="rtEmptyHint">
-          在空白处 <b>右键</b> 就能添加人物
-        </p>
+            <div class="rt-zoom">
+              <button type="button" data-action="zoom-in" title="放大" aria-label="放大">
+                <span data-icon="zoom-in" data-icon-size="16"></span>
+              </button>
+              <button type="button" data-action="zoom-out" title="缩小" aria-label="缩小">
+                <span data-icon="zoom-out" data-icon-size="16"></span>
+              </button>
+              <button type="button" data-action="fit" title="缩放到适应" aria-label="缩放到适应">
+                <span data-icon="maximize" data-icon-size="16"></span>
+              </button>
+            </div>
+
+            <div class="rt-legend" id="rtLegend" aria-label="图例">
+              <span><i class="rt-legend-line" aria-hidden="true"></i> 血缘</span>
+              <span><i class="rt-legend-line rt-legend-line--dashed" aria-hidden="true"></i> 婚姻</span>
+            </div>
+
+            <p class="rt-empty-hint" id="rtEmptyHint">
+              在空白处 <b>右键</b> 就能添加人物
+            </p>
+          </div>
+
+          <p class="rt-hint">在空白处 <b>右键</b> 就能添加人物 · 拖动节点可调整位置</p>
+        </section>
+
+        <aside class="rt-detail" id="rtNodeDetail" aria-label="人物详情"></aside>
+      </div>
+
+      <div class="rt-bottomnav">
+        <nav class="rt-bottomnav-tabs" aria-label="主导航">
+          <a href="{{ page_base }}">工作台</a>
+          <a href="{{ page_base }}/timeline">时间线</a>
+          <a class="is-active" href="{{ page_base }}/relation" aria-current="page">关系树</a>
+          <a href="{{ page_base }}/map">地图</a>
+          <a href="/explore">探索</a>
+        </nav>
+        <span class="rt-bottomnav-meta" id="rtTreeStats">共 0 位人物 · 0 条关系</span>
       </div>
     </section>
 
@@ -160,7 +214,7 @@
         <p id="rtErrorText">它可能已经被删掉了。</p>
         <div class="rt-error-actions">
           <button type="button" class="rt-btn" id="rtErrorRetry">重试</button>
-          <a class="rt-btn rt-btn--primary rt-error-home" href="/relationship">回到模版选择</a>
+          <a class="rt-btn rt-btn--primary rt-error-home" href="{{ page_base }}/relation">回到模版选择</a>
         </div>
       </div>
     </section>
@@ -219,6 +273,13 @@
   </div>
 
   <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
+  <script>
+    window.__WORLD__ = {
+      slug: "{{ world.slug|escapejs }}",
+      apiBase: "{{ api_base|escapejs }}",
+      pageBase: "{{ page_base|escapejs }}"
+    };
+  </script>
   <script src="{% static 'relationship.js' %}?v={{ static_version }}"></script>
   <!-- 体验层：导航进度线 / Ripple / 骨架屏 / 离线徽标 / 焦点与离开处理 -->
   <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>

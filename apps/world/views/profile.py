@@ -257,6 +257,18 @@ def _notice_variant(message: str) -> dict:
     }
 
 
+def _safe_next(request) -> str:
+    """登录 / 注册后回到哪儿：只认站内相对路径，挡掉开放重定向。
+
+    页面守门把游客送来时带的是 ``/login?next=<原路径>``，登录成功要能回原地；
+    但 ``next`` 是用户可控的，``//evil.com`` 之类必须拒绝。
+    """
+    target = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    if target.startswith("/") and not target.startswith("//"):
+        return target
+    return ""
+
+
 def _auth_page(request, mode: str = "login", error: str = "", status: int = 200):
     """登录 / 注册页的公共渲染。"""
     world = current_world_or_none()
@@ -302,6 +314,8 @@ def _auth_page(request, mode: str = "login", error: str = "", status: int = 200)
         "email": request.POST.get("email", ""),
         "invite": request.POST.get("invite") or request.GET.get("invite", ""),
         "invite_hint": invite_hint,
+        # 登录 / 注册成功后回原地（守门跳转带来的那个 next）
+        "next": _safe_next(request),
     }, status=status)
 
 
@@ -311,7 +325,7 @@ def login_page(request):
     from django.contrib.auth import authenticate, login
 
     if request.user.is_authenticated:
-        return redirect("/world")
+        return redirect(_safe_next(request) or "/w/")
     if request.method != "POST":
         if not permissions.users_exist():
             return redirect("/register")
@@ -328,14 +342,14 @@ def login_page(request):
     _login_throttle_reset(username)
     login(request, user)
     _activate_default_world(request, user)
-    return redirect("/world")
+    return redirect(_safe_next(request) or "/w/")
 
 
 @require_http_methods(["GET", "POST"])
 def register_page(request):
     """注册页（表单）。必须有有效邀请码才能注册（首个账号除外）。"""
     if request.user.is_authenticated:
-        return redirect("/world")
+        return redirect(_safe_next(request) or "/w/")
     if request.method != "POST":
         return _auth_page(request, "register")
 
@@ -353,16 +367,16 @@ def register_page(request):
     user, message, _created_owner, _world = _register_user(payload, request)
     if user is None:
         return _auth_page(request, "register", message, status=400)
-    return redirect("/world")
+    return redirect(_safe_next(request) or "/w/")
 
 
 @require_http_methods(["GET", "POST"])
 def logout_page(request):
-    """退出并回到工作区（未登录也能看）。"""
+    """退出并回到登录页（世界选择页对游客没意义）。"""
     from django.contrib.auth import logout
 
     logout(request)
-    return redirect("/world")
+    return redirect("/login")
 
 
 @require_safe
