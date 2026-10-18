@@ -1,0 +1,105 @@
+{% load static %}<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我的世界 · Opuscule</title>
+  <meta name="description" content="挑一个世界进去，或者新建一个。" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/svg+xml" href="{% static 'brand/opuscule-mark.svg' %}" />
+  {% comment %}
+    世界选择页（/w/）：地址里没点名世界时的入口。
+    注册即得一个世界，之后的邀请 / 自建都从这里分流。样式与公开世界页同源。
+  {% endcomment %}
+  <link rel="stylesheet" href="{% static 'site.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'apple.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'terminal.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'polish.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+  <style>
+    .picker-create {
+      font: inherit; padding: 8px 18px; border: 0; border-radius: 999px;
+      background: var(--site-primary); color: #fff; cursor: pointer;
+    }
+    .picker-create[disabled] { opacity: .55; cursor: progress; }
+  </style>
+</head>
+<body class="site" data-surface="picker">
+  <a class="skip-link" href="#pickerMain">跳到正文</a>
+  <header class="nav">
+    <a class="nav-brand" href="/w/">Opuscule</a>
+    <nav class="nav-links">
+      <a href="/explore">公开世界</a>
+    </nav>
+    <nav class="nav-links" style="margin-left:auto">
+      <span style="color:var(--ink-dim)">{{ display_name }}</span>
+      <a href="/logout">退出</a>
+    </nav>
+  </header>
+
+  <main class="wrap" id="pickerMain" tabindex="-1">
+    <section class="hero">
+      <h1>我的世界</h1>
+      <p class="hero-sub">挑一个进去。每个世界有自己的时间线、关系树与地图，互不打扰。</p>
+      <p class="hero-stats">{{ worlds|length }} 个世界</p>
+    </section>
+
+    {% if worlds %}
+      <div class="grid" style="margin-top:24px">
+        {% for item in worlds %}
+          <a class="tile" href="{{ item.url }}" style="--site-primary: {{ item.color }}">
+            <span class="tile-kind">{% if item.is_current %}当前世界{% else %}/w/{{ item.slug }}{% endif %}</span>
+            <span class="tile-name">{{ item.name }}</span>
+            {% if item.description %}<span class="tile-era">{{ item.description|truncatechars:72 }}</span>{% endif %}
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty" style="margin-top:24px">你还没有任何世界。建一个空世界就能开始写。</p>
+    {% endif %}
+
+    <p style="margin-top:28px">
+      <button type="button" class="picker-create" id="pickerCreate">新建世界</button>
+      <span class="empty" id="pickerStatus" style="margin-left:10px"></span>
+    </p>
+  </main>
+
+  <footer class="foot">
+    <div>{{ app.display }} · 世界观共建工作台</div>
+    <div class="foot-meta"><a href="/explore">公开世界</a> · <a href="/logout">退出</a></div>
+  </footer>
+
+  <script>
+    // 新建世界：接口建好后返回 slug，直接进那个世界。
+    // 接口对 POST 已 csrf_exempt，这里不用再取 token。
+    document.getElementById('pickerCreate').addEventListener('click', function () {
+      var status = document.getElementById('pickerStatus');
+      var button = this;
+      button.disabled = true;
+      status.textContent = '正在创建…';
+      fetch('/api/world/worlds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ name: '新世界' })
+      }).then(function (response) {
+        return response.json().then(function (data) {
+          return { ok: response.ok, data: data };
+        });
+      }).then(function (result) {
+        if (!result.ok) {
+          throw new Error((result.data && result.data.error) || '创建失败');
+        }
+        var slug = result.data.world && result.data.world.slug;
+        if (!slug) throw new Error('创建失败');
+        window.location.href = '/w/' + encodeURIComponent(slug);
+      }).catch(function (err) {
+        button.disabled = false;
+        status.textContent = err.message || '创建失败';
+      });
+    });
+  </script>
+  <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
+</body>
+</html>

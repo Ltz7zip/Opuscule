@@ -10,9 +10,9 @@
 字段的取值规则全部收在 ``timeline.normalize`` 里，模型本身只负责存储，
 所以写入路径（接口 / admin / 导入脚本）拿到的规范化结果始终一致。
 
-在整个项目里它是 ``world`` 主工作区之外的次应用：world 才是主战场，timeline
-只提供 ``/legacy`` 经典时间轴页面；它的数据可以用 world 的 ``import_timeline``
-命令迁进 world 的时间线文档。
+在整个项目里它是 ``world`` 主工作区之外的次应用，而且从 0.7.0 起只剩“老数据”：
+编辑器读写的是世界的总时间线（``WorldTimeline`` + ``Era`` + ``TimelineEvent``），
+不再碰这张表。这里的条目可以用 world 的 ``import_timeline`` 命令迁进世界总时间线。
 """
 
 from django.db import models

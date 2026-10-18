@@ -19,10 +19,18 @@ from .. import permissions, version as app_version
 from ..models import AUDIENCE_PUBLIC, DOC_TYPES, MAX_OWNED_WORLDS, World
 from ..models.constants import safe_primary_color
 from ..normalize import as_int, as_text
-from apps.documents.models import Card, Presence
+from apps.documents.models import Card, Presence, WorldTimeline
 
 from .accounts import _session_expiry
-from .common import create_world, current_world, error, json_response, parse_json
+from .common import (
+    create_world,
+    current_world,
+    error,
+    json_response,
+    parse_json,
+    world_page_allowed,
+    world_page_denied,
+)
 
 
 def service_worker(request):
@@ -144,29 +152,136 @@ def explore(request):
     })
 
 
-def workspace(request):
-    """工作区页面：前端自己再拉 /api/world/state 启动。
+@require_safe
+def world_picker(request):
+    """``/w/``：没有点名世界时的入口——列出我能进的世界让人挑。
+
+    一个世界都没有时（首次安装 / 刚被别人移出）给一张空态卡片，指向新建与注册；
+    游客先登录，登录完带着 ``next`` 回到这儿。
+    """
+    if not permissions.users_exist():
+        return redirect("/register")
+    if not (request.user and request.user.is_authenticated):
+        return redirect("/login?next=%2Fw%2F")
+
+    current = permissions.current_world_or_none()
+    items = []
+    for world in permissions.worlds_for(request.user):
+        items.append({
+            "id": world.id,
+            "name": world.name,
+            "description": (world.description or "").strip(),
+            "slug": world.slug,
+            "url": permissions.workspace_path(world),
+            "color": safe_primary_color(world.theme.get("primaryColor")),
+            "is_current": bool(current and world.id == current.id),
+        })
+    return render(request, "world_picker.html", {
+        "worlds": items,
+        "current_id": current.id if current else None,
+        "display_name": request.user.get_full_name() or request.user.username,
+    })
+
+
+def workspace(request, world_slug=None):
+    """世界工作区页面：``/w/<slug>``，前端自己再拉 ``<这个前缀>/api/world/state`` 启动。
 
     ``?embed=<doc_id>``：发布站点里嵌地图 / 关系树 / 图谱画布时用——
     只渲染那一篇文档，去掉工作区外壳，默认只读。
 
-    读守门人拦的是接口，这一页本身也得挡：匿名用户没带 ``embed``（或那篇没公开）
-    就别放进工作区，送去公开世界展示页 ``/explore``（那里有登录入口）。已登录的用户
-    照常渲染——他能不能写由接口去判，这里不能重定向到 /login（登录页见到已登录会弹回
-    /world，会成死循环）。库里一个用户都没有时照旧放行：那是"首次安装"，得让人进得来
-    把世界建起来。
+    读守门人拦的是接口，这一页本身也得挡：游客没带 ``embed``（或那篇没公开）
+    送去登录（带 ``next`` 回来），登录了但不是这个世界的人给 404（不泄漏世界存在）。
+    库里一个用户都没有时照旧放行：那是"首次安装"，得让人进得来把世界建起来。
     """
+    world = permissions.current_world_or_none()
+    if world is None:
+        # 路径里的 slug 由中间件保证真实存在；走到这里说明库里还没有任何世界。
+        return redirect("/w/")
+
     embed_id = as_int(request.GET.get("embed"), 0)
     document = permissions.published_document(embed_id) if embed_id else None
+    if document is not None and document.world_id != world.id:
+        document = None
     if document is not None:
         # 让这条会话认准文档所属的世界：嵌进来的地图 / 关系树页靠会话 world_id 取数
         request.session["world_id"] = document.world_id
-    elif permissions.users_exist() and not (request.user and request.user.is_authenticated):
-        return redirect("/explore")
+    elif not world_page_allowed(request, world):
+        return world_page_denied(request, world)
     return render(request, "workspace.html", {
         "embed_doc": embed_id,
         "embed_readonly": request.GET.get("readonly", "1") not in ("0", "false", "no"),
+        "world": world,
+        "world_slug": world.slug,
+        "world_base": permissions.workspace_path(world),
     })
+
+
+# --------------------------------------------------------------------------- #
+# 旧地址：一律 302 到 /w/<slug>/…，已经发出去的链接不能断
+# --------------------------------------------------------------------------- #
+def _keep_query(request, target: str) -> str:
+    """把原请求的查询串原样带到跳转目标上（``?embed=`` / ``?doc=`` 都要留着）。"""
+    query = request.GET.urlencode()
+    return f"{target}?{query}" if query else target
+
+
+def _redirect_into_world(request, suffix: str = ""):
+    """把请求送进"当前世界"的规范地址；没有世界就回选择页。"""
+    world = permissions.current_world_or_none()
+    if world is None:
+        return redirect("/w/")
+    return redirect(_keep_query(request, f"/w/{world.slug}{suffix}"))
+
+
+def legacy_workspace(request):
+    """旧入口 ``/world``：游客去公开展示页，登录者去自己世界的规范地址。"""
+    embed_id = as_int(request.GET.get("embed"), 0)
+    if embed_id:
+        document = permissions.published_document(embed_id)
+        if document is not None:
+            return redirect(_keep_query(request, f"/w/{document.world.slug}"))
+    if permissions.users_exist() and not (request.user and request.user.is_authenticated):
+        return redirect("/explore")
+    return _redirect_into_world(request)
+
+
+def legacy_timeline(request):
+    """旧独立页 ``/legacy`` → ``/w/<slug>/timeline``。"""
+    return _redirect_into_world(request, "/timeline")
+
+
+def legacy_relationship(request):
+    """旧关系树页 ``/relationship`` → ``/w/<slug>/relation``。"""
+    return _redirect_into_world(request, "/relation")
+
+
+def legacy_map_home(request):
+    """旧地图入口 ``/map`` → ``/w/<slug>/map/2d``（原来就跳到默认那一档）。"""
+    return _redirect_into_world(request, "/map/2d")
+
+
+def legacy_map_page(request, view):
+    """旧地图页 ``/map/<view>`` → ``/w/<slug>/map/<view>``。"""
+    return _redirect_into_world(request, f"/map/{view}")
+
+
+def legacy_timeline_embedded(request, doc_id):
+    """旧嵌入页 ``/w/timeline/<doc_id>`` → ``/w/<slug>/timeline/<doc_id>``。
+
+    文档已经删了也照跳——地址里记的就是那个世界，页面自己会给出"这篇不在了"。
+    """
+    from apps.documents.models import Document
+
+    world = (Document.objects.filter(pk=doc_id)
+             .values_list("world__slug", flat=True).first())
+    if world:
+        return redirect(_keep_query(request, f"/w/{world}/timeline/{doc_id}"))
+    return _redirect_into_world(request, f"/timeline/{doc_id}")
+
+
+def legacy_w_entry(request):
+    """旧短地址 ``/w`` → ``/w/``。"""
+    return redirect(_keep_query(request, "/w/"))
 
 
 @csrf_exempt
@@ -290,21 +405,13 @@ def state(request):
         online = [entry.to_payload() for entry in Presence.online(world)]
         trash_count = world.documents.filter(deleted_at__isnull=False).count()
 
-    # 树节点带上卡片的"纪元可见性"：前端要按当前纪元标出不属于它的卡
-    era_map = {
-        card.document_id: (card.era_mode, card.era_ids if isinstance(card.era_ids, list) else [])
-        for card in Card.objects.filter(document__world=world)
+    # 每个纪元里看不见的卡片：唯一口径是 Card.visible_in_era（前端不再自己算）
+    cards = list(Card.objects.filter(document__world=world, document__deleted_at__isnull=True))
+    era_hidden = {
+        str(era.id): [card.document_id for card in cards if not card.visible_in_era(era.id)]
+        for era in world.eras.all()
     }
-
-    def annotate(nodes):
-        for node in nodes:
-            mode, ids = era_map.get(node["id"], (None, None))
-            if mode is not None:
-                node["era_mode"] = mode
-                node["era_ids"] = ids
-            annotate(node.get("children") or [])
-
-    annotate(documents)
+    timeline = WorldTimeline.objects.filter(world=world).first()
     return json_response({
         "world": world.to_payload(),
         "viewer": permissions.viewer_payload(request.user, world),
@@ -313,6 +420,10 @@ def state(request):
         "eras": [era.to_payload() for era in world.eras.all()],
         "calendars": [calendar.to_payload() for calendar in world.calendars.all()],
         "documents": documents,
+        # 纪元 -> 这一版里看不见的卡片 id（口径见 Card.visible_in_era）
+        "era_hidden": era_hidden,
+        # 世界总时间线是否有内容：侧栏「设置工作空间」进度卡靠它判断
+        "timeline_events": timeline.events.count() if timeline is not None else 0,
         "doc_types": [{"value": value, "label": label} for value, label in DOC_TYPES],
         "trash_count": trash_count,
         # 侧栏世界菜单：我能进的世界 + 现在这个是哪个（一次给全，切菜单不用再请求）

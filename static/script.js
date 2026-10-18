@@ -281,6 +281,7 @@
     renderGrid();
     // 把最后一条也删掉之后，空状态要自己回来
     if (state.loaded) syncEmptyState();
+    syncShell();
   }
 
   var bootSeq = 0;             // 开屏时给每条记录排的出场号
@@ -349,7 +350,8 @@
       var label = item.title || '未命名';
       if (n.title && n.title.textContent !== label) n.title.textContent = label;
     } else {
-      var text = item.title || '未命名';
+      var mark = item.confidence && item.confidence !== 'exact' ? '≈ ' : '';
+      var text = mark + (item.title || '未命名');
       if (n.pill && n.pill.textContent !== text) n.pill.textContent = text;
     }
   }
@@ -427,7 +429,8 @@
       root.addEventListener('pointerdown', onEraPointerDown);
       dom.erasLayer.appendChild(root);
     } else {
-      root.innerHTML = '<span class="ev-dot"></span><span class="ev-pill"></span>';
+      root.innerHTML = '<span class="ev-range"></span><span class="ev-dot"></span><span class="ev-pill"></span>';
+      node.range = root.querySelector('.ev-range');
       node.dot = root.querySelector('.ev-dot');
       node.pill = root.querySelector('.ev-pill');
       bindHover(node.dot, root);
@@ -475,6 +478,20 @@
     } else {
       n.root.className = 'ev' + (selected ? ' is-selected' : '') +
         (hovered && !selected ? ' is-hover' : '');
+      // 不确定时间：以事件为心画 ±range_years 的区间条；确信度决定线型
+      var range = Number(item.range_years) || 0;
+      if (n.range) {
+        if (range > 0) {
+          var half = range * pxPerYear();
+          n.range.style.display = 'block';
+          n.range.style.left = (-half) + 'px';
+          n.range.style.width = (half * 2) + 'px';
+          n.range.className = 'ev-range' +
+            (item.confidence && item.confidence !== 'exact' ? ' is-' + item.confidence : '');
+        } else {
+          n.range.style.display = 'none';
+        }
+      }
       var ph = PILL_H + n.level * (PILL_H + PILL_GAP);
       n.root.style.left = n.x + 'px';
       n.root.style.top = y + 'px';
@@ -1465,8 +1482,9 @@
       b.classList.toggle('is-active', b.dataset.theme === themeOf(item));
     });
     var r = dom.edCover.getBoundingClientRect();
-    dom.palette.style.left = Math.round(clamp(r.left, 8, state.width - 190)) + 'px';
-    dom.palette.style.top = Math.round(clamp(r.top - 6, 8, state.height - 70)) + 'px';
+    // 调色板是 position:fixed，夹边界要用窗口尺寸而不是画布尺寸
+    dom.palette.style.left = Math.round(clamp(r.left, 8, window.innerWidth - 190)) + 'px';
+    dom.palette.style.top = Math.round(clamp(r.top - 6, 8, window.innerHeight - 70)) + 'px';
     showPanel(dom.palette);
   }
 
@@ -1782,18 +1800,26 @@
 
   function openSettings() {
     syncSettings();
+    // 先放出来再量：hidden 时 offsetHeight 是 0，按 0 算就会把面板推到屏幕外
+    showPanel(dom.settings);
     var btn = dom.toolbar.querySelector('[data-tool="calendar"]');
     var w = 316;
-    var left = state.width / 2 - w / 2;
-    var top = Math.max(8, state.height - 200 - dom.settings.offsetHeight);
+    var h = dom.settings.offsetHeight;
+    // 面板是 position:fixed（窗口坐标），夹边界必须用窗口尺寸；
+    // 用画布尺寸的话，整页壳里右栏会把它挤到左栏上去。
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var left = vw / 2 - w / 2;
+    var top = Math.max(8, vh - 200 - h);
     if (btn) {
       var br = btn.getBoundingClientRect();
-      left = clamp(br.left + br.width / 2 - w / 2, 8, Math.max(8, state.width - w - 8));
-      top = Math.max(8, br.top - 10 - dom.settings.offsetHeight);
+      left = clamp(br.left + br.width / 2 - w / 2, 8, Math.max(8, vw - w - 8));
+      top = Math.max(8, br.top - 10 - h);
     }
+    left = clamp(left, 8, Math.max(8, vw - w - 8));
+    top = clamp(top, 8, Math.max(8, vh - h - 8));
     dom.settings.style.left = Math.round(left) + 'px';
     dom.settings.style.top = Math.round(top) + 'px';
-    showPanel(dom.settings);
   }
 
   function closeSettings() { hidePanel(dom.settings); }
@@ -1911,6 +1937,237 @@
      ].forEach(function (id) {
       dom[id] = $(id);
     });
+  }
+
+  /* ============================================================== 整页壳 */
+  /* 顶层整页（html.tl-shell）的顶栏 / 侧栏 / 右栏都是模板里的静态节点，
+     这里只把壳里的按钮接到已有能力上，并在每次渲染后把状态回写进壳。
+     iframe 态（html.tl-embed）不做任何事，只把保存提示搬回画布左下角。 */
+  var SHELL_ZOOM_BASE = 60;      // 视野跨度 60 年记为 100%（脚本默认视野）
+  var shellBound = false;
+  var shellEraSig = '';
+
+  function isShell() {
+    return document.documentElement.classList.contains('tl-shell');
+  }
+
+  function shellNode(id) { return document.getElementById(id); }
+
+  function shellPct() {
+    var span = viewSpan();
+    if (!isFinite(span) || span <= 0) return 100;
+    return Math.max(1, Math.round(SHELL_ZOOM_BASE / span * 100));
+  }
+
+  function shellMarkView(view) {
+    ['tlxTabs', 'tlxViews'].forEach(function (id) {
+      var root = shellNode(id);
+      if (!root) return;
+      Array.prototype.forEach.call(root.querySelectorAll('[data-view]'), function (b) {
+        b.classList.toggle('is-active', b.dataset.view === view);
+      });
+    });
+  }
+
+  function shellSetView(view) {
+    if (!view) return;
+    shellMarkView(view);
+    if (view === 'canvas') {
+      if (listState.open) toggleListView();
+      return;
+    }
+    if (view === 'list') {
+      if (!listState.open) toggleListView();
+      return;
+    }
+    if (view === 'calendar') openSettings();
+  }
+
+  /** 视野居中到某条记录并打开编辑卡片；zoomIn 时顺手把视野收窄一些 */
+  function shellFocusItem(item, zoomIn) {
+    if (!item) return;
+    var span = viewSpan();
+    if (zoomIn) {
+      var own = item.kind === 'era' && item.end != null ? Math.abs(item.end - item.start) : 0;
+      span = Math.min(span, Math.max(own * 2.4, SHELL_ZOOM_BASE / 8));
+    }
+    var start = item.start;
+    var end = item.end != null ? item.end : item.start;
+    var center = (start + end) / 2;
+    state.selectedId = item.id;
+    applyView(center - span / 2, center + span / 2, true);
+    openEditor(item);
+  }
+
+  function shellSearch(query) {
+    var q = (query || '').trim().toLowerCase();
+    if (!q) return;
+    var hit = null;
+    for (var i = 0; i < state.items.length; i++) {
+      var it = state.items[i];
+      if ((it.title || '').toLowerCase().indexOf(q) >= 0) { hit = it; break; }
+    }
+    if (!hit) { toast('没有找到「' + q + '」'); return; }
+    shellFocusItem(hit, true);
+  }
+
+  function shellEraButton(id, title, theme) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.id = id;
+    if (theme) b.className = 't-' + theme;
+    var dot = document.createElement('span');
+    dot.className = 'tlx-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    b.appendChild(dot);
+    b.appendChild(document.createTextNode(title));
+    return b;
+  }
+
+  function syncShellEras() {
+    var list = shellNode('tlxEraList');
+    if (!list) return;
+    var eras = state.items.filter(function (it) { return it.kind === 'era'; });
+    var sig = eras.map(function (it) {
+      return it.id + ':' + (it.title || '') + ':' + themeOf(it);
+    }).join('|');
+    if (sig !== shellEraSig) {
+      shellEraSig = sig;
+      list.innerHTML = '';
+      list.appendChild(shellEraButton('', '全部纪元', ''));
+      eras.forEach(function (it) {
+        list.appendChild(shellEraButton(it.id, it.title || '未命名', themeOf(it)));
+      });
+    }
+    var active = state.selectedId == null ? '' : String(state.selectedId);
+    Array.prototype.forEach.call(list.querySelectorAll('button'), function (b) {
+      b.classList.toggle('is-active', b.dataset.id === active);
+    });
+  }
+
+  /** 每次 render 之后同步壳内的计数、缩放、精度、选中卡与纪元列表 */
+  function syncShell() {
+    if (!shellBound || !isShell()) return;
+
+    var evs = 0, eras = 0;
+    state.items.forEach(function (it) { if (it.kind === 'era') eras++; else evs++; });
+    var count = shellNode('tlxCount');
+    if (count) count.textContent = evs + ' 个时间点 · ' + eras + ' 个纪元';
+
+    var pct = shellPct();
+    var zoomVal = shellNode('tlxZoomVal');
+    if (zoomVal) zoomVal.textContent = pct + '%';
+    var zoomFoot = shellNode('tlxZoomFoot');
+    if (zoomFoot) zoomFoot.textContent = '缩放 ' + pct + '%';
+
+    var precision = shellNode('tlxPrecision');
+    if (precision) {
+      precision.textContent = '精度：' +
+        (settings.precision === 'year' ? '年' : settings.precision === 'day' ? '日' : '月');
+    }
+
+    var item = state.selectedId != null ? byId(state.selectedId) : null;
+    var card = shellNode('tlxSelCard');
+    var empty = shellNode('tlxDetailEmpty');
+    if (card && empty) {
+      if (item) {
+        card.hidden = false;
+        empty.hidden = true;
+        shellNode('tlxSelTitle').textContent = item.title || '未命名';
+        shellNode('tlxSelMeta').textContent = item.kind === 'era'
+          ? fmtRange(item.start, item.end != null ? item.end : item.start)
+          : fmtFull(item.start);
+        shellNode('tlxSelKind').textContent = item.kind === 'era' ? '纪元' : '时间点';
+      } else {
+        card.hidden = true;
+        empty.hidden = false;
+      }
+    }
+
+    syncShellEras();
+  }
+
+  function bindShell() {
+    if (!isShell()) {
+      // iframe 态顶栏整体隐藏，保存提示要搬回画布左下角才有地方显示
+      if (dom.saveChip && dom.saveChip.parentNode !== dom.viewport) {
+        dom.viewport.appendChild(dom.saveChip);
+      }
+      return;
+    }
+    if (shellBound) return;
+    shellBound = true;
+
+    var newNode = shellNode('tlxNewEvent');
+    if (newNode) newNode.addEventListener('click', function () { createEventAt(centerTime()); });
+
+    var panLeft = shellNode('tlxPanLeft');
+    if (panLeft) panLeft.addEventListener('click', function () { panBy(-0.5); });
+    var panRight = shellNode('tlxPanRight');
+    if (panRight) panRight.addEventListener('click', function () { panBy(0.5); });
+
+    ['tlxTabs', 'tlxViews'].forEach(function (id) {
+      var root = shellNode(id);
+      if (!root) return;
+      Array.prototype.forEach.call(root.querySelectorAll('[data-view]'), function (b) {
+        b.addEventListener('click', function () { shellSetView(b.dataset.view); });
+      });
+    });
+
+    var calBtn = shellNode('tlxCalendarBtn');
+    if (calBtn) calBtn.addEventListener('click', function () { shellSetView('calendar'); openSettings(); });
+    var precision = shellNode('tlxPrecision');
+    if (precision) precision.addEventListener('click', function () { openSettings(); });
+
+    var save = shellNode('tlxSave');
+    if (save) save.addEventListener('click', function () { commitEditor(false); });
+
+    var openRecord = shellNode('tlxOpenRecord');
+    if (openRecord) {
+      openRecord.addEventListener('click', function () {
+        window.open(location.href, '_blank', 'noopener');
+      });
+    }
+
+    var share = shellNode('tlxShare');
+    if (share) {
+      share.addEventListener('click', function () {
+        var url = location.href;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function () { toast('链接已复制'); },
+            function () { toast(url); });
+        } else {
+          toast(url);
+        }
+      });
+    }
+
+    var search = shellNode('tlxSearch');
+    if (search) {
+      search.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        shellSearch(search.value);
+      });
+    }
+
+    var eraList = shellNode('tlxEraList');
+    if (eraList) {
+      eraList.addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (!b || !eraList.contains(b)) return;
+        if (!b.dataset.id) {
+          state.selectedId = null;
+          render();
+          fitToContent(true);
+          return;
+        }
+        var item = byId(b.dataset.id);
+        if (item) shellFocusItem(item, true);
+      });
+    }
+
+    syncShell();
   }
 
   /* ============================================================== 空状态 */
@@ -2162,6 +2419,7 @@
   function load() {
     cacheDom();
     bind();
+    bindShell();
 
     // 开屏编排：背景、轴线、工具条各自进场；数据没到之前先在轴线上走一道微光
     state.booting = true;

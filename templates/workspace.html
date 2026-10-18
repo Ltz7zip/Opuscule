@@ -42,6 +42,8 @@
   <!-- Opuscule 设计语言层（默认深色皮肤）：只重映射 --tx-* 等变量、不碰页面结构；
        靠"变量使用时求值"在最后统一改写取值。删掉这一行即可回滚。取值见 DESIGN.md -->
   <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+  <!-- AI 抽屉：聊天 / 变更集审阅 / 供应商设置（0.6.0）——只加浮层，不改动编辑器结构 -->
+  <link rel="stylesheet" href="{% static 'ai.css' %}?v={{ static_version }}" />
 </head>
 <body data-surface="workspace" data-sw="{% if sw_enabled %}1{% else %}0{% endif %}" data-sw-version="{{ static_version }}"{% if embed_doc %} class="is-embed" data-embed-doc="{{ embed_doc }}" data-embed-readonly="{{ embed_readonly|yesno:'1,0' }}"{% endif %}>
   <!-- 启动屏（DESIGN.md）：标记写在首帧里，要不要显示由 <html class="xp-splash"> 决定 -->
@@ -76,6 +78,14 @@
         <button class="tb-btn is-icon" id="redoBtn" type="button" title="重做（⇧⌘Z）" disabled>重做</button>
         <span class="tb-divider"></span>
         <button class="tb-btn" id="paletteBtn" type="button" title="命令面板">⌘K</button>
+        {# AI 入口：只读成员也可见（聊天可用），应用变更集时才按写入权限拦截 #}
+        <button class="tb-btn" id="aiBtn" type="button" title="AI 助手" aria-haspopup="dialog">AI</button>
+        <span class="tb-divider"></span>
+        {# 显式的明暗切换：按钮上写的是"点下去会切到的那一档" #}
+        <button class="tb-btn" id="themeToggle" type="button" title="切换到浅色模式" aria-pressed="true">
+          <span class="icon" id="themeToggleGlyph" aria-hidden="true"></span>
+          <span id="themeToggleText">浅色</span>
+        </button>
         <span class="tb-divider"></span>
         <span class="save-state" id="saveState" role="status" aria-live="polite" data-kind="saved"
               title="有改动会先落本地，再写回世界"><i></i><span id="saveStateText">已保存</span></span>
@@ -142,6 +152,7 @@
             <button class="sb-act" id="typesBtn" type="button">类型</button>
             <button class="sb-act" id="erasBtn" type="button">纪元</button>
             <button class="sb-act" id="themeBtn" type="button">主题</button>
+            <button class="sb-act" id="archivesBtn" type="button" title="整包存一份 / 读回某个存档">存档</button>
             <button class="sb-act" id="trashBtn" type="button">回收站</button>
           </div>
           <div class="sb-foot">
@@ -169,7 +180,7 @@
           <div class="eh-actions">
             <button class="mini-btn is-primary" id="ehGuide" type="button">用模板新建…</button>
             <button class="mini-btn" id="ehCard" type="button">新建卡片</button>
-            <button class="mini-btn" id="ehTimeline" type="button">新建时间线</button>
+            <button class="mini-btn" id="ehTimeline" type="button">打开时间线</button>
             <button class="mini-btn" id="ehImport" type="button">导入 Markdown</button>
           </div>
         </div>
@@ -218,6 +229,12 @@
        P3 起正文只有这一条渲染路径，没有 ?editor= 开关：workspace.js 在第一次要画正文时
        按需注入这两个资源（loadEditorIsland），随后从 window.OpusEditorIsland 取挂载入口。 -->
   <script>
+    // 当前世界：所有前端拼地址都从这儿取，别再硬编码 /api/world 与 /world
+    window.__WORLD__ = {
+      slug: "{{ world.slug|escapejs }}",
+      apiBase: "/w/{{ world.slug|escapejs }}/api/world",
+      pageBase: "/w/{{ world.slug|escapejs }}"
+    };
     window.OPUS_EDITOR_ASSETS = {
       js: "{% static 'editor/dist/assets/editor.js' %}?v={{ static_version }}",
       css: "{% static 'editor/dist/assets/editor.css' %}?v={{ static_version }}"
@@ -229,5 +246,8 @@
   <!-- 体验层在业务脚本之后加载：它接管 window.toast（分级/堆叠/撤销），
        并对外暴露 window.Opus（启动屏、骨架屏、切换动效、离线、焦点管理） -->
   <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
+  <!-- AI 抽屉：依赖 workspace.js 暴露的 window.__WORLD__ / S / reloadTree 等，
+       但自己不经过 api()（只读成员也要能聊天），所以放在最后加载 -->
+  <script src="{% static 'ai.js' %}?v={{ static_version }}"></script>
 </body>
 </html>

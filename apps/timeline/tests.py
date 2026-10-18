@@ -29,6 +29,8 @@ class TimelineApiTests(TestCase):
     def setUp(self):
         TimelineItem.objects.all().delete()
         TimelineView.objects.update_or_create(pk=1, defaults={"start": 1500.0, "end": 1900.0})
+        # 经典时间轴页现在挂在世界地址下（/w/<slug>/timeline），得先有个世界
+        self.world = World.objects.create(name="时间轴世界")
         self.client = Client()
 
     def post_json(self, path, payload):
@@ -39,7 +41,7 @@ class TimelineApiTests(TestCase):
 
     # ---------------------------------------------------------------- 页面 --
     def test_index_renders_with_static_urls(self):
-        resp = self.client.get("/legacy")
+        resp = self.client.get(f"/w/{self.world.slug}/timeline")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "/static/style.css")
         self.assertContains(resp, "/static/script.js")
@@ -262,13 +264,13 @@ class LegacyTimelineAccessTests(TestCase):
         self.assertNotIn("不该被匿名读到", resp.content.decode())
 
     def test_legacy_page_redirects_anonymous_to_login(self):
-        resp = self.anonymous.get("/legacy")
+        resp = self.anonymous.get(f"/w/{self.world.slug}/timeline")
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp["Location"], "/login")
+        self.assertTrue(resp["Location"].startswith("/login?next="))
 
     def test_logged_in_user_can_read(self):
         client = self._logged_in()
-        page = client.get("/legacy")
+        page = client.get(f"/w/{self.world.slug}/timeline")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "/static/style.css")
         self.assertEqual(client.get("/api/timeline").status_code, 200)
@@ -277,7 +279,7 @@ class LegacyTimelineAccessTests(TestCase):
         """库里一个账号都没有时照旧放行：否则首次安装的人连演示数据都看不见。"""
         User.objects.all().delete()
         self.assertFalse(User.objects.exists())
-        self.assertEqual(self.anonymous.get("/legacy").status_code, 200)
+        self.assertEqual(self.anonymous.get(f"/w/{self.world.slug}/timeline").status_code, 200)
         self.assertEqual(self.anonymous.get("/api/timeline").status_code, 200)
 
     def test_embedded_timeline_still_readable_for_published_doc(self):

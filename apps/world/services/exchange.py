@@ -21,7 +21,8 @@ from typing import Iterable
 from django.utils import timezone
 
 from ..normalize import normalize_blocks
-from apps.documents.models import Card, Document
+from apps.documents.models import Card, Document, Era, TimelineEvent, WorldTimeline
+from apps.world.models.constants import CONFIDENCE_EXACT, PRECISION_YEAR
 
 DOC_TYPE_LABEL = {
     "card": "卡片", "folder": "文件夹", "timeline": "时间线", "map": "地图",
@@ -182,14 +183,55 @@ def document_payload(document: Document) -> dict:
     return data
 
 
+def _era_span(era: Era) -> str:
+    if era.start_year is None:
+        return ""
+    if era.end_year is None:
+        return f"（{era.start_year:g} 年 — 至今）"
+    return f"（{era.start_year:g} – {era.end_year:g} 年）"
+
+
+def timeline_markdown(world, timeline: WorldTimeline | None = None) -> str:
+    """世界总时间线 -> Markdown：时代区间 + 事件（0.7.0 起它不再是文档）。"""
+    timeline = timeline if timeline is not None else getattr(world, "timeline", None)
+    lines = ["# 世界时间线", ""]
+    if timeline is None:
+        return "\n".join(lines)
+
+    lines.append(f"- 坐标原点：{timeline.origin_year:g} 年")
+    if timeline.calendar_id:
+        lines.append(f"- 历法：{timeline.calendar.name}")
+    lines.append("")
+
+    eras = list(world.eras.order_by("position", "id"))
+    if eras:
+        lines.extend(["## 时代", ""])
+        for era in eras:
+            lines.append(f"- **{era.name}**{_era_span(era)}")
+        lines.append("")
+
+    lines.extend(["## 事件", ""])
+    events = timeline.events.order_by("year", "month", "day", "hour", "position", "id")
+    for event in events:
+        era = f"（{event.era.name}）" if event.era_id else ""
+        links = "、".join(c.name for c in event.linked_cards.all())
+        suffix = f"（关联：{links}）" if links else ""
+        lines.append(f"- **{event.date_label()}** {event.title}{era}{suffix}")
+        if event.description:
+            lines.append(f"  - {event.description}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def world_backup(world) -> dict:
-    """整世界 JSON 备份：类型 + 纪元 + 日历 + 文档树（递归）。"""
+    """整世界 JSON 备份：类型 + 纪元 + 日历 + 总时间线 + 文档树（递归）。"""
     def walk(document: Document) -> dict:
         item = document_payload(document)
         item["children"] = [walk(child) for child in document.children.filter(deleted_at__isnull=True).order_by("position", "id")]
         return item
 
     roots = world.documents.filter(parent__isnull=True, deleted_at__isnull=True).order_by("position", "id")
+    timeline = getattr(world, "timeline", None)
     return {
         "format": "worldbuilding-timeline/backup",
         "version": 1,
@@ -198,6 +240,18 @@ def world_backup(world) -> dict:
         "types": [t.to_payload(with_properties=True) for t in world.types.all()],
         "eras": [e.to_payload() for e in world.eras.all()],
         "calendars": [c.to_payload() for c in world.calendars.all()],
+        # 0.7.0：事件挂在世界总时间线上；旧时间线文档里的事件仍随文档各存一份，
+        # 导入时按事件 id 去重，旧备份（没有 timeline 键）也能照常还原。
+        "timeline": (
+            {
+                **timeline.to_payload(),
+                "events": [
+                    e.to_payload()
+                    for e in timeline.events.order_by("year", "month", "day", "hour", "position", "id")
+                ],
+            }
+            if timeline is not None else None
+        ),
         "documents": [walk(root) for root in roots],
     }
 
@@ -223,9 +277,13 @@ def world_zip(world) -> bytes:
             f"# {world.name}\n\n"
             f"导出时间：{timezone.now().strftime('%Y-%m-%d %H:%M')}\n\n"
             "- `world.json`：完整备份，可以用工作区的「导入」原样导回来\n"
+            "- `timeline.md`：世界总时间线（时代与事件）\n"
             "- `documents/`：每份文档一个 Markdown，方便拿去别的工具\n"
             "- `media/`：媒体清单（真正的图片仍在原来的地址）\n"
         ))
+        timeline = getattr(world, "timeline", None)
+        if timeline is not None:
+            archive.writestr("timeline.md", timeline_markdown(world, timeline))
         for root in world.documents.filter(parent__isnull=True, deleted_at__isnull=True).order_by("position", "id"):
             stack = [(root, "")]
             while stack:
@@ -400,12 +458,97 @@ def import_markdown_files(world, files: list[dict], parent: Document | None = No
     }
 
 
+def _as_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_optional_float(value):
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _import_eras(world, payload: dict) -> dict:
+    """备份里的时代 -> 世界里的同名时代；没有才新建（反复导入不会堆出一串同名时代）。"""
+    era_map: dict[int, Era] = {}
+    existing = {era.name.strip().lower(): era for era in world.eras.all()}
+    for item in payload.get("eras") or []:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or "新纪元").strip()[:80] or "新纪元"
+        era = existing.get(name.lower())
+        if era is None:
+            era = Era.objects.create(
+                world=world,
+                name=name,
+                position=_as_int(item.get("position")),
+                start_year=_as_optional_float(item.get("start_year")),
+                end_year=_as_optional_float(item.get("end_year")),
+                start_precision=item.get("start_precision") or PRECISION_YEAR,
+                end_precision=item.get("end_precision") or PRECISION_YEAR,
+                theme=item.get("theme") or "blue",
+                theme_config=item.get("theme_config") if isinstance(item.get("theme_config"), dict) else {},
+                icon=item.get("icon") or "",
+                description=item.get("description") or "",
+                cover=item.get("cover") or "",
+            )
+            existing[name.lower()] = era
+        if item.get("id") is not None:
+            era_map[item.get("id")] = era
+    return era_map
+
+
+def _import_event(item: dict, timeline: WorldTimeline, doc_map: dict, era_map: dict,
+                  document: Document | None = None) -> TimelineEvent | None:
+    """备份里的一条事件 -> 世界总时间线上的事件；文档 / 时代 / 关联卡片都重新对号。"""
+    title = (item.get("title") or "").strip()[:160]
+    if not title:
+        return None
+    linked = [doc_map[c.get("id")] for c in (item.get("linked_cards") or [])
+              if isinstance(c, dict) and c.get("id") in doc_map]
+    event = TimelineEvent.objects.create(
+        timeline=timeline,
+        document=doc_map.get(item.get("document")) or document,
+        title=title,
+        precision=item.get("precision") or PRECISION_YEAR,
+        year=_as_int(item.get("year")),
+        month=_as_int(item.get("month"), 1) or 1,
+        day=_as_int(item.get("day"), 1) or 1,
+        hour=_as_int(item.get("hour")),
+        era=era_map.get(item.get("era")),
+        description=item.get("description") or "",
+        cover=item.get("cover") or "",
+        row=_as_int(item.get("row")),
+        position=_as_int(item.get("position")),
+        confidence=item.get("confidence") or CONFIDENCE_EXACT,
+        range_years=_as_float(item.get("range_years")),
+        settings=item.get("settings") if isinstance(item.get("settings"), dict) else {},
+        featured_card=doc_map.get(item.get("featured_card")),
+    )
+    if linked:
+        event.linked_cards.set(linked)
+    return event
+
+
 def import_backup(world, payload: dict) -> dict:
-    """导入 world.json 备份：按原层级重建文档。"""
+    """导入 world.json 备份：按原层级重建文档，并把时代与总时间线事件一并还原。"""
     if not isinstance(payload, dict) or "documents" not in payload:
         raise ValueError("这不是工作区导出的 world.json")
 
     created = 0
+    doc_map: dict[int, Document] = {}           # 备份里的文档 id -> 新文档
+    doc_items: list[tuple[dict, Document]] = []
 
     def build(item: dict, parent: Document | None) -> None:
         nonlocal created
@@ -427,10 +570,48 @@ def import_backup(world, payload: dict) -> dict:
             card.body = "\n".join(b.get("text", "") for b in card.blocks if isinstance(b, dict))
             card.values = card_payload.get("values") or {}
             card.save()
+        if item.get("id") is not None:
+            doc_map[item.get("id")] = document
+        doc_items.append((item, document))
         created += 1
         for child in item.get("children") or []:
             build(child, document)
 
     for root in payload.get("documents") or []:
         build(root, None)
-    return {"created": created, "folders": 0, "documents": []}
+
+    era_map = _import_eras(world, payload)
+    timeline = WorldTimeline.for_world(world)
+    imported: dict[int, TimelineEvent] = {}
+    event_count = 0
+
+    timeline_payload = payload.get("timeline")
+    if isinstance(timeline_payload, dict):
+        # 目标世界的总时间线还是空的时候才采纳备份里的坐标原点 / 视野设置
+        if not timeline.events.exists():
+            timeline.origin_year = _as_float(timeline_payload.get("origin_year"), timeline.origin_year)
+            settings_ = timeline_payload.get("settings")
+            timeline.settings = settings_ if isinstance(settings_, dict) else {}
+            timeline.save(update_fields=["origin_year", "settings", "updated_at"])
+        for item in timeline_payload.get("events") or []:
+            if not isinstance(item, dict):
+                continue
+            event = _import_event(item, timeline, doc_map, era_map)
+            if event is None:
+                continue
+            event_count += 1
+            if item.get("id") is not None:
+                imported[item.get("id")] = event
+
+    # 旧备份没有 timeline 键：事件只随旧时间线文档一起导出，这里按 id 去重后补上
+    for item, document in doc_items:
+        for event_item in item.get("events") or []:
+            if not isinstance(event_item, dict):
+                continue
+            if event_item.get("id") is not None and event_item.get("id") in imported:
+                continue
+            if _import_event(event_item, timeline, doc_map, era_map, document=document) is not None:
+                event_count += 1
+
+    return {"created": created, "folders": 0, "documents": [],
+            "events": event_count, "eras": len(era_map)}

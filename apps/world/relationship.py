@@ -19,7 +19,7 @@
 
 from __future__ import annotations
 
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_safe
 
@@ -36,15 +36,18 @@ from .relations import (
     template_payload,
     template_relations,
 )
-from apps.documents.models import Document
+from apps.documents.models import Card, Document
 from apps.graph.models import TreeEdge, TreeNode, TreeVariant
 
 #: 这些名字是"还没起过名"的意思，选完模版可以顺手替掉
 DEFAULT_TREE_NAMES = {"", "未命名", "新建关系树", "关系树"}
 
 
-def relationship_page(request):
+def relationship_page(request, world_slug=None):
     """关系树页面。``?doc=<id>`` 直接进编辑区，不带就停在模版选择那一步。
+
+    世界由路径 ``/w/<slug>/relation`` 指定（``world_slug`` 形参只是让路由签名对齐，
+    真正的解析在中间件里）；没有当前世界就回世界选择页，进不去就让对方登录 / 404。
 
     明暗跟工作区走同一条规则（``world.theme.mode``，非 light 即 dark），
     这样从工作区点「全屏编辑」跳过来不会有"闪一下换了皮肤"的割裂感。
@@ -53,7 +56,11 @@ def relationship_page(request):
     留白与圆角边框，让编辑器直接铺满那块地方。``embed`` 默认只读，
     要可编辑得显式给 ``readonly=0``。
     """
-    world = world_views.current_world()
+    world = permissions.current_world_or_none()
+    if world is None:
+        return redirect("/w/")
+    if not world_views.world_page_allowed(request, world):
+        return world_views.world_page_denied(request, world)
     # 原样留着请求的 id（别悄悄归零）：文档打不开时前端要能说"这篇不在了"，
     # 而不是把人丢回模版选择——那看着像"我的树变成了新建向导"。
     doc_id = world_views.as_int(request.GET.get("doc"), 0)
@@ -75,14 +82,24 @@ def relationship_page(request):
     # 没编辑权限的人（游客 / 只读成员）看到的也是只读画布
     if not permissions.can_edit(request.user, world):
         readonly = True
+    # 三维联动（PLAN §4.4 B）：``?era=`` 只过滤显示；``?focus=`` 高亮一张卡片对应的节点。
+    era_id = world_views.as_int(request.GET.get("era"), 0)
+    if era_id and not world.eras.filter(id=era_id).exists():
+        era_id = 0
     return render(request, "relationship.html", {
         "doc_id": doc_id,
         "doc_missing": bool(doc_id) and document is None,
+        "era_id": era_id,
+        "focus_card": world_views.as_int(request.GET.get("focus"), 0),
         "theme_mode": "light" if is_light else "dark",
         # 嵌入态：宿主是暗色外壳，画布跟着暗
         "paper": not is_light,
         "embed": embed,
         "readonly": readonly,
+        # 页面 / 接口都挂在世界下面，模板里用它拼地址
+        "world": world,
+        "page_base": f"/w/{world.slug}",
+        "api_base": f"/w/{world.slug}/api/world",
     })
 
 
@@ -272,10 +289,38 @@ def tree_detail(request, doc_id):
         return world_views.error("这个文档不是关系树")
 
     variant = _variant_or_default(document)
+    eras = list(world.eras.all())
+    # 时代可见性只在这里算一次：前端拿结果直接过滤，不再自己实现一遍口径。
+    cards = {
+        card.document_id: card
+        for card in Card.objects.filter(
+            document__world=world, document__deleted_at__isnull=True
+        )
+    }
+    era_hidden = {
+        str(era.id): [
+            doc_id for doc_id, card in cards.items() if not card.visible_in_era(era.id)
+        ]
+        for era in eras
+    }
+    edges = list(variant.edges.all())
+    era_edges = {}
+    for era in eras:
+        span = era.filter_span()
+        if span is None:            # 时代还没摆到轴上：不过滤
+            continue
+        era_edges[str(era.id)] = [
+            edge.id for edge in edges if edge.active_in_span(*span)
+        ]
     return world_views.json_response({
         "document": document.to_payload(),
         "variant": variant.to_payload(with_graph=True),
         "grid": grid_payload(),
+        # 时代区间：前端据此判断一条关系是否落在当前时代里（§4.4 D）
+        "eras": [era.to_payload() for era in eras],
+        # §4.4 B / §4.5：节点与关系在某个时代里显不显示，服务端一次算好
+        "era_hidden": era_hidden,
+        "era_edges": era_edges,
         "relation_kinds": [
             {"value": value, "label": label, "style": relation_style(value)}
             for value, label in world_views.TREE_EDGE_KINDS

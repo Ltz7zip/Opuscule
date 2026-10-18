@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from django.http import JsonResponse
+from django.shortcuts import render
 
 from . import permissions
 
@@ -35,7 +36,14 @@ class ActiveWorldMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        slug = permissions.world_slug_from_path(request.path)
         world = permissions.resolve_active_world(request)
+        if slug and world is None:
+            # 路径点名了一个不存在的世界：接口回 JSON 404，页面回 404 页。
+            # 绝不能落回"全场第一个世界"——那会把别人的世界端出来。
+            if permissions.api_path(request.path).startswith("/api/"):
+                return JsonResponse({"error": "世界不存在"}, status=404)
+            return render(request, "404.html", status=404)
         token = permissions.set_active_world(world)
         try:
             return self.get_response(request)
@@ -49,13 +57,16 @@ class ReadPermissionMiddleware:
     例外只有一处——发布站点的只读嵌入：游客带着 ``?embed=<已发布文档>`` 能读那一篇
     （见 ``permissions.allow_public_read``），其余一律拦下。未登录回 401（带
     ``need_login``，前端据此弹登录），已登录但不在这个世界回 403。
+
+    路径化后 ``/w/<slug>/api/…`` 先归一化成 ``/api/…`` 再判断前缀。
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.method in READ_METHODS and request.path.startswith(READ_PROTECTED_PREFIXES):
+        path = permissions.api_path(request.path)
+        if request.method in READ_METHODS and path.startswith(READ_PROTECTED_PREFIXES):
             world = permissions.current_world_or_none()
             if not permissions.can_read(request.user, world) and not permissions.allow_public_read(request):
                 if not request.user or not request.user.is_authenticated:
@@ -70,7 +81,7 @@ class EditPermissionMiddleware:
 
     def __call__(self, request):
         if request.method in WRITE_METHODS:
-            path = request.path
+            path = permissions.api_path(request.path)
             protected = any(path.startswith(prefix) for prefix in PROTECTED_PREFIXES)
             open_write = any(path.startswith(prefix) for prefix in permissions.OPEN_WRITE_PREFIXES)
             if protected and not open_write:

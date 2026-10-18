@@ -5,7 +5,8 @@
 不再 re-export 这里的模型（避免 ``world`` ↔ ``documents`` 导入环）。
 """
 
-from .document import Calendar, Card, Document, Era, TimelineEvent
+from .archive import WorldArchive
+from .document import Calendar, Card, Document, Era, TimelineEvent, WorldTimeline
 from .presence import Presence
 from .version import DocumentVersion
 
@@ -17,4 +18,6 @@ __all__ = [
     "Era",
     "Presence",
     "TimelineEvent",
+    "WorldArchive",
+    "WorldTimeline",
 ]

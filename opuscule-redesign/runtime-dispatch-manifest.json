@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-15T15:19:57.550Z",
+  "generated_at": "2026-10-16T17:53:29.433Z",
   "source": "build-page-dispatch-manifest.mjs",
   "mode": "library-bound",
   "summary_path": "runtime-orchestration-summary.json",
@@ -13,7 +13,7 @@
   },
   "dispatchPreflightManifest": [
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -74,10 +74,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/workspace.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/workspace.html' --title='工作区' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/workspace.html' --title='工作区' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -87,7 +87,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -119,7 +119,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -180,10 +180,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/timeline-canvas.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/timeline-canvas.html' --title='时间线画布' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/timeline-canvas.html' --title='时间线画布' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -193,7 +193,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -225,7 +225,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -286,10 +286,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/relationship-tree.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/relationship-tree.html' --title='关系树' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/relationship-tree.html' --title='关系树' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -299,7 +299,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -331,7 +331,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -392,10 +392,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-shell.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-shell.html' --title='地图外壳' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-shell.html' --title='地图外壳' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -405,7 +405,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -437,7 +437,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -498,10 +498,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-panels.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-panels.html' --title='地图面板' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-panels.html' --title='地图面板' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -511,7 +511,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -543,7 +543,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -604,10 +604,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-editor.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-editor.html' --title='地图编辑器' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/map-editor.html' --title='地图编辑器' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -617,7 +617,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -649,7 +649,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -710,10 +710,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/auth.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/auth.html' --title='登录与初始化' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/auth.html' --title='登录与初始化' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -723,7 +723,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -755,7 +755,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -816,10 +816,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/reset-password.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/reset-password.html' --title='重置密码' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/reset-password.html' --title='重置密码' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -829,7 +829,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -861,7 +861,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -922,10 +922,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/explore.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/explore.html' --title='公开世界' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/explore.html' --title='公开世界' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -935,7 +935,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -967,7 +967,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1028,10 +1028,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-base.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-base.html' --title='站点基座' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-base.html' --title='站点基座' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1041,7 +1041,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1073,7 +1073,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1134,10 +1134,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-home.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-home.html' --title='站点首页' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-home.html' --title='站点首页' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1147,7 +1147,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1179,7 +1179,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1240,10 +1240,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-document.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-document.html' --title='站点文档页' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-document.html' --title='站点文档页' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1253,7 +1253,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1285,7 +1285,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1346,10 +1346,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-era.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-era.html' --title='站点时代页' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-era.html' --title='站点时代页' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1359,7 +1359,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1391,7 +1391,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1452,10 +1452,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-search.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-search.html' --title='站点搜索' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-search.html' --title='站点搜索' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1465,7 +1465,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1497,7 +1497,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1558,10 +1558,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-password.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-password.html' --title='站点访问闸门' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-password.html' --title='站点访问闸门' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1571,7 +1571,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1603,7 +1603,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1664,10 +1664,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-missing.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-missing.html' --title='站点缺失页' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-missing.html' --title='站点缺失页' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1677,7 +1677,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1709,7 +1709,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1770,10 +1770,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-filter.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-filter.html' --title='站点筛选器' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/site-filter.html' --title='站点筛选器' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1783,7 +1783,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1815,7 +1815,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1876,10 +1876,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/maintenance.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/maintenance.html' --title='系统维护' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/maintenance.html' --title='系统维护' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1889,7 +1889,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -1921,7 +1921,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -1982,10 +1982,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/error-404.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/error-404.html' --title='404 未找到' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/error-404.html' --title='404 未找到' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -1995,7 +1995,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",
@@ -2027,7 +2027,7 @@
       "largeWorkflowFilesInTaskQuery": null
     },
     {
-      "recorded_at": "2026-10-15T15:19:57.541Z",
+      "recorded_at": "2026-10-16T17:53:29.426Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
       "packetType": "LibraryBoundPagePacket",
       "laneContract": {
@@ -2088,10 +2088,10 @@
       },
       "cssFilePath": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css",
       "htmlFilePath": "/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/error-500.html",
-      "brandPrefix": "",
+      "brandPrefix": "minimal",
       "aestheticsMode": "library-bound",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/error-500.html' --title='500 服务端错误' --lang='zh-CN' --prefix='' --replace-head",
+      "fillHtmlHeadCommand": "node '/Users/ltz2024/.trae-cn/plugins/trae-remote-official/trae-design/0.1.3/skills/solo-design/shared-runtime/deterministic-tooling/apply-html-head-contract.mjs' '/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist/colors_and_type.css' '/Users/ltz2024/PycharmProjects/worldbuilding_timeline/opuscule-redesign/pages/error-500.html' --title='500 服务端错误' --lang='zh-CN' --prefix='minimal' --replace-head",
       "headFillMode": "replace-head-after-body",
       "viewportMode": "desktop",
       "completionSchemaExpected": "full",
@@ -2101,7 +2101,7 @@
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "opuscule-redesign.design": "705f7b7a155d4b45912de80ce290d00687fdf75f2982717eb03bc23e95bec90b"
+        "opuscule-redesign.design": "c421f75b20cd9138252758faefe13ff72e1b05aaba54b8ddfaa315bbb256195f"
       },
       "contextPreflight": {
         "workflowPath": "intent-workflows/intent-page-library-bound/INTENT_WORKFLOW.md",

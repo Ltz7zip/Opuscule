@@ -15,7 +15,7 @@
           "contentHeight": 924,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-9c8f15df",
-          "measuredAt": 1792161247091
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -52,14 +52,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 0,
-        "y": 760,
+        "y": 756,
         "group": 0,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 924,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-f11e9ce2",
-          "measuredAt": 1792096233352
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -89,7 +89,7 @@
           "contentHeight": 924,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-3c6291c8",
-          "measuredAt": 1792096233352
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -119,7 +119,7 @@
           "contentHeight": 900,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-666b4213",
-          "measuredAt": 1792096233352
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -153,7 +153,7 @@
           "contentHeight": 1008,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-6df98df9",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -175,14 +175,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 0,
-        "y": 2297,
+        "y": 2305,
         "group": 1,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 900,
           "viewportWidth": 1440,
-          "sourceHash": "fnv1a-85dd3aee",
-          "measuredAt": 1792124401841
+          "sourceHash": "fnv1a-1cd6a682",
+          "measuredAt": 1792178645896
         }
       },
       "devMetadata": {
@@ -205,14 +205,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 960,
-        "y": 442,
+        "y": 508,
         "group": 1,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 1287,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-7bad43fc",
-          "measuredAt": 1792161247091
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -239,14 +239,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 0,
-        "y": 2670,
+        "y": 2678,
         "group": 1,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 924,
           "viewportWidth": 1440,
-          "sourceHash": "fnv1a-65ac39b9",
-          "measuredAt": 1792124401841
+          "sourceHash": "fnv1a-bc176440",
+          "measuredAt": 1792178645896
         }
       },
       "devMetadata": {
@@ -275,7 +275,7 @@
           "contentHeight": 1176,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-bdd03587",
-          "measuredAt": 1792161247091
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -307,7 +307,7 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 0,
-        "y": 3810,
+        "y": 3818,
         "group": 2,
         "layoutSnapshot": {
           "version": 1,
@@ -344,7 +344,7 @@
           "contentHeight": 1137,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-74ece143",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792285407762
         }
       },
       "devMetadata": {
@@ -383,7 +383,7 @@
           "contentHeight": 1733,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-06e7d8b6",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792285407762
         }
       },
       "devMetadata": {
@@ -406,14 +406,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 1440,
-        "y": 412,
+        "y": 501,
         "group": 3,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 1388,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-5a3feba3",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792285407762
         }
       },
       "devMetadata": {
@@ -443,7 +443,7 @@
           "contentHeight": 1037,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-6e31500b",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792285407762
         }
       },
       "devMetadata": {
@@ -465,14 +465,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 480,
-        "y": 453,
+        "y": 499,
         "group": 3,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 924,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-71c936c9",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792190914600
         }
       },
       "devMetadata": {
@@ -494,7 +494,7 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 480,
-        "y": 3810,
+        "y": 3818,
         "group": 3,
         "layoutSnapshot": {
           "version": 1,
@@ -524,14 +524,14 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 960,
-        "y": 927,
+        "y": 1105,
         "group": 4,
         "layoutSnapshot": {
           "version": 1,
           "contentHeight": 924,
           "viewportWidth": 1440,
           "sourceHash": "fnv1a-1337c985",
-          "measuredAt": 1792124401841
+          "measuredAt": 1792285407762
         }
       },
       "devMetadata": {
@@ -553,7 +553,7 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 0,
-        "y": 3430,
+        "y": 3438,
         "group": 4,
         "layoutSnapshot": {
           "version": 1,
@@ -582,7 +582,7 @@
       "createdAt": 1792108800000,
       "canvasData": {
         "x": 0,
-        "y": 3050,
+        "y": 3058,
         "group": 4,
         "layoutSnapshot": {
           "version": 1,
@@ -634,7 +634,7 @@
     }
   ],
   "config": {
-    "autoLayout": true,
+    "autoLayout": false,
     "deviceType": "desktop",
     "projectName": "Opuscule 世界观工作台",
     "designLibrary": {
@@ -645,6 +645,7 @@
       "path": "/Users/ltz2024/.trae-cn/design_libraries/dl_builtin_minimalist",
       "versionSource": "metadata.json"
     },
-    "showEdge": true
+    "showEdge": true,
+    "visualEditorEnabled": false
   }
 }

@@ -29,6 +29,8 @@ let list: HTMLElement | null = null;
 let count: HTMLElement | null = null;
 let state: MarkerState | null = null;
 let selected: number | null = null;
+/** ?focus= 只在首次载入时用一次，之后的重载不能把用户的选择顶掉 */
+let focusApplied = false;
 
 /** 新标注的默认外观：记在浏览器里（每张地图一份），只影响之后新建的标注 */
 const DEFAULTS_KEY = "tx.markerDefaults";
@@ -104,7 +106,7 @@ function mountDefaults(): void {
 const api = (path: string) => `${hostContext().apiBase}${path}`;
 
 async function load(): Promise<void> {
-  const { docId, docMissing } = hostContext();
+  const { docId, docMissing, eraId } = hostContext();
   if (!docId) return;
   // 文档已不存在（被删掉 / 链接过期）：顶栏写着「地图不存在」，这里也不用去戳那个 id
   if (docMissing) {
@@ -112,7 +114,9 @@ async function load(): Promise<void> {
     return;
   }
   try {
-    const response = await fetch(api(`/${docId}`), { headers: { Accept: "application/json" } });
+    // 当前纪元只管「显示哪些标注」，不改数据；不传 era 就是全部
+    const path = eraId > 0 ? `/${docId}?era=${eraId}` : `/${docId}`;
+    const response = await fetch(api(path), { headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     state = (await response.json()) as MarkerState;
   } catch (error) {
@@ -121,7 +125,32 @@ async function load(): Promise<void> {
   }
   render();
   mountDefaults();
+  if (!focusApplied) {
+    focusApplied = true;
+    applyFocus();
+  }
 }
+
+/** 工作区要求高亮某张卡片时：只在列表里选中它，不缩放、不弹编辑卡（联动不打断阅读） */
+function applyFocus(): void {
+  focusCard(hostContext().focusCardId);
+}
+
+/** 按卡片 id 选中对应标注；找不到就什么都不做。 */
+function focusCard(cardId: number): void {
+  if (!cardId || !state) return;
+  const marker = state.markers.find(entry => entry.card === cardId);
+  if (!marker) return;
+  selected = marker.id;
+  render();
+}
+
+/* 工作区选中一张卡时广播过来：这边只负责选中，不缩放、不跳转。 */
+window.addEventListener("message", event => {
+  if (event.origin !== window.location.origin) return;
+  const data = event.data || {};
+  if (data.type === "ws-focus-card") focusCard(Number(data.cardId) || 0);
+});
 
 /** 标注的中心点：库里存的是百分比，FMG 的视图坐标是地图单位 */
 function centerOf(marker: Marker): [number, number] {

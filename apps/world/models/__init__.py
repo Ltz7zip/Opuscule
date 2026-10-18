@@ -67,6 +67,15 @@ from .constants import (
     PRECISION_TIME,
     PRECISIONS,
     PRECISION_ORDER,
+    # 事件确信度（模糊 / 相对时间）
+    CONFIDENCE_EXACT,
+    CONFIDENCE_APPROX,
+    CONFIDENCE_LEGEND,
+    CONFIDENCES,
+    # 世界存档
+    ARCHIVE_MANUAL,
+    ARCHIVE_AUTO,
+    ARCHIVE_KINDS,
     # 日历
     CAL_EARTH,
     CAL_CUSTOM,
@@ -120,6 +129,7 @@ from .constants import (
     REPORT_STATUSES,
     # 版本
     MAX_VERSIONS,
+    MAX_ARCHIVES,
     # 世界配额
     MAX_OWNED_WORLDS,
     # 工具函数

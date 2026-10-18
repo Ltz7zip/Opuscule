@@ -17,6 +17,9 @@ export interface HostContext {
   theme: string;
   apiBase: string;
   lang: string;
+  //: 三维联动（PLAN §4.4 B）：当前纪元（0 = 全部）+ 要高亮的卡片（0 = 无）
+  eraId: number;
+  focusCardId: number;
 }
 
 const FALLBACK: HostContext = {
@@ -29,7 +32,9 @@ const FALLBACK: HostContext = {
   canEdit: false,
   theme: "dark",
   apiBase: "/api/world/maps",
-  lang: "zh"
+  lang: "zh",
+  eraId: 0,
+  focusCardId: 0
 };
 
 /** 是否跑在宿主的页面里（由构建期注入的 window.__OPUSCULE_HOSTED__ 标记） */

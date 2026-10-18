@@ -29,6 +29,21 @@
 
 'use strict';
 
+/* ------------------------------------------------- 地址：当前世界的前缀
+   页面里所有接口 / 页面链接都从这儿拼，别在下面各处再写死 /api/world 与 /world。
+   window.__WORLD__ 由 workspace.html 注入；老页面（没注入）退回旧前缀，行为不变。 */
+const WORLD = window.__WORLD__ || {};
+const API_BASE = WORLD.apiBase || '/api/world';
+const PAGE_BASE = WORLD.pageBase || '/w';
+const GLOBAL_API = ['/api/world/auth/', '/api/world/account/', '/api/world/worlds', '/api/world/moderation', '/api/world/presence'];
+
+/** 世界级接口挪到当前世界前缀下；认证 / 账号 / 世界列表这类全局接口保持原样。 */
+function scopedApiPath(path) {
+  if (!path.startsWith('/api/world/') && path !== '/api/world') return path;
+  if (GLOBAL_API.some((prefix) => path === prefix || path.startsWith(prefix))) return path;
+  return API_BASE + path.slice('/api/world'.length);
+}
+
 /* ----------------------------------------------------------------- 常量 */
 const DOC_LABEL = {
   folder: '文件夹', card: '卡片', timeline: '时间线', map: '地图', canvas: '画布',
@@ -72,7 +87,7 @@ function renderSetupCard() {
   // 每一项都带一个"点了就能做"的动作——清单本身就是入口，不再是四行只读的待办。
   const checks = [
     ['建第一张卡片', has('card'), () => guidedTemplatesDialog()],
-    ['建一条时间线', has('timeline'), () => createDoc('timeline')],
+    ['在世界时间线上放事件', !!S.timelineEvents, () => openDoc(WORLD_TIMELINE_ID, 0)],
     ['建一张世界地图', has('map'), () => createDoc('map')],
     ['发布只读站点', !!(S.world && S.world.published), () => publishDialog()],
   ];
@@ -119,11 +134,41 @@ const ERA_COLORS = {
   red: [236, 58, 58], teal: [26, 176, 121], gold: [224, 148, 36],
 };
 
+/* --------------------------------------------- 世界总时间线（0.7.0）
+   时间线不再是一份文档：每个世界只有一条总时间线。前端用一个虚拟 id
+   `timeline` 表示它，接口走 /api/world/timeline（不建文档、不进文档树）。 */
+const WORLD_TIMELINE_ID = 'timeline';
+
+function worldTimelineEntry() {
+  return {
+    document: {
+      id: WORLD_TIMELINE_ID, type: 'timeline', name: '世界时间线',
+      world: S.world ? S.world.id : null, settings: {},
+    },
+    card: null, timeline: null, type: null, worldTimeline: true,
+  };
+}
+
+/** 时间线接口前缀：世界总时间线 vs 旧的「时间线文档」。 */
+function timelineApiPath(entry, suffix = '') {
+  return entry && entry.worldTimeline
+    ? `/api/world/timeline${suffix}`
+    : `/api/world/timelines/${entry.document.id}${suffix}`;
+}
+
+/** 地址栏 / 面板里的文档 id：数字，或世界总时间线的 `timeline`。 */
+function parseDocId(value) {
+  if (value === WORLD_TIMELINE_ID) return WORLD_TIMELINE_ID;
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 /* ----------------------------------------------------------------- 状态 */
 const S = {
   world: null, types: [], eras: [], calendars: [],
   worlds: [],          // 我能进的世界（侧栏"我的世界"菜单用）
   tree: [],            // 根文档（含 children）
+  eraHidden: {},       // 纪元 id -> 这一版里看不见的卡片 id（服务端按 Card.visible_in_era 算好）
   docs: new Map(),     // docId -> 详情（document + card / timeline 状态）
   panels: [{ tabs: [], active: -1 }],
   collapsed: new Set(),
@@ -336,6 +381,8 @@ async function api(path, { method = 'GET', body, form } = {}) {
   // 写操作统一闸门：只读时不用发请求，直接提示（服务端也会拦，这里是体验层）
   const writing = method !== 'GET'
     && !path.startsWith('/api/world/auth/') && !path.startsWith('/api/world/presence');
+  // 世界级接口挂到当前世界的路径前缀下；离线队列里存的也是这个最终地址
+  const url = scopedApiPath(path);
   if (writing) {
     if (!guardWrite()) {
       // 只读拦下来的写请求：提示已经弹过了，这里标记一下，让全局处理器安静吞掉
@@ -350,7 +397,7 @@ async function api(path, { method = 'GET', body, form } = {}) {
   }
   let response;
   try {
-    response = await fetch(path, {
+    response = await fetch(url, {
       method,
       headers: form ? {} : (body === undefined ? {} : { 'Content-Type': 'application/json' }),
       body: form ? form : (body === undefined ? undefined : JSON.stringify(body)),
@@ -362,7 +409,7 @@ async function api(path, { method = 'GET', body, form } = {}) {
     noteApiFailure(0);
     if (writing) {
       offlineWriteQueued = Boolean(typeof Opus !== 'undefined' && Opus.offline && !form
-        && Opus.offline.enqueue({ path, method, body }));
+        && Opus.offline.enqueue({ path: url, method, body }));
       document.dispatchEvent(new CustomEvent('opus:offline-write'));
     }
     else if (Date.now() - (api._lastNetToast || 0) > 6000) {
@@ -397,7 +444,8 @@ async function api(path, { method = 'GET', body, form } = {}) {
   // 而多数调用点只关心成功与否、直接丢弃响应体；不在这里回写，下一次写就会
   // 拿旧 revision 被 409 当成"被别人改过"拦下，内容会静默丢失。
   if (writing && payload && payload.revision !== undefined) {
-    const match = /^\/api\/world\/(?:cards|documents)\/(\d+)/.exec(path);
+    const tail = path.startsWith(API_BASE) ? path.slice(API_BASE.length) : path;
+    const match = /^\/(?:cards|documents)\/(\d+)/.exec(tail);
     const entry = match && S.docs.get(Number(match[1]));
     if (entry) entry.revision = payload.revision;
   }
@@ -430,8 +478,8 @@ function markOfflineQueue(delta) {
 function applyTheme(theme) {
   const root = document.documentElement.style;
   if (!theme) return;
-  // 外壳只有一套暗色形态，嵌入的画布必须同色，
-  // 否则工作区里会嵌着一块奶油色的 iframe。世界主题显式设成 light 时仍然尊重它。
+  // 外壳两档明暗都要能落地；嵌入的画布必须同色，
+  // 否则工作区里会嵌着一块反色的 iframe。
   const forcedMode = theme.mode === 'light' ? 'light' : 'dark';
   document.documentElement.dataset.theme = forcedMode;
   if (theme.primaryColor) {
@@ -443,10 +491,44 @@ function applyTheme(theme) {
   // 颗粒噪点：终端语言里一律为 0（噪点污染等宽字的边缘）。世界主题的 grain 不再生效。
   root.setProperty('--grain', '0');
   if (theme.background) {
-    document.body.style.backgroundImage = `linear-gradient(rgba(11,10,9,.88), rgba(11,10,9,.94)), url("${theme.background}")`;
+    // 压暗 / 提亮的罩色跟当前档位走，浅色主题下不能再用深色罩把整页压回暗色
+    const veil = forcedMode === 'light'
+      ? 'linear-gradient(rgba(255,255,255,.88), rgba(255,255,255,.94))'
+      : 'linear-gradient(rgba(11,10,9,.88), rgba(11,10,9,.94))';
+    document.body.style.backgroundImage = `${veil}, url("${theme.background}")`;
     document.body.style.backgroundSize = 'cover';
     document.body.style.backgroundAttachment = 'fixed';
   }
+  syncThemeToggle();
+  syncEmbeddedTheme();
+}
+
+/** 当前实际生效的明暗档（纪元主题可能覆盖世界主题）。 */
+function themeMode() {
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+}
+
+/** 当前纪元进画布 URL（?era=<id>）：与工作区同一个口径，刷新 / 分享都不丢。 */
+function eraQuery() {
+  return S.eraId ? `&era=${S.eraId}` : '';
+}
+
+/**
+ * 把明暗档推给同源的嵌入画布（经典时间轴 / 关系树 / 地图）。
+ * iframe 是独立文档，宿主换主题时它不会自己跟着变；这里直接改
+ * contentDocument 上的 data-theme，不重载，所以平移缩放和选中都还在。
+ */
+function syncEmbeddedTheme() {
+  const mode = themeMode();
+  document.querySelectorAll('iframe.timeline-frame, iframe.tree-frame, iframe.map-frame')
+    .forEach((frame) => {
+      try {
+        const doc = frame.contentDocument;
+        if (doc && doc.documentElement) doc.documentElement.dataset.theme = mode;
+      } catch (error) {
+        // 同源嵌入不会走到这里；跨域时让画布按 URL 上的 theme 自己渲染。
+      }
+    });
 }
 
 function readableInk(hex) {
@@ -492,6 +574,43 @@ function applyThemeAnimated(theme) {
   }
 }
 
+/** 任务栏的明暗切换按钮：字形与文字都显示"点下去会切到的那一档"。 */
+function syncThemeToggle() {
+  const btn = $('#themeToggle');
+  if (!btn) return;
+  const dark = document.documentElement.dataset.theme !== 'light';
+  btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+  btn.title = dark ? '切换到浅色模式' : '切换到深色模式';
+  const glyph = $('#themeToggleGlyph');
+  if (glyph) glyph.innerHTML = iconHtml(dark ? 'sun' : 'moon', 15);
+  const label = $('#themeToggleText');
+  if (label) label.textContent = dark ? '浅色' : '深色';
+}
+
+/** 明暗切换：本地先生效，再把 mode 写回世界主题（下次打开还是这一档）。 */
+async function toggleThemeMode() {
+  if (!S.world) return;
+  const prev = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  const next = prev === 'light' ? 'dark' : 'light';
+  // 纪元自带配色时保留它，只把明暗这一档换掉。
+  const era = (S.eras || []).find((item) => item.id === S.eraId);
+  const eraTheme = era && era.theme_config && Object.keys(era.theme_config).length ? era.theme_config : null;
+  const base = { ...(S.world.theme || {}), ...(eraTheme || {}) };
+  applyThemeAnimated({ ...base, mode: next });
+  try {
+    const world = await api('/api/world/world', {
+      method: 'PUT',
+      body: { theme_config: { mode: next } },
+    });
+    S.world = world;
+    toast(next === 'light' ? '已切到浅色模式' : '已切到深色模式', 1600);
+  } catch (error) {
+    // 只读被拦时 guardWrite 已经提示过了，这里只把界面退回去；
+    // 其它失败（断网会进离线队列）保留本地状态，由队列补写。
+    if (error && error.isReadonly) applyThemeAnimated({ ...base, mode: prev });
+  }
+}
+
 /* ----------------------------------------------------------------- 启动 */
 /* 只读被拦、编辑冲突都是预期情况：界面上已经提示过，不该再冒到控制台 */
 window.addEventListener('unhandledrejection', (event) => {
@@ -505,8 +624,10 @@ async function boot() {
   // 地址栏里既然已经写了 id，就没有理由让这两件事排队。
   const hash = new URLSearchParams((location.hash || '').replace(/^#/, ''));
   const embedId = Number(document.body.dataset.embedDoc || 0);
-  const first = Number(hash.get('doc')) || embedId || null;
-  const preload = first ? fetchEntry(first).catch(() => null) : null;
+  const first = parseDocId(hash.get('doc')) || embedId || null;
+  // 世界总时间线没有文档详情可取，别去 fetch 一个不存在的文档。
+  const preload = first && first !== WORLD_TIMELINE_ID
+    ? fetchEntry(first).catch(() => null) : null;
 
   const data = await api(stateUrl());
   applyViewer(data.viewer);
@@ -524,9 +645,21 @@ async function boot() {
   }
   S.types = data.types;
   S.eras = data.eras;
+  // 纪元（世界版本）也可以直接写进 URL（?era=<id>）：刷新、分享都不丢
+  const eraFromUrl = Number(new URLSearchParams(location.search).get('era'));
+  if (Number.isFinite(eraFromUrl) && S.eras.some((era) => era.id === eraFromUrl)) {
+    S.eraId = eraFromUrl;
+  }
   S.calendars = data.calendars;
+  S.eraHidden = data.era_hidden || {};
+  // 世界总时间线不再是一份文档：进度卡靠事件数判断它是否已经用起来
+  S.timelineEvents = data.timeline_events || 0;
   S.tree = data.documents;
-  applyTheme(S.world.theme);
+  // 纪元可以有自己的主题：从 URL 恢复的那一版，配色也跟着回来
+  const bootEraTheme = S.eraId
+    ? ((S.eras.find((era) => era.id === S.eraId) || {}).theme_config || null) : null;
+  applyTheme(bootEraTheme && Object.keys(bootEraTheme).length
+    ? { ...(S.world.theme || {}), ...bootEraTheme } : S.world.theme);
 
   $('#worldName').textContent = S.world.name;
   $('#worldAvatar').textContent = (S.world.name || 'W').trim().charAt(0).toUpperCase();
@@ -547,8 +680,9 @@ async function boot() {
     // （用户在启动过程中点了链接、或者改了 hash），那就听地址栏的——
     // 否则会把用户刚点开的那一篇顶掉：地址栏写着 A，面板里却是 B。
     const late = new URLSearchParams((location.hash || '').replace(/^#/, ''));
-    const wanted = Number(late.get('doc')) || 0;
-    await openDoc(wanted && findNode(wanted) ? wanted : firstOpenable(S.tree));
+    const wanted = parseDocId(late.get('doc')) || 0;
+    await openDoc(wanted && (wanted === WORLD_TIMELINE_ID || findNode(wanted))
+      ? wanted : firstOpenable(S.tree));
   }
   restoreViewState();          // 回到上次读到哪儿
   // 启动屏等这一句：数据到位、首屏画完才收
@@ -629,11 +763,28 @@ function firstOpenable(nodes) {
 }
 
 /* ================================================================= 文档树 */
+/** 侧栏固定的一行：世界总时间线（不是文档：不能拖、不能改名、没有右键菜单）。 */
+function worldTimelineRow() {
+  const row = el('div', 'row depth-0 is-timeline');
+  row.dataset.id = WORLD_TIMELINE_ID;
+  const active = activeDocument();
+  if (active && active.id === WORLD_TIMELINE_ID) row.classList.add('is-active');
+  row.appendChild(el('span', 'r-caret', ''));
+  const iconBox = el('span', 'r-icon');
+  iconBox.appendChild(docIcon('timeline', 15));
+  row.appendChild(iconBox);
+  row.appendChild(el('span', 'r-name', '世界时间线'));
+  row.title = '整个世界唯一的一条时间线';
+  row.addEventListener('click', () => openDoc(WORLD_TIMELINE_ID, 0, { fromTree: true }));
+  return row;
+}
+
 function renderTree() {
   renderSetupCard();
   const host = $('#sbTree');
   host.innerHTML = '';
   const filter = S.filter.trim().toLowerCase();
+  if (!filter || '世界时间线'.includes(filter)) host.appendChild(worldTimelineRow());
 
   // 列表长了就截断，末尾给「⋯ 查看全部」
   const CAP = 26;
@@ -778,15 +929,9 @@ function treeRow(node, depth) {
   if (isFlying(node.id, 'row')) row.classList.add('is-fly-away');
   if (node.hidden) row.appendChild(el('span', 'r-hide', '隐'));
   // 当前纪元（世界版本）里没有这张卡 -> 标灰，一眼看出"这一版没有它"
-  if (S.eraId && node.era_mode && node.era_mode !== 'universal'
-      && Array.isArray(node.era_ids) && node.era_ids.length) {
-    const visible = node.era_mode === 'only'
-      ? node.era_ids.includes(S.eraId)
-      : !node.era_ids.includes(S.eraId);
-    if (!visible) {
-      row.classList.add('is-other-era');
-      row.title = '这张卡不在当前纪元这一版里';
-    }
+  if (S.eraId && eraHiddenIn(S.eraId, node.id)) {
+    row.classList.add('is-other-era');
+    row.title = '这张卡不在当前纪元这一版里';
   }
 
   // hover 才浮出的行内操作（Notion：页面行 hover 出现 ⋯）。文件夹额外给一个「＋」直接建子项。
@@ -870,6 +1015,7 @@ async function reloadTree() {
   S.types = data.types;
   S.eras = data.eras;
   S.calendars = data.calendars;
+  S.eraHidden = data.era_hidden || {};
   renderTree();
   applyEmptyHint();
 }
@@ -883,7 +1029,21 @@ function activeDocument() {
   return entry ? entry.document : null;
 }
 
+/** 告诉同源嵌入画布：当前选中的是哪张卡。只高亮，不跳转、不改数据。 */
+function broadcastFocus(docId) {
+  if (!docId) return;
+  $$('iframe.tree-frame, iframe.map-frame').forEach((frame) => {
+    try {
+      frame.contentWindow.postMessage({ type: 'ws-focus-card', cardId: docId }, location.origin);
+    } catch (error) {
+      // 同源嵌入不会走到这里；跨域的画布本来也不参与联动。
+    }
+  });
+}
+
 async function openDoc(id, panelIndex = 0, { focus = true, pushHistory = true, preloaded = null, fromTree = false } = {}) {
+  // 世界总时间线是虚拟入口：没有文档详情可取，先把占位 entry 放进缓存。
+  if (id === WORLD_TIMELINE_ID && !S.docs.has(id)) S.docs.set(id, worldTimelineEntry());
   const panel = S.panels[panelIndex];
   if (!panel.tabs.includes(id)) panel.tabs.push(id);
   if (focus) panel.active = panel.tabs.indexOf(id);
@@ -926,6 +1086,7 @@ async function openDoc(id, panelIndex = 0, { focus = true, pushHistory = true, p
   announce(`已打开《${(S.docs.get(id) || {}).document ? S.docs.get(id).document.name : ''}》`);
   if (window.innerWidth < 900) closeSidebarDrawer();
   if (focus) {
+    broadcastFocus(id);
     if (pushHistory) syncHash(id);
     // 鼠标点进来的不抢焦点（内容可编辑，一进来就聚焦会让人以为"已经选中了标题"）；
     // **键盘**导航进来的必须把焦点送到正文标题——不然树重画一次，焦点就掉到 body，
@@ -941,7 +1102,7 @@ async function openDoc(id, panelIndex = 0, { focus = true, pushHistory = true, p
 function syncHash(id) {
   const params = new URLSearchParams((location.hash || '').replace(/^#/, ''));
   let hash = `#doc=${id}`;
-  ['panel', 'tl', 'event', 'editor'].forEach((key) => {
+  ['panel', 'tl', 'event', 'editor', 'era'].forEach((key) => {
     if (params.get(key)) hash += `&${key}=${params.get(key)}`;
   });
   if (location.hash !== hash) {
@@ -952,8 +1113,7 @@ function syncHash(id) {
 
 function documentIdFromHash() {
   const params = new URLSearchParams((location.hash || '').replace(/^#/, ''));
-  const id = Number(params.get('doc'));
-  return Number.isFinite(id) && id > 0 ? id : null;
+  return parseDocId(params.get('doc'));
 }
 
 /** 浏览器前进 / 后退（以及外部改 hash）时重新打开对应的文档。 */
@@ -1056,6 +1216,7 @@ function renderPanels() {
         }
         panel.active = tabIndex;
         renderPanels();
+        broadcastFocus(id);
       });
       tab.addEventListener('auxclick', (event) => { if (event.button === 1) closeTab(index, id); });
       tab.addEventListener('contextmenu', (event) => {
@@ -1079,6 +1240,12 @@ function renderPanels() {
     const activeId = panel.tabs[panel.active];
     if (activeId && S.docs.has(activeId)) {
       const entry = S.docs.get(activeId);
+      // 世界总时间线是虚拟 entry：没有 fetchEntry 那一趟，状态要单独取一次。
+      if (entry.worldTimeline && !entry.timeline && !entry.timelineTried) {
+        entry.timelineTried = true;
+        ensureTimelineState(entry).then(() => renderPanels())
+          .catch(() => toast('时间线载入失败'));
+      }
       // 错误边界：某个文档类型的渲染器炸了，不该让整格变成空白 ——
       // 就地给一个降级块（说清是哪一篇、给重试和导出），别的面板照常工作。
       const paint = () => {
@@ -1455,7 +1622,7 @@ function degradeBlock(entry, card, reason) {
   const actions = el('div', 'form-row');
   if (reason !== 'legacy') actions.appendChild(button('重试', '', () => renderPanels(), true));
   const link = el('a', 'mini-btn', '导出这一篇');
-  link.href = `/api/world/documents/${entry.document.id}/export`;
+  link.href = scopedApiPath(`/api/world/documents/${entry.document.id}/export`);
   link.rel = 'noopener';
   actions.appendChild(link);
   box.appendChild(actions);
@@ -3249,15 +3416,18 @@ function renderTimelineFrame(entry) {
     toast('已重新载入');
   }));
   bar.appendChild(button('↗', '在新标签页打开', () => {
-    window.open(`/world/timeline/${entry.document.id}`, '_blank', 'noopener');
+    window.open(timelineStandaloneUrl(entry), '_blank', 'noopener');
   }));
   bar.appendChild(el('span', 'tl-frame-hint',
     '画布、拖拽、时间段用左侧的经典编辑器；日历与卡片在这里管。'));
 
   const body = el('div', 'tl-frame-body');
   const frame = el('iframe', 'timeline-frame');
-  frame.src = `/w/timeline/${entry.document.id}`;
+  // 画布跟着宿主走：?theme= 让服务端首屏就是对的颜色，避免先闪一块反色的画布；
+  // 后续切主题由 syncEmbeddedTheme 直接改 iframe 文档，不重载编辑器。
+  frame.src = `${timelineStandaloneUrl(entry)}?theme=${themeMode()}`;
   frame.title = `${entry.document.name} · 时间线编辑器`;
+  frame.addEventListener('load', syncEmbeddedTheme);
   body.appendChild(frame);
 
   if (ui.panel === 'calendar' && entry.timeline) {
@@ -3272,8 +3442,15 @@ function renderTimelineFrame(entry) {
   return wrap;
 }
 
+/** 经典编辑器的独立页：世界总时间线走 /w/<slug>/timeline，旧文档仍带 doc id。 */
+function timelineStandaloneUrl(entry) {
+  return entry && entry.worldTimeline
+    ? `${PAGE_BASE}/timeline`
+    : `${PAGE_BASE}/timeline/${entry.document.id}`;
+}
+
 async function ensureTimelineState(entry) {
-  entry.timeline = await api(`/api/world/timelines/${entry.document.id}`);
+  entry.timeline = await api(timelineApiPath(entry));
 }
 
 /** 事件面板：经典编辑器管不到的那部分（精度 / 纪元 / 关联卡片）。 */
@@ -3312,6 +3489,37 @@ function eventMetaPanel(entry) {
       toast('精度已保存（重新载入编辑器后位置会跟着变）');
     });
     meta.appendChild(precision);
+
+    // 模糊 / 相对时间（§4.4 E）：确信度 + 不确定范围，只影响展示口径。
+    const confidence = el('select', 'mini-select');
+    [['exact', '确切'], ['approx', '约'], ['legend', '传说']].forEach(([value, label]) => {
+      const option = el('option', null, label);
+      option.value = value;
+      confidence.appendChild(option);
+    });
+    confidence.value = event.confidence || 'exact';
+    confidence.title = '时间的确信度';
+    confidence.addEventListener('change', async () => {
+      await api(`/api/world/events/${event.id}`, { method: 'PUT', body: { confidence: confidence.value } });
+      await ensureTimelineState(entry);
+      renderPanels();
+    });
+    meta.appendChild(confidence);
+
+    const range = el('input', 'mini-input');
+    range.type = 'number';
+    range.min = '0';
+    range.step = 'any';
+    range.value = event.range_years ? String(event.range_years) : '';
+    range.placeholder = '±年';
+    range.title = '不确定范围（±年）';
+    range.addEventListener('change', async () => {
+      await api(`/api/world/events/${event.id}`, {
+        method: 'PUT', body: { range_years: range.value || 0 },
+      });
+      await ensureTimelineState(entry);
+    });
+    meta.appendChild(range);
 
     const eraSelect = el('select', 'mini-select');
     const none = el('option', null, '不指定纪元');
@@ -3424,7 +3632,7 @@ function renderTimeline(entry) {
     band.style.borderColor = `rgba(${rgb.join(',')}, .45)`;
     band.style.background = 'rgba(20,20,17,.92)';
     band.style.width = `${clamp(150 + era.name.length * 7, 140, 260)}px`;
-    band.appendChild(el('span', null, `纪元 · ${era.name}${era.length_years ? `（${era.length_years} 年）` : '（开放）'}`));
+    band.appendChild(el('span', null, `纪元 · ${era.name}（${eraSpanLabel(era)}）`));
     band.title = era.description || '';
     eraStrip.appendChild(band);
   });
@@ -3532,7 +3740,7 @@ function renderTimeline(entry) {
     if (ui.suppressClick) { ui.suppressClick = false; return; }
     const rect = canvas.getBoundingClientRect();
     const year = Math.round(yearFor(event.clientX - rect.left));
-    const created = await api(`/api/world/timelines/${entry.document.id}/events`, {
+    const created = await api(timelineApiPath(entry, '/events'), {
       method: 'POST',
       body: { title: `Year ${year} 的事件`, precision: calendar.default_precision || 'year', year },
     });
@@ -3594,7 +3802,7 @@ function renderTimeline(entry) {
   };
   addTool('＋', '在视野中央新建事件', async () => {
     const year = Math.round((view.start + view.end) / 2);
-    const created = await api(`/api/world/timelines/${entry.document.id}/events`, {
+    const created = await api(timelineApiPath(entry, '/events'), {
       method: 'POST', body: { title: `Year ${year} 的事件`, year },
     });
     entry.timeline.events.push(created);
@@ -3663,6 +3871,12 @@ function formatYear(year, calendar) {
 async function saveView(entry, view) {
   const rounded = { view_start: Math.round(view.start * 100) / 100, view_end: Math.round(view.end * 100) / 100 };
   entry.timeline.view = { start: rounded.view_start, end: rounded.view_end };
+  if (entry.worldTimeline) {
+    debounce(`view:${entry.document.id}`, () => {
+      api('/api/world/timeline', { method: 'PUT', body: { view: entry.timeline.view } });
+    }, 600);
+    return;
+  }
   debounce(`view:${entry.document.id}`, () => {
     api(`/api/world/documents/${entry.document.id}`, { method: 'PUT', body: { settings: rounded } });
   }, 600);
@@ -3671,6 +3885,10 @@ async function saveView(entry, view) {
 /* 日历设置面板（settings.* 文案） */
 function calendarPanel(entry) {
   const calendar = entry.timeline.calendar;
+  // 显示坐标（显示年 = 存储年 − 坐标原点）：只有世界总时间线有原点
+  const origin = Number(entry.timeline.origin_year || 0) || 0;
+  const toDisplay = (value) => (value === null || value === undefined ? '' : Math.round((value - origin) * 10000) / 10000);
+  const toStorage = (value) => (value === '' ? null : Math.round((Number(value) + origin) * 10000) / 10000);
   const panel = el('div', 'tl-panel');
   panel.appendChild(el('h3', null, '日历设置'));
 
@@ -3680,6 +3898,25 @@ function calendarPanel(entry) {
     row.appendChild(node);
     return row;
   };
+
+  if (entry.worldTimeline) {
+    const originInput = el('input');
+    originInput.type = 'number';
+    originInput.step = 'any';
+    originInput.value = origin;
+    originInput.title = '显示年 = 存储年 − 坐标原点';
+    const applyOrigin = el('button', 'tl-mini', '迁轴');
+    applyOrigin.addEventListener('click', async () => {
+      await api('/api/world/timeline', { method: 'PUT', body: { origin_year: Number(originInput.value) || 0 } });
+      await refreshTimeline(entry);
+      toast('坐标原点已更新');
+    });
+    const originRow = el('div', 'tl-row-actions');
+    originRow.appendChild(originInput);
+    originRow.appendChild(applyOrigin);
+    panel.appendChild(field('坐标原点', originRow));
+    panel.appendChild(el('p', 'tl-hint', '显示年 = 存储年 − 坐标原点；改它只重新编号，事件与纪元的相对位置不变。'));
+  }
 
   const name = el('input');
   name.value = calendar.name || '';
@@ -3700,6 +3937,23 @@ function calendarPanel(entry) {
   hours.max = '48';
   hours.value = calendar.hours_per_day;
   panel.appendChild(field('每天小时数', hours));
+
+  // 生效区间：切换点落在历法自己身上；年份按显示坐标填写
+  const rangeStart = el('input');
+  rangeStart.type = 'number';
+  rangeStart.step = 'any';
+  rangeStart.placeholder = '不设限';
+  rangeStart.value = toDisplay(calendar.start_year);
+  rangeStart.title = '这本历法从哪一年开始生效（留空 = 不设限）';
+  const rangeEnd = el('input');
+  rangeEnd.type = 'number';
+  rangeEnd.step = 'any';
+  rangeEnd.placeholder = '不设限';
+  rangeEnd.value = toDisplay(calendar.end_year);
+  rangeEnd.title = '这本历法到哪一年为止（留空 = 不设限）';
+  panel.appendChild(field('生效起始年', rangeStart));
+  panel.appendChild(field('生效结束年', rangeEnd));
+  panel.appendChild(el('p', 'tl-hint', '留空 = 不设限。切换点落在历法自己身上：同一根轴上可以有 A 历 → B 历。'));
 
   const monthsBox = el('div');
   monthsBox.appendChild(el('h4', null, `月份（${(calendar.months || []).length} 个 · 全年 ${calendar.days_per_year} 天）`));
@@ -3783,6 +4037,8 @@ function calendarPanel(entry) {
       mode: mode.value,
       hours_per_day: Number(hours.value) || 24,
       default_precision: precision.value,
+      start_year: toStorage(rangeStart.value.trim()),
+      end_year: toStorage(rangeEnd.value.trim()),
     });
   });
   actions.appendChild(save);
@@ -3808,7 +4064,7 @@ async function updateCalendar(entry, patch) {
   const calendar = entry.timeline.calendar;
   const payload = await api(`/api/world/calendars/${calendar.id}`, { method: 'PUT', body: patch });
   entry.timeline.calendar = payload;
-  entry.timeline = await api(`/api/world/timelines/${entry.document.id}`);
+  entry.timeline = await api(timelineApiPath(entry));
   toast('日历已保存');
   renderPanels();
 }
@@ -3975,7 +4231,7 @@ async function patchEvent(entry, event, patch) {
 }
 
 async function refreshTimeline(entry) {
-  entry.timeline = await api(`/api/world/timelines/${entry.document.id}`);
+  entry.timeline = await api(timelineApiPath(entry));
   renderPanels();
 }
 
@@ -3990,9 +4246,14 @@ async function linkCardDialog(entry, event) {
   });
 }
 
-/* 纪元管理（settings.eras / eraLengthYears） */
+/* 纪元 / 时代管理：总时间线上的一段命名区间（起止年份 + 精度，允许重叠） */
 async function erasDialog(entry) {
   const eras = await api('/api/world/eras');
+  const reload = async () => {
+    await reloadTree();
+    if (entry) await refreshTimeline(entry);
+    else renderPanels();
+  };
   openModal('纪元', (body) => {
     const list = el('div');
     eras.eras.forEach((era) => {
@@ -4001,18 +4262,46 @@ async function erasDialog(entry) {
       name.value = era.name;
       name.addEventListener('blur', async () => {
         await api(`/api/world/eras/${era.id}`, { method: 'PUT', body: { name: name.value.trim() } });
-        await reloadTree();
-        if (entry) await refreshTimeline(entry);
+        await reload();
       });
-      const length = el('input', 'mini-input');
-      length.type = 'number';
-      length.value = era.length_years;
-      length.title = '长度（年），0 表示开放';
-      length.style.maxWidth = '120px';
-      length.addEventListener('blur', async () => {
-        await api(`/api/world/eras/${era.id}`, { method: 'PUT', body: { length_years: Number(length.value) || 0 } });
-        if (entry) await refreshTimeline(entry);
+      const start = el('input', 'mini-input');
+      start.type = 'number';
+      start.step = 'any';
+      start.placeholder = '起';
+      start.title = '起始年（留空 = 还没摆放）';
+      start.style.maxWidth = '100px';
+      start.value = era.start_year === null || era.start_year === undefined ? '' : era.start_year;
+      const end = el('input', 'mini-input');
+      end.type = 'number';
+      end.step = 'any';
+      end.placeholder = '止';
+      end.title = '结束年（留空 = 开放）';
+      end.style.maxWidth = '100px';
+      end.value = era.end_year === null || era.end_year === undefined ? '' : era.end_year;
+      const precision = el('select', 'mini-select');
+      [['year', '年'], ['month', '月'], ['day', '日'], ['time', '时间']].forEach(([value, label]) => {
+        const option = el('option', null, label);
+        option.value = value;
+        precision.appendChild(option);
       });
+      precision.value = era.start_precision || 'year';
+      precision.title = '精度';
+      precision.style.maxWidth = '90px';
+      const saveSpan = async () => {
+        await api(`/api/world/eras/${era.id}`, {
+          method: 'PUT',
+          body: {
+            start_year: start.value === '' ? null : Number(start.value),
+            end_year: end.value === '' ? null : Number(end.value),
+            start_precision: precision.value,
+            end_precision: precision.value,
+          },
+        });
+        await reload();
+      };
+      start.addEventListener('blur', saveSpan);
+      end.addEventListener('blur', saveSpan);
+      precision.addEventListener('change', saveSpan);
       const theme = el('select', 'mini-select');
       Object.keys(ERA_COLORS).forEach((key) => {
         const option = el('option', null, key);
@@ -4023,7 +4312,7 @@ async function erasDialog(entry) {
       theme.style.maxWidth = '110px';
       theme.addEventListener('change', async () => {
         await api(`/api/world/eras/${era.id}`, { method: 'PUT', body: { theme: theme.value } });
-        if (entry) await refreshTimeline(entry);
+        await reload();
       });
       const remove = el('button', 'mini-btn is-danger', '删除');
       remove.dataset.danger = '1';
@@ -4033,7 +4322,7 @@ async function erasDialog(entry) {
         closeModal();
         await erasDialog(entry);
       });
-      [name, length, theme, remove].forEach((node) => row.appendChild(node));
+      [name, start, end, precision, theme, remove].forEach((node) => row.appendChild(node));
       list.appendChild(row);
     });
     body.appendChild(list);
@@ -4047,7 +4336,8 @@ async function erasDialog(entry) {
       await erasDialog(entry);
     });
     body.appendChild(add);
-    body.appendChild(el('p', 'hint', '每个纪元都从自己坐标系的 0 年起算——与官网一致。'));
+    body.appendChild(el('p', 'hint',
+      '纪元是总时间线上的一段命名区间：允许重叠。起始留空 = 还没摆放，结束留空 = 开放。'));
   });
 }
 
@@ -4295,13 +4585,14 @@ function renderTreeFrame(entry) {
   const frame = liveEmbed(key, () => {
     const node = el('iframe', 'tree-frame');
     node.title = `${entry.document.name} · 关系树`;
+    node.addEventListener('load', syncEmbeddedTheme);
+    node.addEventListener('load', () => broadcastFocus((activeDocument() || {}).id));
     return node;
   });
   // 只读成员看到的也是只读画布；权限变了只换参数，不重建 iframe。
-  // 主机（工作区面板）是暗色终端外壳，画布必须同色，所以这里不带 theme=paper：
-  // 外壳只有一套暗色形态，没有浅色纸面档，
-  // 服务端收到 theme=paper 也会落到暗色（world/relationship.py）。
-  const src = `/relationship?doc=${entry.document.id}&embed=1`
+  // theme= 与画布同一条规则：服务端首屏就按这一档渲染，之后切主题由
+  // syncEmbeddedTheme 直接改 iframe 文档，不重载也不丢平移缩放。
+  const src = `${PAGE_BASE}/relation?doc=${entry.document.id}&embed=1&theme=${themeMode()}${eraQuery()}`
     + (editable() && !isEmbedded() ? '&readonly=0' : '&readonly=1');
   if (frame.dataset.src !== src) {
     frame.dataset.src = src;
@@ -4317,7 +4608,7 @@ function renderTreeFrame(entry) {
  * 要完整外壳（顶栏 + 两条栏）就走这里。入口在标签页与侧栏那一行的右键菜单上。
  */
 function openStandaloneMap(id) {
-  window.open(`/map/2d?doc=${id}`, '_blank', 'noopener');
+  window.open(`${PAGE_BASE}/map/2d?doc=${id}${eraQuery()}`, '_blank', 'noopener');
 }
 
 /**
@@ -4338,9 +4629,12 @@ function renderMapFrame(entry) {
   const frame = liveEmbed(key, () => {
     const node = el('iframe', 'map-frame');
     node.title = `${entry.document.name} · 地图`;
+    node.addEventListener('load', syncEmbeddedTheme);
+    node.addEventListener('load', () => broadcastFocus((activeDocument() || {}).id));
     return node;
   });
-  const src = `/map/2d?doc=${entry.document.id}&embed=1`
+  // 同关系树：首屏颜色走 ?theme=，之后由 syncEmbeddedTheme 热更新。
+  const src = `${PAGE_BASE}/map/2d?doc=${entry.document.id}&embed=1&theme=${themeMode()}${eraQuery()}`
     + (editable() && !isEmbedded() ? '&readonly=0' : '&readonly=1');
   if (frame.dataset.src !== src) {
     frame.dataset.src = src;
@@ -5559,7 +5853,7 @@ async function runPalette(query) {
   list.innerHTML = '';
   const actions = [
     { kind: '动作', name: '新建卡片', run: async () => { await createDoc('card'); } },
-    { kind: '动作', name: '新建时间线', run: async () => { await createDoc('timeline'); } },
+    { kind: '动作', name: '打开世界时间线', run: async () => { await openDoc(WORLD_TIMELINE_ID); } },
     { kind: '动作', name: '新建文件夹', run: async () => { await createDoc('folder'); } },
     { kind: '动作', name: '新建世界图谱', run: async () => { await createDoc('graph'); } },
     { kind: '动作', name: '用新渲染器打开时间线（对比用）', run: async () => {
@@ -5801,6 +6095,8 @@ async function setEraDialog(node) {
 
 /* ============================================================ 新建 / 回收站 */
 async function createDoc(type, parent = null) {
+  // 世界时间线不是文档：每个世界只有一条，入口就是打开它。
+  if (type === 'timeline') { await openDoc(WORLD_TIMELINE_ID, 0); return; }
   // 关系树不在这里问名字：下一步就是模版选择，名字跟着模版走（建完还能改）
   let name = '新建关系树';
   if (type !== 'familyTree') {
@@ -5867,6 +6163,109 @@ async function showTrash() {
     });
     body.appendChild(list);
     const actions = el('div', 'form-row');
+    actions.appendChild(button('关闭', '', closeModal));
+    body.appendChild(actions);
+  });
+}
+
+/* ============================================================ 世界存档 */
+/** 体积用人类能扫一眼的单位显示。 */
+function formatArchiveSize(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** 存档位：整包快照（含地图），可命名多份；读档前服务端会自动备份。 */
+async function archivesDialog() {
+  let data;
+  try {
+    data = await api('/api/world/archives');
+  } catch (error) {
+    toast('存档列表载入失败');
+    return;
+  }
+  openModal('世界存档', (body) => {
+    const listWrap = el('div');
+    body.appendChild(listWrap);
+    const hint = el('p', 'hint');
+    body.appendChild(hint);
+
+    const render = (payload) => {
+      hint.textContent = `把整个世界拍成一份快照（文档、卡片、时间线、时代、地图整包都在里面）。`
+        + `最多留 ${payload.max} 份；读档前会自动备份当前状态，不怕点错。`;
+      listWrap.innerHTML = '';
+      if (!payload.archives.length) {
+        listWrap.appendChild(emptyBlock({
+          iconName: 'box',
+          title: '还没有存档',
+          text: '存档是整包快照：之后可以一键读回现在的样子。',
+        }));
+        return;
+      }
+      const list = el('div', 'suggest-list');
+      payload.archives.forEach((archive) => {
+        const row = el('div', 'suggest-row');
+        const info = el('div', 'trash-info');
+        info.appendChild(el('b', null, archive.name || '未命名存档'));
+        info.appendChild(el('span', 'hint',
+          `${archive.kind_label || '手动'} · ${archive.summary || ''}`.replace(/ · $/, '')));
+        info.appendChild(el('span', 'hint',
+          `${(archive.created_at || '').replace('T', ' ').slice(0, 16)} · ${formatArchiveSize(archive.size)}`));
+        row.appendChild(info);
+
+        const restore = el('button', 'mini-btn is-primary', '读档');
+        restore.addEventListener('click', async () => {
+          if (!window.confirm(`读档会把这个世界的当前内容整包回滚到「${archive.name}」。`
+            + '当前状态会先自动备份一份。继续？')) return;
+          restore.disabled = true;
+          try {
+            await api(`/api/world/archives/${archive.id}/restore`, { method: 'POST' });
+            // 读档重建了全部主键：所有缓存与标签页都失效了，重新拉一遍。
+            S.docs.clear();
+            S.panels = [{ tabs: [], active: -1 }];
+            S.timelineEvents = 0;
+            S.eraId = null;
+            await reloadTree();
+            renderPanels();
+            await openDoc(WORLD_TIMELINE_ID, 0).catch(() => {});
+            toast('已读档');
+            closeModal();
+          } catch (error) {
+            restore.disabled = false;
+            toast(error && error.message ? error.message : '读档失败');
+          }
+        });
+        row.appendChild(restore);
+
+        const remove = el('button', 'mini-btn is-danger', '删除');
+        remove.dataset.danger = '1';
+        remove.addEventListener('click', async () => {
+          if (!window.confirm(`删除存档「${archive.name}」？存档删掉就找不回来了。`)) return;
+          await api(`/api/world/archives/${archive.id}`, { method: 'DELETE' });
+          data = await api('/api/world/archives');
+          render(data);
+          toast('存档已删除');
+        });
+        row.appendChild(remove);
+        list.appendChild(row);
+      });
+      listWrap.appendChild(list);
+    };
+    render(data);
+
+    const actions = el('div', 'form-row');
+    actions.appendChild(button('存一份现在', '', async () => {
+      const name = await askText({
+        label: '存档名称', value: `存档 ${new Date().toLocaleString()}`,
+      });
+      if (name === null) return;
+      await api('/api/world/archives', { method: 'POST', body: { name: name.trim() } });
+      data = await api('/api/world/archives');
+      render(data);
+      toast('已存档');
+    }, true));
     actions.appendChild(button('关闭', '', closeModal));
     body.appendChild(actions);
   });
@@ -5972,6 +6371,7 @@ function decorateChrome() {
     ['#typesBtn', 'tag', '类型'],
     ['#erasBtn', 'globe', '纪元'],
     ['#themeBtn', 'droplet', '主题'],
+    ['#archivesBtn', 'box', '存档'],
     ['#trashBtn', 'trash-2', '回收站'],
     ['#newDocBtn', 'circle-plus', '新建文档'],
     ['#newFolderBtn', 'folder', '文件夹'],
@@ -6081,10 +6481,7 @@ function bindEvents() {
     toast(`已新建「${created.name}」`);
   });
   wire('#ehTimeline', async () => {
-    const created = await api('/api/world/documents', { method: 'POST', body: { type: 'timeline', name: '新时间线' } });
-    await reloadTree();
-    await openDoc(created.id);
-    toast(`已新建「${created.name}」`);
+    await openDoc(WORLD_TIMELINE_ID);
   });
   wire('#ehImport', () => exchangeDialog());
   /* 保存状态：样式层早就写好了 .save-state，这里把它接上事件。
@@ -6190,6 +6587,8 @@ function bindEvents() {
   $('#typesBtn').addEventListener('click', () => typeManager());
   $('#erasBtn').addEventListener('click', () => erasDialog(S.docs.get(activeIdOfTimeline())));
   $('#themeBtn').addEventListener('click', themeDialog);
+  if ($('#themeToggle')) $('#themeToggle').addEventListener('click', toggleThemeMode);
+  $('#archivesBtn').addEventListener('click', archivesDialog);
   $('#trashBtn').addEventListener('click', showTrash);
   $('#mdClose').addEventListener('click', closeModal);
   $('#modal').addEventListener('click', (event) => { if (event.target.id === 'modal') closeModal(); });
@@ -6322,7 +6721,7 @@ function bindEvents() {
     event.preventDefault();
     openCtx(event.clientX, event.clientY, [
       { label: '新建卡片', run: () => createDoc('card') },
-      { label: '新建时间线', run: () => createDoc('timeline') },
+      { label: '打开世界时间线', run: () => openDoc(WORLD_TIMELINE_ID) },
       { label: '新建关系树', run: () => createDoc('familyTree') },
       { label: '新建文件夹', run: () => createDoc('folder') },
     ]);
@@ -6446,7 +6845,7 @@ function renderTableTool(entry) {
   wrap.appendChild(body);
 
   const csvButton = button('导出 CSV', '下载当前视图', () => {
-    download(`/api/world/tables/${entry.document.id}/csv`);
+    download(scopedApiPath(`/api/world/tables/${entry.document.id}/csv`));
   });
   const importInput = el('input');
   importInput.type = 'file';
@@ -7730,8 +8129,10 @@ function renderCalendarView(entry, panelIndex) {
   wrap.dataset.doc = String(document_.id);
 
   const calendars = S.calendars || [];
-  const calendar = calendars.find((c) => c.id === (entry.timeline && entry.timeline.calendar))
-    || calendars[0];
+  // timeline_state 里的 calendar 是完整对象（不是一个 id）
+  const currentId = entry.timeline && entry.timeline.calendar
+    ? entry.timeline.calendar.id : null;
+  const calendar = calendars.find((c) => c.id === currentId) || calendars[0];
   if (!calendar) {
     wrap.appendChild(emptyBlock({ iconName: 'align', title: '还没有日历', text: '先在「日历与纪元」里建一个日历。' }));
     return wrap;
@@ -7757,8 +8158,9 @@ function renderCalendarView(entry, panelIndex) {
   });
   switcher.value = calendar.id;
   switcher.addEventListener('change', async () => {
-    await api(`/api/world/timelines/${document_.id}`, { method: 'PUT', body: { calendar: Number(switcher.value) } });
-    entry.timeline.calendar = Number(switcher.value);
+    const next = calendars.find((c) => c.id === Number(switcher.value)) || null;
+    await api(timelineApiPath(entry), { method: 'PUT', body: { calendar: Number(switcher.value) } });
+    if (next) entry.timeline.calendar = next;
     CAL_STATE.initialized = false;
     renderPanels();
   });
@@ -7898,6 +8300,15 @@ function eraChip() {
   return chip;
 }
 
+/** 纪元的起止描述：未摆放 / 开放 / 区间。 */
+function eraSpanLabel(era) {
+  const start = era.start_year;
+  const end = era.end_year;
+  if (start === null || start === undefined) return '未摆放';
+  if (end === null || end === undefined) return `${formatYear(start)} 起 · 开放`;
+  return `${formatYear(start)} – ${formatYear(end)}`;
+}
+
 function eraSwitcherDialog() {
   const eras = S.eras || [];
   openModal('世界版本（纪元）', (body) => {
@@ -7925,7 +8336,7 @@ function eraSwitcherDialog() {
     addRow(null, '所有纪元', '不做过滤，看到全部内容');
     eras.forEach((era) => {
       const hidden = countEraHidden(era.id);
-      addRow(era.id, era.name, `${era.length_years ? `${era.length_years} 年 · ` : ''}`
+      addRow(era.id, era.name, `${eraSpanLabel(era)} · `
         + (hidden ? `${hidden} 张卡不在这一版` : '全部卡都在这一版'), era.theme_config);
     });
     body.appendChild(list);
@@ -7938,27 +8349,25 @@ function eraSwitcherDialog() {
   });
 }
 
+function eraHiddenIn(eraId, docId) {
+  return (S.eraHidden[String(eraId)] || []).includes(docId);
+}
+
 function countEraHidden(eraId) {
-  let hidden = 0;
-  (S.tree || []).forEach((node) => {
-    const walk = (item) => {
-      const card = item.card;
-      if (card && card.era_mode && card.era_mode !== 'universal'
-          && Array.isArray(card.era_ids) && card.era_ids.length) {
-        const visible = card.era_mode === 'only'
-          ? card.era_ids.includes(eraId)
-          : !card.era_ids.includes(eraId);
-        if (!visible) hidden += 1;
-      }
-      (item.children || []).forEach(walk);
-    };
-    walk(node);
-  });
-  return hidden;
+  return (S.eraHidden[String(eraId)] || []).length;
+}
+
+/** 当前时间上下文进 URL（?era=<id>）：可分享、刷新不丢。 */
+function syncEraUrl(eraId) {
+  const url = new URL(location.href);
+  if (eraId) url.searchParams.set('era', String(eraId));
+  else url.searchParams.delete('era');
+  history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 function setActiveEra(eraId) {
   S.eraId = eraId || null;
+  syncEraUrl(S.eraId);
   if (S.eraId) localStorage.setItem('ws:era', String(S.eraId));
   else localStorage.removeItem('ws:era');
   // 纪元可以有自己的主题：有就盖在世界主题上
@@ -8107,7 +8516,7 @@ function disableEditing() {
    （新类型、添加纪元、保存主题、恢复/彻底删除、建为卡片……），一并对游客收起来。 */
 const WRITE_CONTROLS = [
   '#undoBtn', '#redoBtn', '#exchangeBtn', '#newDocBtn', '#newFolderBtn', '#templateBtn',
-  '#typesBtn', '#erasBtn', '#themeBtn', '#trashBtn', '#suggestBtn',
+  '#typesBtn', '#erasBtn', '#themeBtn', '#archivesBtn', '#trashBtn', '#suggestBtn',
   '#tbNav [data-nav="new-timeline"]', '#tbNav [data-nav="new-card"]',
   '.bottom-nav [data-mobile="new"]',
   '#mapUploadBtn', '#mapBgBtn', '#insertBlockBtn', '#addEventBtn', '#calendarEditBtn',
@@ -8253,7 +8662,7 @@ function userMenu() {
     actions.appendChild(button('退出登录', '', async () => {
       await api('/api/world/auth/logout', { method: 'POST', body: {} });
       clearLocalState();          // 退出时把自己的本地痕迹也清掉
-      window.location.href = '/world';
+      window.location.href = '/login';
     }, false, true));
     body.appendChild(actions);
   });
@@ -8375,7 +8784,7 @@ function accountDeleteDialog() {
       });
       toast('账号已注销');
       clearLocalState();
-      setTimeout(() => { window.location.href = '/world'; }, 600);
+      setTimeout(() => { window.location.href = '/login'; }, 600);
     });
     actions.appendChild(remove);
     actions.appendChild(button('取消', '', () => closeModal()));
@@ -8634,7 +9043,7 @@ function editorFallback(entry, error) {
   const actions = el('div', 'form-row');
   actions.appendChild(button('重试', '', () => renderPanels(), true));
   const link = el('a', 'mini-btn', '导出这一篇');
-  link.href = `/api/world/documents/${entry.document.id}/export`;
+  link.href = scopedApiPath(`/api/world/documents/${entry.document.id}/export`);
   link.rel = 'noopener';
   actions.appendChild(link);
   box.appendChild(actions);
@@ -8822,20 +9231,20 @@ async function exchangeDialog() {
     body.appendChild(el('h4', 'form-title', '导出'));
     const exportRow = el('div', 'form-row');
     exportRow.appendChild(button('整个世界（zip）', 'Markdown + world.json 备份', () => {
-      download('/api/world/export');
+      download(scopedApiPath('/api/world/export'));
       toast('正在打包整个世界…');
     }));
     exportRow.appendChild(button('世界备份（JSON）', '可以用下面的导入原样还原', () => {
-      download('/api/world/export?format=json');
+      download(scopedApiPath('/api/world/export?format=json'));
       toast('正在导出世界备份…');
     }));
     if (current) {
       exportRow.appendChild(button(`当前文档 Markdown`, current.name, () => {
-        download(`/api/world/documents/${current.id}/export`);
+        download(scopedApiPath(`/api/world/documents/${current.id}/export`));
         toast(`正在导出「${current.name}」…`);
       }));
       exportRow.appendChild(button('当前文档 JSON', '给脚本用', () => {
-        download(`/api/world/documents/${current.id}/export?format=json`);
+        download(scopedApiPath(`/api/world/documents/${current.id}/export?format=json`));
       }));
     }
     body.appendChild(exportRow);
@@ -9318,10 +9727,11 @@ function worldMenu() {
 /** 切到另一个世界：写进会话，然后整页重载（工作区所有数据都跟着换）。 */
 async function switchWorld(id) {
   try {
-    await api(`/api/world/worlds/${id}/switch`, { method: 'POST', body: {} });
+    const payload = await api(`/api/world/worlds/${id}/switch`, { method: 'POST', body: {} });
     closeModal();
     // 丢掉 #doc= 这类旧深链——它属于上一个世界，留着只会弹"未找到该文档"
-    location.replace('/world');
+    const slug = payload && payload.world && payload.world.slug;
+    location.replace(slug ? `/w/${encodeURIComponent(slug)}` : '/w/');
   } catch (error) { /* api() 已经提示过 */ }
 }
 
@@ -9330,9 +9740,10 @@ async function createWorldFlow() {
   const name = await askText({ label: '新世界的名字（可留空）', value: '', okLabel: '创建' });
   if (name == null) return;                 // 取消
   try {
-    await api('/api/world/worlds', { method: 'POST', body: { name: (name || '').trim() || '新世界' } });
+    const payload = await api('/api/world/worlds', { method: 'POST', body: { name: (name || '').trim() || '新世界' } });
     closeModal();
-    location.replace('/world');
+    const slug = payload && payload.world && payload.world.slug;
+    location.replace(slug ? `/w/${encodeURIComponent(slug)}` : '/w/');
   } catch (error) { /* api() 已经提示过 */ }
 }
 
@@ -9686,26 +10097,13 @@ function showOnboard(index) {
     actions.appendChild(button('放到时间线上', '', async () => {
       const title = titleInput.value.trim();
       if (!title) { toast('先写一句发生了什么'); titleInput.focus(); return; }
-      let timelineId = null;
-      const existing = [];
-      const walk = (nodes) => nodes.forEach((node) => {
-        if (node.type === 'timeline') existing.push(node.id);
-        walk(node.children || []);
-      });
-      walk(S.tree);
-      if (existing.length) timelineId = existing[0];
-      else {
-        const created = await api('/api/world/documents', { method: 'POST', body: { type: 'timeline', name: '世界时间线' } });
-        timelineId = created.id;
-        await reloadTree();
-      }
       const year = Number((whenInput.value.match(/\d+/) || [])[0]) || 1000;
-      await api(`/api/world/timelines/${timelineId}/events`, {
+      // 0.7.0 起事件挂在世界总时间线上，不再需要先建一份时间线文档
+      await api('/api/world/timeline/events', {
         method: 'POST',
         body: { title, sort_year: year, sort_month: 1, sort_day: 1, precision: 'year' },
       });
-      await reloadTree();
-      await openDoc(timelineId);
+      await openDoc(WORLD_TIMELINE_ID);
       toast('时间线上已经有第一条事件了', 2400);
       next();
     }, true));

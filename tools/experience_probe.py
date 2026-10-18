@@ -1889,6 +1889,8 @@ def run(pw) -> None:
             # 干净单击仍然要跳转
             # 挑一个"周围没有别的点压着"的孤立节点：鱼群刚流动过，随便挑一个可能被压在下面，
             # 那样点到的就是别人了（这一步要验的是"单击跳转"，不是命中测试）
+            # 光比圆心距离不够——标签画在圆心下方 12px、宽约 80px，能盖住邻点的圆，
+            # 所以还要用 elementFromPoint 确认那个点上最上层就是它自己。
             isolated = gp.evaluate("""() => {
               const uid = [...S.docs.entries()].find(([, e]) => e.document.type === 'graph');
               const nodes = (uid && uid[1].graphUi && uid[1].graphUi.data) ? uid[1].graphUi.data.nodes : [];
@@ -1903,6 +1905,9 @@ def run(pw) -> None:
                 const clash = centers.some((other) => other.id !== me.id
                   && Math.hypot(other.x - me.x, other.y - me.y) < 26);
                 if (clash) continue;
+                const top = document.elementFromPoint(me.x, me.y);
+                const own = top && top.closest ? top.closest('.graph-node') : null;
+                if (!own || Number(own.dataset.node) !== me.id) continue;
                 return {id: candidate.id, x: me.x, y: me.y};
               }
               return null;

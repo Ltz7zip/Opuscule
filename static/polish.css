@@ -924,8 +924,8 @@ input[type="range"] {
   animation: pf-dot-ping 1.8s var(--pf-ease-inout) infinite;
 }
 @keyframes pf-dot-ping {
-  0%, 100% { box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.92), 0 0 0 4px color-mix(in srgb, var(--mn-accent, #0066cc) 30%, transparent); }
-  50% { box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.92), 0 0 0 9px color-mix(in srgb, var(--mn-accent, #0066cc) 4%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 1.5px var(--tx-canvas), 0 0 0 4px var(--tx-green-line); }
+  50% { box-shadow: 0 0 0 1.5px var(--tx-canvas), 0 0 0 9px transparent; }
 }
 .tl-dot:hover {
   filter: brightness(1.25);

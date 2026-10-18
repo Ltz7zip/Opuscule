@@ -45,6 +45,9 @@ OPEN_WRITE_PREFIXES = (
     "/api/world/moderation",
     "/api/world/presence",
     "/api/world/worlds",
+    # AI 横切层（0.6.0）：凭据挂在"我"身上、会话与变更集按世界归属，
+    # 视图里用 can_read / can_edit 自己守门，不放行的话只读成员连聊天都发不出。
+    "/api/world/ai/",
 )
 
 # 这些读接口跟"某一个世界的数据"无关，未登录也放行：
@@ -59,6 +62,8 @@ PUBLIC_READ_PATHS = (
     "/api/world/worlds",
     "/api/world/relationship/templates",
     "/api/world/moderation",
+    # 凭据不属于任何世界，视图里自己校验登录后再按 user 过滤。
+    "/api/world/ai/credentials",
 )
 
 # 从"带文档 id 的读路径"里抠出 id（documents/12、cards/12、maps/12/data…）。
@@ -66,6 +71,45 @@ PUBLIC_READ_PATHS = (
 _DOC_ID_PATTERN = re.compile(
     r"^/api/world/(?:documents|cards|timelines|maps|tables|trees|relationship/trees)/(\d+)"
 )
+
+# 世界寻址（PLAN §2.2）：页面是 ``/w/<slug>``，接口是 ``/w/<slug>/api/world/…``。
+# slug 用非捕获的 ``[^/]+`` 匹配，中文 / 短码都认；``/w/`` 本身不算，它留给世界选择页。
+_WORLD_PATH_PATTERN = re.compile(r"^/w/(?P<slug>[^/]+)(?:/|$)")
+_WORLD_API_PATTERN = re.compile(r"^/w/[^/]+(?P<rest>/api(?:/.*)?)$")
+
+# 旧地址 ``/w/timeline/<doc_id>`` 里的 ``timeline`` 是固定段，不是世界 slug；
+# 不排除掉的话中间件会把「timeline」当成世界名去查，直接 404。
+_LEGACY_W_PATH = re.compile(r"^/w/timeline/\d+/?$")
+
+
+def world_slug_from_path(path: str) -> str:
+    """从请求路径里取世界 slug；``/w/``、``/w`` 或别的前缀返回空串。"""
+    path = path or ""
+    if _LEGACY_W_PATH.match(path):
+        return ""
+    match = _WORLD_PATH_PATTERN.match(path)
+    return match.group("slug") if match else ""
+
+
+def world_by_slug(slug: str) -> World | None:
+    if not slug:
+        return None
+    return World.objects.filter(slug=slug).first()
+
+
+def api_path(path: str) -> str:
+    """把 ``/w/<slug>/api/…`` 归一化回 ``/api/…``；其余路径原样返回。
+
+    守门人 / 公开读白名单只认全局前缀，路径化之后统一先过这一层，
+    免得每个判断都要写两套。
+    """
+    match = _WORLD_API_PATTERN.match(path or "")
+    return match.group("rest") if match else (path or "")
+
+
+def workspace_path(world: World | None) -> str:
+    """世界工作区的规范地址；没有世界时回到世界选择页。"""
+    return f"/w/{world.slug}" if world is not None else "/w/"
 
 # 请求内的"当前世界"。``_UNSET`` 表示没解析过（命令行 / 测试直调），退回"全场第一个"。
 _UNSET = object()
@@ -236,8 +280,12 @@ def can_read(user, world: World | None) -> bool:
 def resolve_active_world(request) -> World | None:
     """按请求解析"当前世界"。
 
-    优先级：会话里选定的（且还能进）→ 用户自己的第一个世界 → 全场第一个世界。
-    游客没有"自己的世界"，统一落到兜底的世界（读永远公开，写另有守门人拦）。
+    优先级：**路径里的 slug** → 会话里选定的（且还能进）→ 用户自己的第一个世界
+    → 全场第一个世界。路径优先是 PLAN §2.2 的核心：``/w/<slug>/…`` 说哪个世界
+    就是哪个世界，不再靠会话猜；顺手把 slug 写回会话，切页后保持选中。
+
+    路径里的 slug 查不到世界时返回 ``None``（而不是回退到全场第一个）——否则
+    ``/w/不存在的/`` 会渲染出别人的世界，``current_world()`` 甚至会误建"新世界"。
     """
     session = getattr(request, "session", None)
     selected = None
@@ -246,6 +294,19 @@ def resolve_active_world(request) -> World | None:
             selected = session.get("world_id")
         except Exception:                  # 会话不可用
             selected = None
+
+    slug = world_slug_from_path(getattr(request, "path", ""))
+    if slug:
+        world = world_by_slug(slug)
+        if world is None:
+            return None
+        if session is not None:
+            try:
+                if session.get("world_id") != world.id:
+                    session["world_id"] = world.id
+            except Exception:              # 会话不可用
+                pass
+        return world
 
     user = getattr(request, "user", None)
     if user is not None and getattr(user, "is_authenticated", False):
@@ -311,7 +372,7 @@ def allow_public_read(request) -> bool:
     放行"某一篇文档"时顺手把当前世界切成它所属的世界——游客默认落在"全场第一个
     世界"，嵌入非首个世界的文档时若不纠正，视图会拿错世界查不到数据。
     """
-    path = request.path
+    path = api_path(request.path)
     if any(path.startswith(prefix) for prefix in PUBLIC_READ_PREFIXES):
         return True
     if path in PUBLIC_READ_PATHS:

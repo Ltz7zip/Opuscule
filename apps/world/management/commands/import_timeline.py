@@ -6,7 +6,7 @@
 * ``TimelineItem(kind="era")``   -> ``Era``（theme / cover / desc 直接搬）
 * ``TimelineItem(kind="event")`` -> ``TimelineEvent``（start 拆成 年/月，精度取到「年」）
 * ``TimelineItem.cards``         -> 每张卡片建一个 ``Document(type=card)`` + ``Card``，并挂到事件上
-* 所有事件与纪元                  -> 一条 ``Document(type=timeline)``
+* 所有事件                       -> 世界的总时间线 ``WorldTimeline``（0.7.0 起不再建时间线文档）
 
 用法：
 
@@ -24,10 +24,9 @@ from apps.timeline.models import TimelineItem, TimelineView
 from apps.world.models import (
     CAL_EARTH,
     DOC_CARD,
-    DOC_TIMELINE,
     World,
 )
-from apps.documents.models import Calendar, Card, Document, Era, TimelineEvent
+from apps.documents.models import Calendar, Card, Document, Era, TimelineEvent, WorldTimeline
 
 
 def split_year(value: float) -> tuple[int, int]:
@@ -65,27 +64,25 @@ class Command(BaseCommand):
             if options["clear"]:
                 world.documents.all().delete()
                 world.eras.all().delete()
-                self.stdout.write("已清空目标世界的历史文档与纪元")
+                WorldTimeline.objects.filter(world=world).delete()
+                self.stdout.write("已清空目标世界的历史文档、纪元与总时间线")
 
             calendar = world.calendars.order_by("id").first()
             if calendar is None:
                 calendar = Calendar.objects.create(world=world, name="通用 12 × 30", mode=CAL_EARTH)
 
             era_map = self._eras(world, eras)
-            timeline = Document.objects.create(
-                world=world,
-                document_type=DOC_TIMELINE,
-                name="世界时间线",
-                position=world.documents.filter(parent__isnull=True).count() + 1,
-                settings={"calendar": calendar.id, "view_start": 1500.0, "view_end": 1900.0},
-            )
+            timeline = WorldTimeline.for_world(world)
+            timeline.calendar = calendar
+            timeline.settings = {"view_start": 1500.0, "view_end": 1900.0}
+            timeline.save()
 
             created_events = 0
             created_cards = 0
             for item in events:
                 year, month = split_year(item.start)
                 event = TimelineEvent.objects.create(
-                    document=timeline,
+                    timeline=timeline,
                     title=item.title or "未命名事件",
                     precision="year",
                     year=year,
@@ -128,7 +125,7 @@ class Command(BaseCommand):
             timeline.save(update_fields=["settings"])
 
         self.stdout.write(self.style.SUCCESS(
-            f"完成：世界「{world.name}」+ {len(era_map)} 个纪元 + 1 条时间线 + "
+            f"完成：世界「{world.name}」+ {len(era_map)} 个纪元 + 1 根总时间线 + "
             f"{created_events} 个事件 + {created_cards} 张卡片"
         ))
 
@@ -143,11 +140,15 @@ class Command(BaseCommand):
     def _eras(self, world: World, items) -> dict:
         era_map = {}
         for index, item in enumerate(items):
+            start = float(item.start) if item.start is not None else None
+            end = float(item.end) if item.end is not None else None
             era = Era.objects.create(
                 world=world,
                 name=item.title or f"纪元 {index + 1}",
                 position=index + 1,
-                length_years=max(0.0, float(item.end or 0) - float(item.start or 0)),
+                start_year=start,
+                end_year=end,
+                length_years=max(0.0, (end or 0) - (start or 0)),
                 theme=item.theme if item.theme in {"blue", "sky", "violet", "red", "teal", "gold"} else "blue",
                 description=item.desc or "",
                 cover=item.cover or "",

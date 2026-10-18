@@ -500,18 +500,33 @@ kbd {
 .foot-note b { color: var(--ink-soft); font-weight: 500; }
 
 /* ------------------------------------------------------------- 时间线工具 */
-.tl-wrap { position: relative; height: 100%; min-height: 420px; overflow: hidden; }
+.tl-wrap {
+  position: relative; height: 100%; min-height: 420px; overflow: hidden;
+  /* 点阵取值与经典画布（style.css 的 .bg-grid）逐位对齐：
+     同一档密度、同一档深浅，切换 / 嵌入时不会出现"另一种底纹" */
+  --dot: rgba(255, 255, 243, 0.09);
+  --dot-size: 22px;
+  /* 事件点引线：与经典画布的 --stem 同值，不再借用更重的 hairline-strong */
+  --stem: rgba(255, 255, 243, 0.12);
+}
+:root[data-theme="light"] .tl-wrap {
+  --dot: rgba(24, 24, 27, 0.085);
+  --stem: rgba(24, 24, 27, 0.16);
+}
 .tl-canvas { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
 .tl-canvas.is-panning { cursor: grabbing; }
 .tl-dots {
   position: absolute; inset: 0;
-  background-image: radial-gradient(var(--dot, rgba(255,255,255,0.22)) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(circle at center, var(--dot, rgba(255,255,255,0.22)) 1px, transparent 1.3px);
+  background-size: var(--dot-size, 22px) var(--dot-size, 22px);
   background-position: 12.5px 4px;
+  opacity: 0.95;
 }
-.tl-axis { position: absolute; left: 0; right: 0; top: 50.1%; height: 1px; background: rgba(255, 255, 255, 0.27); }
-.tl-tick { position: absolute; top: calc(50.1% - 4px); width: 1px; height: 9px; background: rgba(255, 255, 255, 0.3); }
-.tl-year { position: absolute; top: calc(50.1% + 22px); font-size: 11px; color: #8e8a83; transform: translateX(-50%); }
+/* 轴线 / 刻度 / 纪年：跟随明暗档，浅色下不再是一层看不见的白线 */
+.tl-axis { position: absolute; left: 0; right: 0; top: 50.1%; height: 1px; background: var(--tx-hairline-strong); }
+.tl-tick { position: absolute; top: calc(50.1% - 4.5px); width: 1px; height: 9px; background: var(--tx-hairline-strong); }
+/* 经典画布用 SVG 的 y 作基线（y+22），这里的 top 是盒顶，所以要减掉字形上升部，才能与刻度标签落到同一基线 */
+.tl-year { position: absolute; top: calc(50.1% + 12px); font-size: 11px; line-height: 1; color: var(--tx-body); transform: translateX(-50%); }
 .tl-era-strip {
   position: absolute; top: 14px; left: 14px; right: 14px;
   display: flex; gap: 8px; flex-wrap: wrap;
@@ -521,55 +536,56 @@ kbd {
   height: 26px; border-radius: 10px;
   display: flex; align-items: center; padding: 0 10px;
   font-size: 11.5px; white-space: nowrap; overflow: hidden;
-  background: rgba(20, 20, 17, 0.92); border: 1px solid currentColor;
+  background: var(--tx-canvas-raised); border: 1px solid currentColor;
 }
 .tl-era-band span { color: inherit; }
 .tl-event { position: absolute; }
 .tl-dot {
   position: absolute; width: 8px; height: 8px; border-radius: 50%;
-  background: #dbd8d6; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.92);
+  background: var(--tx-ink);
+  box-shadow: 0 0 0 1.5px var(--tx-canvas);
   transform: translate(-50%, -50%); cursor: pointer;
 }
-.tl-dot.is-selected { box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.92), 0 0 0 6px rgba(224, 168, 60, 0.22); }
-.tl-stem { position: absolute; width: 1px; background: rgba(255, 255, 255, 0.17); transform: translateX(-0.5px); }
+.tl-dot.is-selected { box-shadow: 0 0 0 1.5px var(--tx-canvas), 0 0 0 6px var(--tx-green-line); }
+.tl-stem { position: absolute; width: 1px; background: var(--stem, var(--tx-hairline-strong)); transform: translateX(-0.5px); }
 .tl-pill {
   position: absolute; height: 24px; border-radius: 12px; padding: 0 8px;
   display: flex; align-items: center; gap: 6px;
-  font-size: 10.6px; color: #d9d5cf;
-  background: rgb(34, 30, 17); border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 10.6px; color: var(--tx-ink);
+  background: var(--tx-canvas-raised); border: 1px solid var(--tx-hairline);
   transform: translateX(-50%); cursor: pointer; white-space: nowrap;
   max-width: 220px; overflow: hidden;
 }
-.tl-pill:hover { border-color: var(--line-strong); }
+.tl-pill:hover { border-color: var(--tx-hairline-strong); }
 .tl-pill .tp-card { color: var(--accent); font-size: 10px; }
 
 .tl-tools {
   position: absolute; left: 50%; bottom: 15.5px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 4px;
   height: 48px; padding: 0 7px;
-  background: rgba(18, 16, 13, 0.94); border: 1px solid var(--line);
-  border-radius: 14px; box-shadow: var(--shadow);
+  background: var(--tx-canvas-raised); border: 1px solid var(--tx-hairline);
+  border-radius: 14px; box-shadow: var(--nb-shadow-lg);
 }
 .tl-tool {
   width: 34px; height: 34px; border-radius: 9px;
   background: transparent; border: 1px solid transparent;
   color: var(--ink-soft); cursor: pointer; font-size: 14px;
 }
-.tl-tool:hover { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
-.tl-tool.is-active { color: var(--ink); background: rgba(255, 255, 255, 0.09); border-color: var(--line); }
+.tl-tool:hover { color: var(--ink); background: var(--nb-alpha-200); }
+.tl-tool.is-active { color: var(--ink); background: var(--nb-alpha-300); border-color: var(--tx-hairline); }
 .tl-sep { width: 1px; height: 20px; background: var(--line); margin: 0 3px; }
 
 .tl-zoom {
   position: absolute; right: 25.5px; bottom: 71.5px;
   width: 41px; display: grid; gap: 2px;
-  background: rgba(18, 16, 13, 0.94); border: 1px solid var(--line);
-  border-radius: 12px; padding: 3px; box-shadow: var(--shadow);
+  background: var(--tx-canvas-raised); border: 1px solid var(--tx-hairline);
+  border-radius: 12px; padding: 3px; box-shadow: var(--nb-shadow-lg);
 }
 .tl-zoom button {
   height: 38px; border-radius: 9px; background: transparent; border: 0;
   color: var(--ink-soft); cursor: pointer; font-size: 14px;
 }
-.tl-zoom button:hover { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
+.tl-zoom button:hover { color: var(--ink); background: var(--nb-alpha-200); }
 
 .tl-panel {
   position: absolute; top: 44px; left: 12px; width: 316px;
@@ -713,14 +729,14 @@ kbd {
 .world-item {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   padding: 8px 10px; border: 1px solid transparent; border-radius: 9px;
-  background: rgba(255, 255, 255, 0.03); color: var(--ink-soft);
+  background: var(--nb-alpha-75); color: var(--ink-soft);
   font: inherit; font-size: 13px; cursor: pointer;
 }
-.world-item:hover { background: rgba(255, 255, 255, 0.06); color: var(--ink); }
-.world-item.is-current { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.05); color: var(--ink); cursor: default; }
+.world-item:hover { background: var(--nb-alpha-200); color: var(--ink); }
+.world-item.is-current { border-color: var(--line-strong); background: var(--nb-alpha-100); color: var(--ink); cursor: default; }
 .world-item .wi-avatar {
   flex: 0 0 26px; height: 26px; display: grid; place-items: center;
-  border-radius: 7px; background: rgba(255, 255, 255, 0.08); color: var(--ink);
+  border-radius: 7px; background: var(--nb-alpha-300); color: var(--ink);
   font-size: 12px; font-weight: 600;
 }
 .world-item .wi-meta { display: grid; gap: 1px; min-width: 0; }
@@ -919,7 +935,7 @@ kbd {
   padding: 8px 10px; border-radius: 8px; cursor: pointer;
   border: 1px solid transparent;
 }
-.folder-row:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--line); }
+.folder-row:hover { background: var(--nb-alpha-100); border-color: var(--line); }
 .fr-icon { width: 16px; color: var(--ink-dim); }
 .fr-name { flex: 1 1 auto; color: var(--ink); font-size: 13.5px; }
 .fr-kind { color: var(--ink-dim); font-size: 11.5px; }
@@ -935,7 +951,7 @@ kbd {
   color: var(--ink-dim); font: inherit; font-size: 12px;
   padding: 3px 6px; cursor: pointer;
 }
-.crumb-seg:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: var(--ink); }
+.crumb-seg:hover:not(:disabled) { background: var(--nb-alpha-200); color: var(--ink); }
 .crumb-seg.is-current { color: var(--ink); font-weight: 500; cursor: default; }
 .folder-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .folder-search {
@@ -1032,6 +1048,6 @@ kbd {
   height: 100%;
   border: 0;
   border-radius: 0 0 var(--shell-radius, 0) var(--shell-radius, 0);
-  background: var(--tx-canvas-sunken, #0d0c0b);
+  background: var(--tx-canvas, #18181b);
 }
 .map-wrap > .map-frame { flex: 1 1 auto; min-height: 0; }

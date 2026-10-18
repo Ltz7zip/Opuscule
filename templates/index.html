@@ -1,189 +1,330 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN"{% if embedded %} data-theme="{{ classic_theme|default:'dark' }}"{% endif %}>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>世界观共建 · 时间轴</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23191919'/%3E%3Cpath d='M6 16h20' stroke='%232383e2' stroke-width='1.8'/%3E%3Ccircle cx='16' cy='16' r='3.4' fill='%232383e2'/%3E%3Ccircle cx='25' cy='16' r='1.8' fill='%23f0efed'/%3E%3C/svg%3E" />
+  <script>
+    // 同一份模板服务两种场景：工作区里的 iframe（.tl-embed）与顶层整页（.tl-shell）。
+    // 判定必须在样式前执行，避免整页壳先闪一下再被还原。
+    (function () {
+      var root = document.documentElement;
+      if (window.self !== window.top) {
+        root.classList.add('tl-embed');
+      } else {
+        root.classList.add('tl-shell');
+        root.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <!-- Opuscule 设计语言层：纯变量文件、零选择器，给 style.css 提供 --nb-* 取值，所以排在 style.css 之前。 -->
   <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
   <link rel="stylesheet" href="{% static 'style.css' %}?v={{ static_version }}" />
 </head>
-<body>
-  <!-- 时间线画布：整块区域就是时间线编辑区本身 -->
-  <div class="viewport" id="viewport">
-    <div class="bg-ambient" aria-hidden="true"></div>
-    <div class="bg-grid" id="bgGrid" aria-hidden="true"></div>
-
-    <!-- 轴线、刻度、连接线 -->
-    <svg class="axis-svg" id="axisSvg" aria-hidden="true"></svg>
-
-    <!-- 数据加载中的一线微光（贴在轴线上） -->
-    <div class="boot-strip" id="bootStrip" aria-hidden="true"><span></span></div>
-
-    <!-- 纪元色带 -->
-    <div class="layer eras" id="erasLayer"></div>
-    <!-- 时间点（圆点 + 标签） -->
-    <div class="layer events" id="eventsLayer"></div>
-
-    <!-- 悬停：轴线上「新建时间点」 -->
-    <div class="point-marker" id="pointMarker" hidden>
-      <div class="pm-tip" id="pmTip">Month 5, Year -8<span class="tip-action"> · 点击添加</span></div>
-      <button class="pm-plus" id="pmPlus" type="button" aria-label="在此新建时间点">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
-      </button>
-    </div>
-
-    <!-- 悬停：轴线下方「新建时间段」 -->
-    <div class="era-marker" id="eraMarker" hidden>
-      <div class="em-preview" id="emPreview"></div>
-      <div class="em-tip" id="emTip">10 Month 11, Year -14 – 18 Month 4, Year -11<span class="tip-action"> · 点击添加</span></div>
-    </div>
-
-    <!-- 拖拽时跟随指针的日期提示 -->
-    <div class="drag-tip" id="dragTip" hidden></div>
-
-    <!-- 空时间轴时的引导 -->
-    <div class="empty" id="emptyState" hidden>
-      <div class="empty-inner">
-        <svg class="empty-ic" viewBox="0 0 64 40" aria-hidden="true">
-          <path d="M2 20h60" /><circle cx="20" cy="20" r="3.4" /><circle cx="44" cy="20" r="3.4" />
-          <rect x="27" y="26.5" width="18" height="7" rx="3.5" />
-        </svg>
-        <h2 class="empty-title" id="emptyTitle">这条时间轴还是空的</h2>
-        <p class="empty-sub" id="emptySub">把指针移到中间的轴线上，会浮出圆形 <b>+</b>；点一下就在那一刻新建时间点。</p>
-        <div class="empty-acts">
-          <button class="empty-btn is-primary" id="emptyNewEvent" type="button">新建时间点</button>
-          <button class="empty-btn" id="emptyNewEra" type="button">新建时间段</button>
+<body class="tl-body">
+  <div class="tlx-shell">
+    <!-- ============================ 顶栏（两行） ============================ -->
+    <header class="tlx-top">
+      <div class="tlx-top-row1">
+        <a class="tlx-back" href="{{ world_base|default:'/w/' }}">工作台</a>
+        <span class="tlx-vsep" aria-hidden="true"></span>
+        <nav class="tlx-crumbs" aria-label="位置">
+          <span>世界观共建</span>
+          <span class="tlx-crumb-sep" aria-hidden="true">/</span>
+          <span>时间线</span>
+          <span class="tlx-crumb-sep" aria-hidden="true">/</span>
+          <b>{{ classic_title|default:"时间轴" }}</b>
+        </nav>
+        <div class="tlx-top-right">
+          <label class="tlx-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.1" /><path d="m15.2 15.2 4.4 4.4" /></svg>
+            <input id="tlxSearch" type="search" placeholder="搜索事件 / 纪元…" autocomplete="off" aria-label="搜索事件或纪元" />
+          </label>
+          <div class="save-chip" id="saveChip" hidden role="status" aria-live="polite">
+            <span class="sc-dot" aria-hidden="true"></span><span id="saveChipText">已保存</span>
+          </div>
+          <button class="tlx-btn" id="tlxShare" type="button">分享</button>
         </div>
       </div>
+      <div class="tlx-top-row2">
+        <nav class="tlx-tabs" id="tlxTabs" aria-label="视图切换">
+          <button type="button" data-view="canvas" class="is-active">时间轴</button>
+          <button type="button" data-view="list">列表</button>
+          <button type="button" data-view="calendar">日历</button>
+          <button type="button" data-view="map" disabled>地图</button>
+        </nav>
+        <div class="tlx-top-actions">
+          <button class="tlx-chip-btn" id="tlxPrecision" type="button">精度：月</button>
+          <button class="tlx-btn tlx-btn--primary" id="tlxNewEvent" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
+            新建时间点
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="tlx-main">
+      <!-- ============================ 左栏 ============================ -->
+      <aside class="tlx-side">
+        <div class="tlx-brand">
+          <span class="tlx-brand-mark" aria-hidden="true"></span>
+          <span class="tlx-brand-name">{{ classic_title|default:"时间轴" }}</span>
+        </div>
+
+        <div class="tlx-side-label">视图</div>
+        <nav class="tlx-nav" id="tlxViews" aria-label="视图">
+          <button type="button" data-view="canvas" class="is-active">时间轴画布</button>
+          <button type="button" data-view="list">列表视图</button>
+          <button type="button" data-view="calendar">日历视图</button>
+        </nav>
+
+        <div class="tlx-side-label">纪元</div>
+        <nav class="tlx-nav tlx-era-list" id="tlxEraList" aria-label="纪元">
+          <button type="button" data-id="" class="is-active"><span class="tlx-dot" aria-hidden="true"></span>全部纪元</button>
+        </nav>
+
+        <div class="tlx-side-foot">
+          <button type="button" class="tlx-nav-item" id="tlxCalendarBtn">日历设置</button>
+          <button class="help-btn tlx-nav-item" id="helpBtn" type="button" data-tip="操作指南　?">操作指南</button>
+        </div>
+      </aside>
+
+      <!-- ============================ 中间画布 ============================ -->
+      <section class="tlx-center">
+        <div class="tlx-canvas-head">
+          <div class="tlx-canvas-title-row">
+            <h1 class="tlx-canvas-title">时间轴</h1>
+            <span class="tlx-count" id="tlxCount">0 个时间点 · 0 个纪元</span>
+          </div>
+          <div class="tlx-canvas-tools">
+            <button class="tlx-icon-btn" id="tlxPanLeft" type="button" aria-label="向左翻页" data-tip="向左翻页　←">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.4 6.4 8.8 12l5.6 5.6" /></svg>
+            </button>
+            <button class="tlx-icon-btn" id="tlxPanRight" type="button" aria-label="向右翻页" data-tip="向右翻页　→">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 6.4 15.2 12l-5.6 5.6" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="tlx-canvas-card">
+          <!-- 时间线画布：整块区域就是时间线编辑区本身 -->
+          <div class="viewport" id="viewport">
+            <div class="bg-ambient" aria-hidden="true"></div>
+            <div class="bg-grid" id="bgGrid" aria-hidden="true"></div>
+
+            <!-- 轴线、刻度、连接线 -->
+            <svg class="axis-svg" id="axisSvg" aria-hidden="true"></svg>
+
+            <!-- 数据加载中的一线微光（贴在轴线上） -->
+            <div class="boot-strip" id="bootStrip" aria-hidden="true"><span></span></div>
+
+            <!-- 纪元色带 -->
+            <div class="layer eras" id="erasLayer"></div>
+            <!-- 时间点（圆点 + 标签） -->
+            <div class="layer events" id="eventsLayer"></div>
+
+            <!-- 悬停：轴线上「新建时间点」 -->
+            <div class="point-marker" id="pointMarker" hidden>
+              <div class="pm-tip" id="pmTip">Month 5, Year -8<span class="tip-action"> · 点击添加</span></div>
+              <button class="pm-plus" id="pmPlus" type="button" aria-label="在此新建时间点">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
+              </button>
+            </div>
+
+            <!-- 悬停：轴线下方「新建时间段」 -->
+            <div class="era-marker" id="eraMarker" hidden>
+              <div class="em-preview" id="emPreview"></div>
+              <div class="em-tip" id="emTip">10 Month 11, Year -14 – 18 Month 4, Year -11<span class="tip-action"> · 点击添加</span></div>
+            </div>
+
+            <!-- 拖拽时跟随指针的日期提示 -->
+            <div class="drag-tip" id="dragTip" hidden></div>
+
+            <!-- 空时间轴时的引导 -->
+            <div class="empty" id="emptyState" hidden>
+              <div class="empty-inner">
+                <svg class="empty-ic" viewBox="0 0 64 40" aria-hidden="true">
+                  <path d="M2 20h60" /><circle cx="20" cy="20" r="3.4" /><circle cx="44" cy="20" r="3.4" />
+                  <rect x="27" y="26.5" width="18" height="7" rx="3.5" />
+                </svg>
+                <h2 class="empty-title" id="emptyTitle">这条时间轴还是空的</h2>
+                <p class="empty-sub" id="emptySub">把指针移到中间的轴线上，会浮出圆形 <b>+</b>；点一下就在那一刻新建时间点。</p>
+                <div class="empty-acts">
+                  <button class="empty-btn is-primary" id="emptyNewEvent" type="button">新建时间点</button>
+                  <button class="empty-btn" id="emptyNewEra" type="button">新建时间段</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右键框选：矩形 + 多选工具条 -->
+            <div class="marquee" id="marquee" hidden></div>
+            <div class="sel-bar" id="selBar" hidden>
+              <span class="sel-count" id="selCount">0 已选择</span>
+              <button class="sel-btn" id="selCopy" type="button" title="复制所选" aria-label="复制所选">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" /></svg>
+              </button>
+              <button class="sel-btn" id="selDelete" type="button" title="删除所选" aria-label="删除所选">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" /></svg>
+              </button>
+              <button class="sel-btn" id="selClose" type="button" title="取消选择" aria-label="取消选择">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" /></svg>
+              </button>
+            </div>
+
+            <!-- 底部工具条 -->
+            <div class="toolbar" id="toolbar">
+              <button class="tool-btn is-active" data-tool="select" type="button" data-tip="选择　V" aria-label="选择">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.9 18.3 12l-6.2 1.1-2.6 5.7z" /></svg>
+              </button>
+              <button class="tool-btn" data-tool="hand" type="button" data-tip="只拖画面　H" aria-label="拖动画布">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8.4 11V5.9a1.45 1.45 0 0 1 2.9 0V11M11.3 10.6V4.9a1.45 1.45 0 0 1 2.9 0v5.7M14.2 10.9V6.4a1.45 1.45 0 0 1 2.9 0V14a6 6 0 0 1-6 6h-.6a5.6 5.6 0 0 1-4.4-2.1l-2.4-3.1a1.5 1.5 0 0 1 2.2-2z" />
+                </svg>
+              </button>
+              <span class="tool-sep" aria-hidden="true"></span>
+              <button class="tool-btn" data-tool="list" type="button" data-tip="列表视图" aria-label="列表视图">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3.6" y="4.6" width="16.8" height="4.2" rx="1.2" /><path d="M3.6 12.4h5.6v7h-5.6zM12.2 12.6h8.2M12.2 15.6h8.2M12.2 18.6h8.2" />
+                </svg>
+              </button>
+              <button class="tool-btn" data-tool="calendar" type="button" data-tip="日历设置" aria-label="日历视图">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3.2" y="5.2" width="17.6" height="15.6" rx="2.4" /><path d="M3.2 9.6h17.6M7.9 3.2v4M16.1 3.2v4M11 13.6l1.9-1.2v5.4M10.4 17.8h5" />
+                </svg>
+              </button>
+              <span class="tool-sep" aria-hidden="true"></span>
+              <button class="tool-btn" data-tool="flag" type="button" data-tip="只看重点" aria-label="标记">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 20.4V4.2M6.6 5.2h9.9l-1.9 3.6 1.9 3.6H6.6" /></svg>
+              </button>
+              <button class="tool-btn" data-tool="copy" type="button" data-tip="复制这条记录　⌘D" aria-label="复制所选">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- 首次使用的引导（只出现一次，或点了「知道了」就不再出现） -->
+            <div class="coach" id="coach" hidden>
+              <span class="coach-text">
+                <span class="coach-msg">把指针移到<b>轴线</b>上可新建时间点，移到<b>轴线下方</b>可拖出时间段</span>
+                <button class="coach-close" id="coachClose" type="button">知道了</button>
+              </span>
+            </div>
+
+            <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastText"></span></div>
+          </div>
+
+          <!-- 右侧缩放控件（画布卡右上角） -->
+          <div class="zoom-stack" id="zoomStack">
+            <button class="zoom-btn" id="zoomIn" type="button" data-tip="放大　+" aria-label="放大">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M10.2 7.2v6M7.2 10.2h6" />
+              </svg>
+            </button>
+            <span class="tlx-zoom-val" id="tlxZoomVal">100%</span>
+            <button class="zoom-btn" id="zoomOut" type="button" data-tip="缩小　−" aria-label="缩小">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M7.2 10.2h6" />
+              </svg>
+            </button>
+            <button class="zoom-btn" id="zoomFit" type="button" data-tip="适应内容　F" aria-label="适应内容">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 8.6V5.6A1.6 1.6 0 0 1 5.6 4h3M15.4 4h3A1.6 1.6 0 0 1 20 5.6v3M20 15.4v3a1.6 1.6 0 0 1-1.6 1.6h-3M8.6 20h-3A1.6 1.6 0 0 1 4 18.4v-3" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- 无边框内容卡（悬停详情） -->
+          <div class="hint-card" id="hintCard" hidden></div>
+
+          <div class="tlx-canvas-hint">⌘/Ctrl + 滚轮缩放 · 拖拽空白平移 · 右键框选</div>
+        </div>
+      </section>
+
+      <!-- ============================ 右栏详情 ============================ -->
+      <aside class="tlx-inspector" aria-label="详情">
+        <article class="tlx-sel-card" id="tlxSelCard" hidden>
+          <div class="tlx-eyebrow">当前选中</div>
+          <h2 class="tlx-sel-title" id="tlxSelTitle"></h2>
+          <div class="tlx-sel-meta" id="tlxSelMeta"></div>
+          <span class="tlx-kind" id="tlxSelKind">时间点</span>
+        </article>
+
+        <div class="tlx-detail-empty" id="tlxDetailEmpty">
+          <div class="tlx-detail-empty-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3.6" y="4.6" width="16.8" height="14.8" rx="2.4" /><path d="M7.4 9.4h9.2M7.4 13h6.2" /></svg>
+          </div>
+          <p>选中一个时间点或纪元查看详情</p>
+        </div>
+
+        <!-- ===================== 记录编辑卡片（时间点 / 纪元共用） ===================== -->
+        <div class="editor" id="editor" hidden role="dialog" aria-modal="true" aria-label="编辑记录">
+          <div class="ed-cover" id="edCover" data-filled="false">
+            <button class="ed-cover-hit" id="edCoverBtn" type="button" title="设置封面" aria-label="设置封面">
+              <svg class="ed-cover-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.4v15.2M4.4 12h15.2" /></svg>
+            </button>
+            <span class="ed-cover-badge" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8z" /></svg>
+            </span>
+          </div>
+
+          <div class="ed-title" id="edTitle" contenteditable="true" spellcheck="false" data-placeholder="未命名"></div>
+
+          <button class="ed-del" id="edDelete" type="button" title="删除" aria-label="删除">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" />
+            </svg>
+          </button>
+
+          <div class="ed-dates">
+            <button class="ed-date" id="edStart" type="button">
+              <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="16" rx="2.4" /><path d="M3 9.6h18M7.8 3v4M16.2 3v4M11.2 13v4.6h2.6" />
+              </svg>
+              <span class="ed-date-text" id="edStartText">Month 5, Year -8</span>
+            </button>
+            <button class="ed-date" id="edEnd" type="button" hidden>
+              <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15.4M13.4 6 19.4 12l-6 6" /></svg>
+              <span class="ed-date-text" id="edEndText">Month 5, Year -8</span>
+            </button>
+          </div>
+
+          <div class="ed-desc" id="edDesc" contenteditable="true" spellcheck="false" data-placeholder="描述"></div>
+
+          <hr class="ed-divider" />
+
+          <button class="ed-cards" id="edCards" type="button">
+            <svg class="ed-cards-ic" id="edCardsIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.2v13.6M5.2 12h13.6" /></svg>
+            <span id="edCardsText">添加卡片</span>
+          </button>
+
+          <div class="tlx-ed-foot">
+            <button class="tlx-save" id="tlxSave" type="button">保存修改</button>
+            <button class="tlx-icon-btn" id="tlxOpenRecord" type="button" title="在新窗口打开" aria-label="在新窗口打开">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-8.6 8.6M18 14.4V19a1.4 1.4 0 0 1-1.4 1.4H5.4A1.4 1.4 0 0 1 4 19V7.8a1.4 1.4 0 0 1 1.4-1.4H10" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="tlx-tip">⌘/Ctrl + 滚轮缩放 · 拖拽空白平移 · 右键框选</div>
+      </aside>
     </div>
 
-    <!-- 右键框选：矩形 + 多选工具条 -->
-    <div class="marquee" id="marquee" hidden></div>
-    <div class="sel-bar" id="selBar" hidden>
-      <span class="sel-count" id="selCount">0 已选择</span>
-      <button class="sel-btn" id="selCopy" type="button" title="复制所选" aria-label="复制所选">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" /></svg>
-      </button>
-      <button class="sel-btn" id="selDelete" type="button" title="删除所选" aria-label="删除所选">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" /></svg>
-      </button>
-      <button class="sel-btn" id="selClose" type="button" title="取消选择" aria-label="取消选择">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" /></svg>
-      </button>
-    </div>
-
-    <!-- 右侧缩放控件 -->
-    <div class="zoom-stack" id="zoomStack">
-      <button class="zoom-btn" id="zoomIn" type="button" data-tip="放大　+" aria-label="放大">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M10.2 7.2v6M7.2 10.2h6" />
-        </svg>
-      </button>
-      <button class="zoom-btn" id="zoomOut" type="button" data-tip="缩小　−" aria-label="缩小">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M7.2 10.2h6" />
-        </svg>
-      </button>
-      <button class="zoom-btn" id="zoomFit" type="button" data-tip="适应内容　F" aria-label="适应内容">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 8.6V5.6A1.6 1.6 0 0 1 5.6 4h3M15.4 4h3A1.6 1.6 0 0 1 20 5.6v3M20 15.4v3a1.6 1.6 0 0 1-1.6 1.6h-3M8.6 20h-3A1.6 1.6 0 0 1 4 18.4v-3" />
-        </svg>
-      </button>
-    </div>
-
-    <!-- 底部工具条 -->
-    <div class="toolbar" id="toolbar">
-      <button class="tool-btn is-active" data-tool="select" type="button" data-tip="选择　V" aria-label="选择">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.9 18.3 12l-6.2 1.1-2.6 5.7z" /></svg>
-      </button>
-      <button class="tool-btn" data-tool="hand" type="button" data-tip="只拖画面　H" aria-label="拖动画布">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8.4 11V5.9a1.45 1.45 0 0 1 2.9 0V11M11.3 10.6V4.9a1.45 1.45 0 0 1 2.9 0v5.7M14.2 10.9V6.4a1.45 1.45 0 0 1 2.9 0V14a6 6 0 0 1-6 6h-.6a5.6 5.6 0 0 1-4.4-2.1l-2.4-3.1a1.5 1.5 0 0 1 2.2-2z" />
-        </svg>
-      </button>
-      <span class="tool-sep" aria-hidden="true"></span>
-      <button class="tool-btn" data-tool="list" type="button" data-tip="列表视图（还没做）" aria-label="列表视图">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3.6" y="4.6" width="16.8" height="4.2" rx="1.2" /><path d="M3.6 12.4h5.6v7h-5.6zM12.2 12.6h8.2M12.2 15.6h8.2M12.2 18.6h8.2" />
-        </svg>
-      </button>
-      <button class="tool-btn" data-tool="calendar" type="button" data-tip="日历设置" aria-label="日历视图">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3.2" y="5.2" width="17.6" height="15.6" rx="2.4" /><path d="M3.2 9.6h17.6M7.9 3.2v4M16.1 3.2v4M11 13.6l1.9-1.2v5.4M10.4 17.8h5" />
-        </svg>
-      </button>
-      <span class="tool-sep" aria-hidden="true"></span>
-      <button class="tool-btn" data-tool="flag" type="button" data-tip="标记（还没做）" aria-label="标记">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 20.4V4.2M6.6 5.2h9.9l-1.9 3.6 1.9 3.6H6.6" /></svg>
-      </button>
-      <button class="tool-btn" data-tool="copy" type="button" data-tip="复制这条记录　⌘D" aria-label="复制所选">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" />
-        </svg>
-      </button>
-    </div>
-
-    <!-- 右下角帮助 -->
-    <button class="help-btn" id="helpBtn" type="button" data-tip="操作指南　?" aria-label="帮助">?</button>
-
-    <!-- 自动保存状态：改写库时短暂出现 -->
-    <div class="save-chip" id="saveChip" hidden role="status" aria-live="polite">
-      <span class="sc-dot" aria-hidden="true"></span><span id="saveChipText">已保存</span>
-    </div>
-
-    <!-- 首次使用的引导（只出现一次，或点了「知道了」就不再出现） -->
-    <div class="coach" id="coach" hidden>
-      <span class="coach-text">
-        <span class="coach-msg">把指针移到<b>轴线</b>上可新建时间点，移到<b>轴线下方</b>可拖出时间段</span>
-        <button class="coach-close" id="coachClose" type="button">知道了</button>
-      </span>
-    </div>
-
-    <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastText"></span></div>
-  </div>
-
-  <!-- ===================== 记录编辑弹层（时间点 / 纪元共用） ===================== -->
-  <div class="editor" id="editor" hidden role="dialog" aria-modal="true" aria-label="编辑记录">
-    <div class="ed-cover" id="edCover" data-filled="false">
-      <button class="ed-cover-hit" id="edCoverBtn" type="button" title="设置封面" aria-label="设置封面">
-        <svg class="ed-cover-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.4v15.2M4.4 12h15.2" /></svg>
-      </button>
-      <span class="ed-cover-badge" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8z" /></svg>
-      </span>
-    </div>
-
-    <div class="ed-title" id="edTitle" contenteditable="true" spellcheck="false" data-placeholder="未命名"></div>
-
-    <button class="ed-del" id="edDelete" type="button" title="删除" aria-label="删除">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" />
-      </svg>
-    </button>
-
-    <div class="ed-dates">
-      <button class="ed-date" id="edStart" type="button">
-        <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3" y="5" width="18" height="16" rx="2.4" /><path d="M3 9.6h18M7.8 3v4M16.2 3v4M11.2 13v4.6h2.6" />
-        </svg>
-        <span class="ed-date-text" id="edStartText">Month 5, Year -8</span>
-      </button>
-      <button class="ed-date" id="edEnd" type="button" hidden>
-        <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15.4M13.4 6 19.4 12l-6 6" /></svg>
-        <span class="ed-date-text" id="edEndText">Month 5, Year -8</span>
-      </button>
-    </div>
-
-    <div class="ed-desc" id="edDesc" contenteditable="true" spellcheck="false" data-placeholder="描述"></div>
-
-    <hr class="ed-divider" />
-
-    <button class="ed-cards" id="edCards" type="button">
-      <svg class="ed-cards-ic" id="edCardsIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.2v13.6M5.2 12h13.6" /></svg>
-      <span id="edCardsText">添加卡片</span>
-    </button>
+    <!-- ============================ 底部状态栏 ============================ -->
+    <footer class="tlx-status">
+      <div class="tlx-keys">
+        <span class="tlx-key"><kbd>V</kbd>选择</span>
+        <span class="tlx-key"><kbd>H</kbd>拖画面</span>
+        <span class="tlx-key"><kbd>F</kbd>适应内容</span>
+        <span class="tlx-key"><kbd>Esc</kbd>取消</span>
+      </div>
+      <div class="tlx-status-right">
+        <span id="tlxZoomFoot">缩放 100%</span>
+        <span class="tlx-status-dot" aria-hidden="true">·</span>
+        <span>全部更改已保存</span>
+      </div>
+    </footer>
   </div>
 
   <!-- 配色选择面板：点封面弹出，切换卡片的配色主题 -->
@@ -326,16 +467,15 @@
     </div>
   </div>
 
-  <!-- ===================== 无边框内容卡（悬停详情） ===================== -->
-  <div class="hint-card" id="hintCard" hidden></div>
-
   {% if classic_readonly %}
   <script>window.CLASSIC_READONLY = true;
     {% if classic_paper %}window.CLASSIC_PAPER = true;{% endif %}</script>
   {% endif %}
   {% if classic_api_base %}
   <!--
-    嵌进工作区时（/w/timeline/<id>）：把编辑器写死的接口地址改写到某条时间线文档上。
+    把编辑器写死的接口改写到实际数据上：
+    世界总时间线（/w/<slug>/timeline）走世界级 classic 接口；
+    旧时间线文档（/w/<slug>/timeline/<id>）走这条文档自己的接口。
     编辑器自身逻辑保持不变，转换规则见 world/classic.py。
   -->
   <script>

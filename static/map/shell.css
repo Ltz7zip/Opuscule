@@ -296,6 +296,17 @@
   cursor: not-allowed;
 }
 
+/* 窄屏的左侧面板开关：宽屏左栏常驻，用不着它 */
+.tx-bar__panel-toggle {
+  display: none;
+}
+
+.tx-bar__panel-toggle[aria-expanded="true"] {
+  background: var(--tx-green-wash);
+  border-color: var(--tx-green-line);
+  color: var(--tx-green);
+}
+
 .tx-bar__noscript {
   position: fixed;
   top: var(--tx-h-bar);
@@ -346,6 +357,12 @@ body:has(> #tx-bar) #options .drag-trigger,
   }
   .tx-bar__stats {
     display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .tx-bar__panel-toggle {
+    display: inline-flex;
   }
 }
 

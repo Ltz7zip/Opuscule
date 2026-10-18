@@ -7,13 +7,17 @@
 
 from __future__ import annotations
 
+from django.db import models
 from django.http import JsonResponse
+from django.shortcuts import redirect, render
 from django.utils import timezone
 import json
 import logging
 import mimetypes
+from urllib.parse import quote
 
 from .. import permissions
+from ..classic import axis_origin
 from ..models import (
     CAL_EARTH,
     DEFAULT_THEME,
@@ -31,7 +35,13 @@ from ..models import (
     make_slug,
 )
 from ..normalize import as_int
-from apps.documents.models import Calendar, Document, DocumentVersion, TimelineEvent
+from apps.documents.models import (
+    Calendar,
+    Document,
+    DocumentVersion,
+    TimelineEvent,
+    WorldTimeline,
+)
 
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -124,6 +134,52 @@ def current_world() -> World:
     return world
 
 
+def page_embed_document(request, world: World | None):
+    """页面里点名的已发布文档（``?embed=`` / ``?doc=``）。
+
+    发布站点把地图 / 关系树 / 时间线嵌进 iframe 时，读者是游客、文档在世界之外；
+    这类请求能进页面，靠的就是"这篇文档已公开且属于这个 slug 指的世界"。
+    """
+    if world is None:
+        return None
+    for key in ("embed", "doc"):
+        doc_id = as_int(request.GET.get(key), 0)
+        if not doc_id:
+            continue
+        document = permissions.published_document(doc_id)
+        if document is not None and document.world_id == world.id:
+            return document
+    return None
+
+
+def world_page_allowed(request, world: World | None) -> bool:
+    """能不能打开某世界的页面（工作区 / 次线）。
+
+    放行三种：首次安装；在这个世界里的人；发布站点的只读嵌入（点名了已发布文档）。
+    """
+    if world is None:
+        return False
+    if not permissions.users_exist():
+        return True
+    if permissions.can_access(request.user, world):
+        return True
+    return page_embed_document(request, world) is not None
+
+
+def world_page_denied(request, world: World | None):
+    """页面守门失败的响应：游客去登录（带 next 回来），登录了但不是成员给 404。
+
+    不给 403，是因为"这个世界存不存在"本身就不该告诉局外人。
+    """
+    if world is not None and not (request.user and request.user.is_authenticated):
+        return redirect(f"/login?next={quote(request.get_full_path(), safe='')}")
+    return render(
+        request, "404.html",
+        {"request_path": request.path, "site_slug": ""},
+        status=404,
+    )
+
+
 # 全新世界自带的三个类型：和"用模板新建"里的角色 / 地点 / 事件一一对应。
 # 不带属性定义——属性留给用户在"类型"面板里按自己的世界加。
 STARTER_TYPES = (
@@ -173,7 +229,11 @@ def get_type(world: World, type_id) -> EntityType | None:
 
 
 def get_event(world: World, event_id) -> TimelineEvent | None:
-    return TimelineEvent.objects.filter(pk=as_int(event_id), document__world=world).first()
+    """事件可能挂在文档上，也可能直接挂在世界总时间线上（0.7.0 起）。"""
+    return TimelineEvent.objects.filter(
+        models.Q(document__world=world) | models.Q(timeline__world=world),
+        pk=as_int(event_id),
+    ).first()
 
 
 def save_document_settings(document: Document, patch: dict) -> None:
@@ -191,23 +251,41 @@ def _any_document(world: World) -> Document:
     return document
 
 
-def timeline_state(document: Document) -> dict:
-    """时间线的完整状态：日历 + 纪元 + 事件 + 视野。"""
+def timeline_state(document) -> dict:
+    """时间线的完整状态：日历 + 时代 + 事件 + 视野。
+
+    ``document`` 可以是旧的时间线文档，也可以是世界总时间线（``WorldTimeline``）；
+    两者暴露同样的 ``world / settings / events``，前端拿到的结构保持一致。
+
+    年份按**显示坐标**下发：显示年 = 存储年 − ``origin_year``。存储层（模型序列化、
+    备份 / 导出）始终是世界坐标，只有 UI 接口做这层换算。
+    """
     world = document.world
+    origin = axis_origin(document)
     settings_ = document.settings if isinstance(document.settings, dict) else {}
-    calendar = world.calendars.filter(pk=as_int(settings_.get("calendar"))).first()
+    preferred = (document.calendar_id if isinstance(document, WorldTimeline)
+                 else as_int(settings_.get("calendar")))
+    calendar = world.calendars.filter(pk=preferred).first() if preferred else None
     if calendar is None:
         calendar = world.calendars.order_by("id").first()
     if calendar is None:
         calendar = Calendar.objects.create(world=world, name="通用 12 × 30", mode=CAL_EARTH)
     events = document.events.all().order_by("year", "month", "day", "hour", "id")
+    view = settings_.get("view")
+    if not isinstance(view, dict):
+        view = {
+            "start": float(settings_.get("view_start", -100.0) or -100.0),
+            "end": float(settings_.get("view_end", 900.0) or 900.0),
+        }
+    view = {key: round(float(value) - origin, 4) for key, value in view.items()}
     return {
         "document": document.to_payload(),
+        "origin_year": origin,
         "calendar": calendar.to_payload(),
         "calendars": [item.to_payload() for item in world.calendars.order_by("id")],
-        "eras": [era.to_payload() for era in world.eras.order_by("position", "id")],
-        "events": [event.to_payload() for event in events],
-        "view": settings_.get("view") or {"start": -100.0, "end": 900.0},
+        "eras": [era.to_payload(origin) for era in world.eras.order_by("position", "id")],
+        "events": [event.to_payload(origin) for event in events],
+        "view": view,
         "presets": PRESET_CALENDARS if "PRESET_CALENDARS" in globals() else [],
     }
 

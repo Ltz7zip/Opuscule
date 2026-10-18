@@ -170,7 +170,7 @@ def _reset_page(request, *, step: str, error: str = "", sent: bool = False,
 def password_reset_page(request):
     """忘记密码（第一步）：填用户名或邮箱，我们把重置链接寄到登记过的邮箱。"""
     if request.user.is_authenticated:
-        return redirect("/world")
+        return redirect("/w/")
     if request.method != "POST":
         return _reset_page(request, step="request")
 
@@ -200,7 +200,7 @@ def password_reset_confirm_page(request, uidb64, token):
     from django.core.exceptions import ValidationError
 
     if request.user.is_authenticated:
-        return redirect("/world")
+        return redirect("/w/")
 
     user = _reset_user_from_token(uidb64, token)
     if user is None:

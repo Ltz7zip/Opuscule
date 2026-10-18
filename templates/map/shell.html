@@ -46,12 +46,22 @@
   </div>
 
   <div class="tx-bar__right">
+    {# 窄屏（≤980px）才出现：左栏在那里是抽屉，宽屏常驻用不着这个开关。 #}
+    <button
+      type="button"
+      class="tx-bar__btn tx-bar__panel-toggle"
+      data-icon="layers"
+      title="显示或收起左侧面板"
+      aria-controls="options"
+      aria-expanded="false"
+    ><span class="tx-bar__label">面板</span></button>
+
     <details class="tx-menu">
-      <summary data-icon="map" title="换一张地图">世界地图<span class="tx-chev" aria-hidden="true">▾</span></summary>
+      <summary data-icon="map" title="换一张地图"><span class="tx-bar__label">世界地图</span><span class="tx-chev" aria-hidden="true">▾</span></summary>
       <div class="tx-menu__panel" role="menu">
         {% for map in shell.maps %}
           <a class="tx-menu__item{% if map.current %} is-current{% endif %}" role="menuitem"
-             href="?doc={{ map.id }}">{{ map.name }}</a>
+             href="?doc={{ map.id }}{% if shell.era_id %}&era={{ shell.era_id }}{% endif %}">{{ map.name }}</a>
         {% empty %}
           <span class="tx-menu__empty">这个世界还没有别的地图</span>
         {% endfor %}
@@ -85,6 +95,47 @@
     </details>
   </div>
 </header>
+{# 抽屉遮罩：只在窄屏拉开面板时显示，点一下收起（display 由 panel.css 的窄屏段打开） #}
+<div class="tx-scrim" hidden></div>
+<script>
+  (function () {
+    var bar = document.getElementById("tx-bar");
+    if (!bar) return;
+    var toggle = bar.querySelector(".tx-bar__panel-toggle");
+    if (!toggle) return;
+    var scrim = document.querySelector(".tx-scrim");
+    var mq = window.matchMedia("(max-width: 980px)");
+
+    function isOpen() {
+      return document.body.classList.contains("tx-panel-open");
+    }
+    function setOpen(open) {
+      document.body.classList.toggle("tx-panel-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (scrim) scrim.hidden = !open;
+    }
+
+    toggle.addEventListener("click", function () {
+      setOpen(!isOpen());
+    });
+    if (scrim) {
+      scrim.addEventListener("click", function () {
+        setOpen(false);
+      });
+    }
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && isOpen()) setOpen(false);
+    });
+    /* 顶栏菜单里的「图层 / 样式 / 选项 / 工具 / 关于」在窄屏要顺手把抽屉拉开，
+       否则点了按钮却没反应（面板被收在屏幕外） */
+    bar.addEventListener("click", function (e) {
+      if (e.target.closest("[data-tab]") && mq.matches) setOpen(true);
+    });
+    mq.addEventListener("change", function (e) {
+      if (!e.matches) setOpen(false);
+    });
+  })();
+</script>
 <noscript><p class="tx-bar__noscript">地图由 JavaScript 绘制；脚本被禁用时这里只显示文档信息。</p></noscript>
 {% endif %}
 {# 面板骨架两种落地方式共用：独立页里它就是左栏；嵌进工作区 / 发布站点时才被 CSS 挪到右边。 #}

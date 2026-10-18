@@ -165,16 +165,26 @@ from .common import (
     get_type,
     json_response,
     logger,
+    page_embed_document,
     parse_json,
     save_document_settings,
     snapshot_document,
     timeline_state,
     touch_document,
+    world_page_allowed,
+    world_page_denied,
 )
 
 from .site import (
     explore,
     healthz,
+    legacy_map_home,
+    legacy_map_page,
+    legacy_relationship,
+    legacy_timeline,
+    legacy_timeline_embedded,
+    legacy_w_entry,
+    legacy_workspace,
     meta,
     robots_txt,
     safe_primary_color,
@@ -183,6 +193,7 @@ from .site import (
     workspace,
     world_collection,
     world_detail,
+    world_picker,
     world_switch,
 )
 
@@ -219,6 +230,15 @@ from .timeline import (
     event_detail,
     event_featured,
     timeline_state_view,
+    world_calendar_apply_preset,
+    world_event_collection,
+    world_timeline_state,
+)
+
+from .archives import (
+    archive_collection,
+    archive_detail,
+    archive_restore,
 )
 
 from .classic_adapter import (
@@ -227,6 +247,10 @@ from .classic_adapter import (
     classic_items,
     classic_timeline,
     classic_view,
+    world_classic_item_detail,
+    world_classic_items,
+    world_classic_timeline,
+    world_classic_view,
 )
 
 from .canvases import (
@@ -245,6 +269,7 @@ from .canvases import (
     map_marker_detail,
     map_state,
     map_state_view,
+    markers_in_era,
     tree_edge_collection,
     tree_edge_detail,
     tree_node_card,

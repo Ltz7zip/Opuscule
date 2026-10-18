@@ -3,6 +3,8 @@
 
 from django.urls import path, re_path
 
+from apps.ai import views as ai_views
+
 from . import views
 from . import relationship
 
@@ -80,9 +82,19 @@ urlpatterns = [
     path("timelines/<int:doc_id>", views.timeline_state_view, name="timeline-state"),
     path("timelines/<int:doc_id>/events", views.event_collection, name="event-collection"),
     path("timelines/<int:doc_id>/apply-preset", views.calendar_apply_preset, name="calendar-apply-preset"),
+    # 世界总时间线（0.7.0）：一个世界一条轴，事件 / 时代 / 历法都挂在这上面
+    path("timeline", views.world_timeline_state, name="world-timeline"),
+    path("timeline/events", views.world_event_collection, name="world-event-collection"),
+    path("timeline/apply-preset", views.world_calendar_apply_preset,
+         name="world-calendar-apply-preset"),
     path("events/<int:event_id>", views.event_detail, name="event-detail"),
     path("events/<int:event_id>/cards", views.event_cards, name="event-cards"),
     path("events/<int:event_id>/cards/<int:card_id>", views.event_cards, name="event-card-detail"),
+
+    # 世界存档（0.7.0）：整包快照 / 读档，上限 20
+    path("archives", views.archive_collection, name="archive-collection"),
+    path("archives/<int:archive_id>", views.archive_detail, name="archive-detail"),
+    path("archives/<int:archive_id>/restore", views.archive_restore, name="archive-restore"),
 
     # 日历与纪元
     path("calendars", views.calendar_collection, name="calendar-collection"),
@@ -97,6 +109,12 @@ urlpatterns = [
     path("timelines/<int:doc_id>/classic/items/<int:item_id>", views.classic_item_detail,
          name="classic-item-detail"),
     path("timelines/<int:doc_id>/classic/view", views.classic_view, name="classic-view"),
+    # 世界总时间线的同一套经典接口（不带 doc_id）
+    path("timeline/classic", views.world_classic_timeline, name="world-classic-timeline"),
+    path("timeline/classic/items", views.world_classic_items, name="world-classic-items"),
+    path("timeline/classic/items/<int:item_id>", views.world_classic_item_detail,
+         name="world-classic-item-detail"),
+    path("timeline/classic/view", views.world_classic_view, name="world-classic-view"),
 
     # 关系树
     path("trees/<int:doc_id>", views.tree_state_view, name="tree-state"),
@@ -143,6 +161,20 @@ urlpatterns = [
     path("complete", views.complete, name="complete"),
     path("autolink", views.autolink_view, name="autolink"),
     path("backlinks/<int:doc_id>", views.backlinks, name="backlinks"),
+
+    # AI 横切层（0.6.0）：凭据 / 会话 / 对话 / 变更集
+    path("ai/credentials", ai_views.credential_collection, name="ai-credentials"),
+    path("ai/credentials/<int:credential_id>", ai_views.credential_detail, name="ai-credential"),
+    path("ai/conversations", ai_views.conversation_collection, name="ai-conversations"),
+    path("ai/conversations/<int:conversation_id>", ai_views.conversation_detail,
+         name="ai-conversation"),
+    path("ai/chat", ai_views.chat, name="ai-chat"),
+    path("ai/changesets", ai_views.changeset_collection, name="ai-changesets"),
+    path("ai/changesets/<int:changeset_id>", ai_views.changeset_detail, name="ai-changeset"),
+    path("ai/changesets/<int:changeset_id>/apply", ai_views.changeset_apply,
+         name="ai-changeset-apply"),
+    path("ai/changesets/<int:changeset_id>/reject", ai_views.changeset_reject,
+         name="ai-changeset-reject"),
 
     # 兜底
     re_path(r"^", views.api_fallback, name="api-fallback"),
