@@ -264,7 +264,10 @@ class Document(models.Model):
         return candidate
 
     # -- 输出 -------------------------------------------------------------- #
-    def to_payload(self, with_children: bool = False, with_card: bool = False) -> dict:
+    def to_payload(self, with_children: bool = False, with_card: bool = False, world=None,
+                   children_map: dict | None = None) -> dict:
+        # 同一个世界的序列化只解析一次 world，子文档 / 卡片都复用它
+        world = world if world is not None else self.world
         payload = {
             "id": self.id,
             "type": self.document_type,
@@ -282,26 +285,30 @@ class Document(models.Model):
             "hidden": self.hidden,
             "is_published": self.is_published,
             "published_slug": self.published_slug,
-            "publish_state": publish_state(self),
+            "publish_state": publish_state(self, world),
             "published_version": self.published_version,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
         if with_children:
             # 回收站里的子文档不再出现在树里（否则点进去只会得到一个 404）
+            if children_map is not None:
+                children = children_map.get(self.id, [])
+            else:
+                children = self.children.filter(deleted_at__isnull=True).order_by("position", "id")
             payload["children"] = [
-                child.to_payload(with_children=True)
-                for child in self.children.filter(deleted_at__isnull=True).order_by("position", "id")
+                child.to_payload(with_children=True, world=world, children_map=children_map)
+                for child in children
             ]
         if with_card and self.document_type == DOC_CARD:
-            payload["card"] = self.card_payload()
+            payload["card"] = self.card_payload(world=world)
         return payload
 
-    def card_payload(self) -> dict:
+    def card_payload(self, world=None) -> dict:
         """卡片正文：类型、别名、属性值、区块（非卡片文档返回空壳）。"""
         card = getattr(self, "card", None)
         if card is None:
             return {"aliases": [], "values": {}, "blocks": [], "body": ""}
-        return card.to_payload()
+        return card.to_payload(world=world)
 
 
 class Card(models.Model):
@@ -337,11 +344,11 @@ class Card(models.Model):
     def effective_type(self) -> EntityType | None:
         return self.entity_type or self.document.entity_type
 
-    def resolved_values(self) -> dict:
+    def resolved_values(self, world=None) -> dict:
         """把原始值解析成前端直接可用的结构（引用转摘要、公式求值）。"""
         from apps.world.normalize import resolve_card_values
 
-        return resolve_card_values(self)
+        return resolve_card_values(self, world=world)
 
     def editor_doc(self):
         """编辑器文档（BlockNote 原生 JSON）；``None`` 表示这张卡还搬不进孤岛。
@@ -355,9 +362,12 @@ class Card(models.Model):
             return self.blocks_doc
         return blocks_to_doc(self.blocks)
 
-    def to_payload(self, with_doc: bool = False) -> dict:
+    def to_payload(self, with_doc: bool = False, world=None) -> dict:
         """``with_doc=True`` 才带 ``blocks_doc`` —— 内联数据库一次拉一整个类型的卡片，
-        无条件附带编辑器文档会把那个响应撑大，所以默认不带。"""
+        无条件附带编辑器文档会把那个响应撑大，所以默认不带。
+
+        ``world`` 由调用方传入时，引用解析可以复用它，少一次 ``card.document.world`` 查询。
+        """
         payload = {
             "id": self.id,
             "document": self.document_id,
@@ -365,7 +375,7 @@ class Card(models.Model):
             "aliases": self.aliases if isinstance(self.aliases, list) else [],
             "comments": self.comments if isinstance(self.comments, list) else [],
             "values": self.values if isinstance(self.values, dict) else {},
-            "resolved": self.resolved_values(),
+            "resolved": self.resolved_values(world=world),
             "blocks": self.blocks if isinstance(self.blocks, list) else [],
             "body": self.body,
             "era_mode": self.era_mode,

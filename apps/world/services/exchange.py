@@ -113,7 +113,7 @@ def document_markdown(document: Document) -> str:
     if document.document_type == "timeline":
         lines.append("## 事件")
         lines.append("")
-        for event in document.events.all().order_by("year", "month", "day", "hour", "id"):
+        for event in document.events.all().order_by("year", "month", "day", "hour", "id").prefetch_related("linked_cards"):
             when = event.display_date() if hasattr(event, "display_date") else str(event.year)
             links = "、".join(c.name for c in event.linked_cards.all())
             suffix = f"（关联：{links}）" if links else ""
@@ -159,12 +159,16 @@ def document_markdown(document: Document) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def document_payload(document: Document) -> dict:
-    """单份文档的 JSON（导回来时能原样重建）。"""
+def document_payload(document: Document, world=None) -> dict:
+    """单份文档的 JSON（导回来时能原样重建）。
+
+    ``world`` 由调用方（整世界备份）传入时，卡片引用解析可以复用它，
+    不必每张卡再顺着 ``card.document.world`` 查一次库。
+    """
     data = document.to_payload(with_card=False)
     card = getattr(document, "card", None)
     if card is not None:
-        data["card"] = card.to_payload()
+        data["card"] = card.to_payload(world=world)
     if document.document_type == "timeline":
         data["events"] = [e.to_payload() for e in document.events.all()]
     if document.document_type == "familyTree":
@@ -211,7 +215,12 @@ def timeline_markdown(world, timeline: WorldTimeline | None = None) -> str:
         lines.append("")
 
     lines.extend(["## 事件", ""])
-    events = timeline.events.order_by("year", "month", "day", "hour", "position", "id")
+    events = (
+        timeline.events.order_by("year", "month", "day", "hour", "position", "id")
+        # 历法取事件的 timeline.calendar；时代名与关联卡片都在循环里用到，一次取齐
+        .select_related("timeline__calendar", "era")
+        .prefetch_related("linked_cards")
+    )
     for event in events:
         era = f"（{event.era.name}）" if event.era_id else ""
         links = "、".join(c.name for c in event.linked_cards.all())
@@ -225,12 +234,28 @@ def timeline_markdown(world, timeline: WorldTimeline | None = None) -> str:
 
 def world_backup(world) -> dict:
     """整世界 JSON 备份：类型 + 纪元 + 日历 + 总时间线 + 文档树（递归）。"""
+    # 一次取回整棵树，在内存里按 parent 分组；避免每层递归各查一次 children。
+    # map_data 只在打开地图时用，备份里用不到，先 defer 掉省内存。
+    all_documents = list(
+        world.documents.filter(deleted_at__isnull=True)
+        .select_related("world", "entity_type")
+        # 卡片连同它自己的类型一次预取，避免每份文档各查一次卡 / 类型
+        .prefetch_related("card__entity_type")
+        .defer("map_data").order_by("position", "id")
+    )
+    children_map: dict[int, list] = {}
+    roots: list = []
+    for document in all_documents:
+        if document.parent_id is None:
+            roots.append(document)
+        else:
+            children_map.setdefault(document.parent_id, []).append(document)
+
     def walk(document: Document) -> dict:
-        item = document_payload(document)
-        item["children"] = [walk(child) for child in document.children.filter(deleted_at__isnull=True).order_by("position", "id")]
+        item = document_payload(document, world=world)
+        item["children"] = [walk(child) for child in children_map.get(document.id, ())]
         return item
 
-    roots = world.documents.filter(parent__isnull=True, deleted_at__isnull=True).order_by("position", "id")
     timeline = getattr(world, "timeline", None)
     return {
         "format": "worldbuilding-timeline/backup",
@@ -284,15 +309,31 @@ def world_zip(world) -> bytes:
         timeline = getattr(world, "timeline", None)
         if timeline is not None:
             archive.writestr("timeline.md", timeline_markdown(world, timeline))
-        for root in world.documents.filter(parent__isnull=True, deleted_at__isnull=True).order_by("position", "id"):
+        # 一次取回整棵树，在内存里按 parent 分组；避免每个有子节点的文档各查一次。
+        # 地图数据 / 工具设置这些大字段导出树时用不到，先 defer 掉。
+        all_documents = list(
+            world.documents.filter(deleted_at__isnull=True)
+            # 每份文档的 Markdown 都要读卡片、别名与类型名，连同文档类型一起预取
+            .select_related("entity_type", "card", "card__entity_type")
+            .defer("map_data", "settings", "preview")
+            .order_by("position", "id")
+        )
+        children_map: dict[int, list] = {}
+        roots: list = []
+        for document in all_documents:
+            if document.parent_id is None:
+                roots.append(document)
+            else:
+                children_map.setdefault(document.parent_id, []).append(document)
+        for root in roots:
             stack = [(root, "")]
             while stack:
                 document, prefix = stack.pop(0)
                 folder = f"documents/{prefix}" if prefix else "documents"
                 archive.writestr(f"{folder}/{unique(document.name)}", document_markdown(document))
-                for child in document.children.filter(deleted_at__isnull=True).order_by("position", "id"):
+                for child in children_map.get(document.id, ()):
                     stack.append((child, f"{prefix}{document.name}/" if prefix else f"{document.name}/"))
-        media = [doc.cover for doc in world.documents.all() if doc.cover]
+        media = world.documents.exclude(cover="").values_list("cover", flat=True)
         archive.writestr("media/index.md", "# 媒体\n\n" + "\n".join(f"- {url}" for url in dict.fromkeys(media)))
     return buffer.getvalue()
 
@@ -303,18 +344,36 @@ def world_zip(world) -> bytes:
 WIKI_LINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
 
-def _link_mentions(html: str, world) -> str:
-    """把 ``[[卡片名]]`` 变成指向卡片的提及（找不到就留纯文本）。"""
+def _link_mentions(html: str, world, cache: dict | None = None) -> str:
+    """把 ``[[卡片名]]`` 变成指向卡片的提及（找不到就留纯文本）。
+
+    ``cache`` 由 ``markdown_to_blocks`` 在一次转换里共用：同一个名字只查一次，
+    别名兜底也最多全量扫一次卡片——正文里链接很多时不用每条都查库。
+    """
     if "[[" not in html:
         return html
+    cache = cache if cache is not None else {}
+    by_name: dict[str, Document | None] = cache.setdefault("documents", {})
 
     def replace(match: re.Match) -> str:
         name = match.group(1).strip()
         label = (match.group(2) or name).strip()
-        document = world.documents.filter(name__iexact=name, deleted_at__isnull=True).first()
+        if name in by_name:
+            document = by_name[name]
+        else:
+            document = world.documents.filter(name__iexact=name, deleted_at__isnull=True).first()
+            by_name[name] = document
         if document is None:
-            document = next((c.document for c in Card.objects.filter(document__world=world)
-                             if name in (c.aliases or [])), None)
+            aliases = cache.get("aliases")
+            if aliases is None:
+                # 按与逐张卡片遍历相同的顺序铺开，先出现的卡片优先
+                aliases = {}
+                for card in Card.objects.filter(document__world=world).select_related("document"):
+                    for alias in (card.aliases or []):
+                        aliases.setdefault(alias, card.document)
+                cache["aliases"] = aliases
+            document = aliases.get(name)
+            by_name[name] = document
         if document is None:
             return label
         return f'<span class="mentions-inline" data-target="{document.id}">{label}</span>'
@@ -327,13 +386,14 @@ def markdown_to_blocks(text: str, world) -> list[dict]:
     blocks: list[dict] = []
     current: dict | None = None
     buffer: list[str] = []
+    link_cache: dict = {}
 
     def flush() -> None:
         nonlocal current, buffer
         if current is None:
             return
         body = "\n".join(buffer).strip()
-        current["html"] = _link_mentions(_paragraph_html(body), world)
+        current["html"] = _link_mentions(_paragraph_html(body), world, link_cache)
         blocks.append(current)
         current = None
         buffer = []
@@ -400,7 +460,19 @@ def import_markdown_files(world, files: list[dict], parent: Document | None = No
     """把一批 Markdown 文件导入成卡片（按目录名建文件夹）。"""
     created_docs: list[Document] = []
     folders: dict[str, Document] = {}
-    order = world.documents.filter(parent=parent).count()
+    # 每个父节点下一次可用的排序号；只在该父节点第一次用到时数一次库
+    next_positions: dict[int, int] = {}
+
+    def take_position(node: Document | None) -> int:
+        key = node.pk if node is not None else 0
+        if key not in next_positions:
+            next_positions[key] = (
+                node.children.count() if node is not None
+                else world.documents.filter(parent__isnull=True).count()
+            )
+        value = next_positions[key]
+        next_positions[key] = value + 1
+        return value
 
     def folder_for(path: str) -> Document | None:
         parts = [p for p in path.split("/")[:-1] if p and p not in (".", "..")]
@@ -417,9 +489,9 @@ def import_markdown_files(world, files: list[dict], parent: Document | None = No
             if sub_key in folders:
                 node = folders[sub_key]
                 continue
-            order_now = (node.children.count() if node else world.documents.filter(parent__isnull=True).count())
             created = Document.objects.create(
-                world=world, parent=node, document_type="folder", name=part[:200], position=order_now,
+                world=world, parent=node, document_type="folder", name=part[:200],
+                position=take_position(node),
             )
             folders[sub_key] = created
             node = created
@@ -436,7 +508,7 @@ def import_markdown_files(world, files: list[dict], parent: Document | None = No
                 break
         title = title or re.sub(r"\.(md|markdown|txt)$", "", name.split("/")[-1], flags=re.I)
         parent_doc = folder_for(name)
-        position = parent_doc.children.count() if parent_doc else world.documents.filter(parent__isnull=True).count()
+        position = take_position(parent_doc)
         blocks = markdown_to_blocks(content, world)
         document = Document.objects.create(
             world=world, parent=parent_doc, document_type=as_type, name=title[:200], position=position,
@@ -549,10 +621,23 @@ def import_backup(world, payload: dict) -> dict:
     created = 0
     doc_map: dict[int, Document] = {}           # 备份里的文档 id -> 新文档
     doc_items: list[tuple[dict, Document]] = []
+    # 每个父节点下一次可用的排序号；只在该父节点第一次用到时数一次库
+    next_positions: dict[int, int] = {}
+
+    def take_position(parent: Document | None) -> int:
+        key = parent.pk if parent is not None else 0
+        if key not in next_positions:
+            next_positions[key] = (
+                parent.children.count() if parent is not None
+                else world.documents.filter(parent__isnull=True).count()
+            )
+        value = next_positions[key]
+        next_positions[key] = value + 1
+        return value
 
     def build(item: dict, parent: Document | None) -> None:
         nonlocal created
-        position = (parent.children.count() if parent else world.documents.filter(parent__isnull=True).count())
+        position = take_position(parent)
         document = Document.objects.create(
             world=world,
             parent=parent,

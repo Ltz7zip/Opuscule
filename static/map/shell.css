@@ -1,10 +1,10 @@
 /* ==========================================================================
-   map/shell.css —— 地图页顶栏的终端皮肤
+   map/shell.css —— 地图页顶栏皮肤（Minimalist）
    --------------------------------------------------------------------------
    地图页跑的是 Opuscule 的整套界面，所以这里**只做两件事**：
 
      1. 给顶栏（templates/map/shell.html）上色。取值来自 map/tokens.css
-        （与 static/terminal.css 同源），那份文件是这套语言唯一的取值落点。
+        （单色中性 + Geist 字体 + 12px 圆角）。
      2. 藏掉 Opuscule 自己的外壳：竖向标签条、标签行、底部动作条、拖动条 —— 那些入口
         已经搬进顶栏。这些元素**仍然留在 DOM 里**，顶栏按钮只是去点它们，行为完全一致。
 
@@ -14,63 +14,79 @@
 
 /* ——— 顶栏本体 ——————————————————————————————————————————————— */
 
+/* 顶栏：应用外壳的第一层 —— 整宽横贯、贴顶，只有一条底边 hairline。
+   不再是一张浮在画布上的圆角卡片：左右栏从它下面开始贴边，四角浮层落在画布内。 */
 #tx-bar {
   position: fixed;
-  inset: 0 0 auto 0;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 90;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  box-sizing: border-box;
   height: var(--tx-h-bar);
-  padding: 0 12px;
+  padding: 0 14px;
   background: var(--tx-canvas);
+  border: 0;
   border-bottom: 1px solid var(--tx-hairline);
-  font-family: var(--tx-mono);
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
   color: var(--tx-body);
   user-select: none;
 }
 
-/* ——— 左：文档名 + 计数（与工作区顶栏同一套） ———————————————————— */
+/* ——— 左：文档名 + 计数 ——————————————————————————————————— */
 
 .tx-bar__doc {
   display: flex;
   align-items: center;
   gap: var(--tx-2);
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
 }
 
 .tx-bar__name {
   flex: none;
-  max-width: 34vw;
+  max-width: 30vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--tx-ink);
   font-family: var(--tx-sans);
-  font-size: var(--tx-fs-ui);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
   text-decoration: none;
 }
 
 .tx-bar__name:hover {
-  color: var(--tx-green-hover);
+  color: var(--tx-body);
 }
 
+/* 世界名与计数是同一层的说明文字：无衬线、小一号、压到 muted */
 .tx-bar__world,
 .tx-bar__stats {
   flex: none;
   white-space: nowrap;
-  font-size: var(--tx-fs-mono);
-  color: var(--tx-dim);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  color: var(--tx-mute);
 }
 
+/* 只读不是警告，是一枚安静的标签：方角、透明底 */
 .tx-bar__chip {
   flex: none;
-  padding: 1px 6px;
-  border: 1px solid var(--tx-hairline-strong);
-  border-radius: var(--tx-r-xxs);
-  font-size: var(--tx-fs-mono);
+  padding: 2px 7px;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  font-family: var(--tx-sans);
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--tx-mute);
 }
 
@@ -80,7 +96,8 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  margin-inline: auto;
   padding: 2px;
   border: 1px solid var(--tx-hairline);
   border-radius: var(--tx-r-md);
@@ -88,38 +105,44 @@
 }
 
 .tx-seg > button {
-  height: 22px;
+  height: 28px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--tx-r-sm);
   background: transparent;
   color: var(--tx-mute);
   font-family: inherit;
-  font-size: var(--tx-fs-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .tx-seg > button:hover {
+  background: var(--tx-canvas-raised);
   color: var(--tx-ink);
 }
 
 .tx-seg > button[aria-pressed="true"] {
-  background: var(--tx-green-wash);
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 /* ——— 右：世界地图 ▾ / 工作区 / ☰ ——————————————————————— */
 
 .tx-bar__right {
-  flex: none;
+  flex: 1 1 0;
   display: flex;
   align-items: center;
-  gap: var(--tx-2);
+  justify-content: flex-end;
+  gap: var(--tx-1);
 }
 
 .tx-chev {
-  font-size: 0.8em;
+  font-size: 0.75em;
   opacity: 0.7;
 }
 
@@ -133,14 +156,18 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: var(--tx-h-row);
-  padding: 0 9px;
-  border: 1px solid transparent;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--tx-hairline);
   border-radius: var(--tx-r-sm);
-  color: var(--tx-mute);
+  background: var(--tx-canvas);
+  color: var(--tx-ink);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   list-style: none;
   white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .tx-menu > summary::-webkit-details-marker {
@@ -149,8 +176,14 @@
 
 .tx-menu > summary:hover,
 .tx-menu[open] > summary {
-  background: var(--tx-canvas-raised);
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
   color: var(--tx-ink);
+}
+
+.tx-menu > summary:focus-visible {
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 2px;
 }
 
 .tx-menu > summary svg.icon {
@@ -163,7 +196,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 95;
-  min-width: 180px;
+  min-width: 196px;
   max-height: 60vh;
   overflow-y: auto;
   padding: var(--tx-1);
@@ -179,17 +212,20 @@
   align-items: center;
   gap: var(--tx-2);
   width: 100%;
-  padding: var(--tx-1) var(--tx-2);
-  border: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--tx-r-sm);
   background: transparent;
   color: var(--tx-body);
   font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
+  font-weight: 500;
+  line-height: 1.25;
   text-align: left;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .tx-menu__item:hover,
@@ -199,21 +235,32 @@
 }
 
 .tx-menu__item.is-current {
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
-/* 菜单里的主 CTA（保存）：绿只给它一个 */
+/* 菜单里的主 CTA（保存）：Minimalist 的实心主色 */
 .tx-menu__group > button.is-primary {
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 .tx-menu__group > button.is-primary:hover {
-  color: var(--tx-green-hover);
+  background: var(--tx-green-hover);
+  color: var(--tx-on-green);
 }
 
 .tx-menu__item.is-current::before {
-  content: "●";
-  font-size: 0.7em;
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .tx-menu__group + .tx-menu__group {
@@ -224,16 +271,18 @@
 
 .tx-menu__empty {
   display: block;
-  padding: var(--tx-1) var(--tx-2);
-  color: var(--tx-dim);
-  font-size: var(--tx-fs-mono);
+  padding: 8px 10px;
+  color: var(--tx-mute);
+  font-family: var(--tx-sans);
+  font-size: 12px;
 }
 
 .tx-menu__group > button svg.icon,
 .tx-menu__item svg.icon {
   flex: none;
   display: block;
-  color: var(--tx-mute);
+  color: currentColor;
+  opacity: 0.8;
 }
 
 .tx-bar__btn {
@@ -241,23 +290,26 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: var(--tx-h-row);
-  padding: 0 9px;
-  border: 1px solid transparent;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--tx-hairline);
   border-radius: var(--tx-r-sm);
-  background: transparent;
-  color: var(--tx-mute);
+  background: var(--tx-canvas);
+  color: var(--tx-ink);
   font-family: inherit;
-  font-size: var(--tx-fs-ui);
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .tx-bar__btn svg.icon {
   flex: none;
   display: block;
+  color: var(--tx-mute);
 }
 
 .tx-bar__label {
@@ -265,30 +317,39 @@
 }
 
 .tx-bar__btn:hover:not(:disabled) {
-  background: var(--tx-canvas-raised);
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
+  color: var(--tx-ink);
+}
+
+.tx-bar__btn:hover:not(:disabled) svg.icon {
   color: var(--tx-ink);
 }
 
 .tx-bar__btn:focus-visible {
-  outline: none;
-  box-shadow: var(--tx-focus-ring);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 2px;
 }
 
-/* 选中：绿只出现在「当前状态」和主 CTA 上 */
+/* 选中：实心主色 + 反色字 */
 .tx-bar__btn[aria-pressed="true"] {
-  background: var(--tx-green-wash);
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
-.tx-bar__btn--primary {
-  color: var(--tx-green);
-  border-color: var(--tx-green-line);
-}
-
+.tx-bar__btn--primary,
 .tx-bar__btn--primary:hover:not(:disabled) {
-  background: var(--tx-green-wash);
-  color: var(--tx-green-hover);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
+}
+
+.tx-bar__btn--primary svg.icon,
+.tx-bar__btn--primary:hover:not(:disabled) svg.icon {
+  color: currentColor;
 }
 
 .tx-bar__btn:disabled {
@@ -302,27 +363,291 @@
 }
 
 .tx-bar__panel-toggle[aria-expanded="true"] {
-  background: var(--tx-green-wash);
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+}
+
+.tx-bar__panel-toggle[aria-expanded="true"] svg.icon {
+  color: currentColor;
 }
 
 .tx-bar__noscript {
   position: fixed;
-  top: var(--tx-h-bar);
-  left: 0;
-  right: 0;
+  top: calc(var(--tx-h-bar) + 8px);
+  left: 14px;
+  right: 14px;
   z-index: 90;
   margin: 0;
   padding: 8px 12px;
   background: var(--tx-canvas-soft);
-  border-bottom: 1px solid var(--tx-hairline);
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  font-family: var(--tx-sans);
+  font-size: 12.5px;
   color: var(--tx-mute);
 }
 
-/* 面板本体：由我们的外壳接管时才变成一条竖栏（具体尺寸在 panel.css 的 #options 段）。
+/* ==========================================================================
+   画布浮层
+   --------------------------------------------------------------------------
+   地图本身没有 DOM，所以「我在哪 / 这是哪张图 / 现在什么视图 / 怎么缩放」
+   只能浮在画布四角。整层 pointer-events: none，只有控件自己接事件 ——
+   地图的拖拽、滚轮缩放、双击都不受影响。
+   ========================================================================== */
+
+.tx-canvas-ui {
+  position: fixed;
+  /* 画布只占外壳剩下的那块：顶栏 44、左栏 272、右栏 288、底部状态栏 28 */
+  top: var(--tx-h-bar);
+  left: 272px;
+  right: 288px;
+  bottom: 28px;
+  z-index: 86;
+  pointer-events: none;
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  color: var(--tx-body);
+}
+
+.tx-canvas-ui > * {
+  position: absolute;
+  pointer-events: auto;
+}
+
+/* ——— 左上面包屑 ————————————————————————————————————— */
+
+.tx-crumbs {
+  left: 14px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px 9px;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  /* 面包屑压在真实地形纹理上，需要一层极轻的底衬才读得清；
+     用半透明 canvas + 模糊，保留地图透出感 */
+  background: color-mix(in srgb, var(--tx-canvas) 82%, transparent);
+  box-shadow: var(--tx-shadow-card);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tx-body);
+}
+
+.tx-crumbs a {
+  color: var(--tx-body);
+  text-decoration: none;
+  transition: color 0.12s ease;
+}
+
+.tx-crumbs a:hover {
+  color: var(--tx-ink);
+}
+
+.tx-crumbs__sep {
+  padding: 0 8px 0 0;
+  color: var(--tx-dim);
+}
+
+.tx-crumbs__muted {
+  padding-right: 8px;
+  color: var(--tx-mute);
+  white-space: nowrap;
+}
+
+.tx-crumbs__current {
+  color: var(--tx-ink);
+  white-space: nowrap;
+}
+
+/* ——— 左上文档卡：标题 + 统计 + 视图药丸 ————————————————— */
+
+.tx-canvas-card {
+  left: 14px;
+  top: 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 154px;
+  max-width: 16rem;
+  padding: 12px;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas-soft);
+  box-shadow: var(--tx-shadow-card);
+}
+
+.tx-canvas-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--tx-ink);
+}
+
+.tx-canvas-card__meta {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tx-mute);
+}
+
+.tx-canvas-card__pill {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+  color: var(--tx-on-green);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* ——— 右上缩放栈 ————————————————————————————————————— */
+
+.tx-zoom-stack {
+  right: 12px;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas);
+  box-shadow: var(--tx-shadow-card);
+  overflow: hidden;
+}
+
+.tx-zoom-stack > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tx-body);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.tx-zoom-stack > button + button {
+  border-top: 1px solid var(--tx-hairline);
+}
+
+.tx-zoom-stack > button:hover {
+  background: var(--tx-canvas-sunken);
+  color: var(--tx-ink);
+}
+
+.tx-zoom-stack > button:focus-visible {
+  outline: 2px solid var(--tx-ink);
+  outline-offset: -2px;
+}
+
+/* ——— 底部状态栏：整宽贴底 ————————————————————————————— */
+
+/* 与编辑器同一条：left 状态 / 视图 / 图层数，右端放操作提示。
+   它横贯整个应用外壳，左右两栏都停在它上面（bottom: 28px）。 */
+.tx-canvas-meta {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--tx-hairline);
+  border-radius: 0;
+  background: var(--tx-canvas);
+  box-shadow: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx-mute);
+  white-space: nowrap;
+}
+
+/* 右端的操作提示：把左边的读数顶过去 */
+.tx-canvas-meta__hint {
+  margin-left: auto;
+  color: var(--tx-mute);
+}
+
+/* 活状态点：与编辑器状态栏右端那枚同义（这里是唯一的一处） */
+.tx-canvas-meta__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+}
+
+.tx-canvas-meta__sep {
+  color: var(--tx-dim);
+}
+
+/* ——— 右下入口 ————————————————————————————————————— */
+
+.tx-canvas-actions {
+  right: 12px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tx-canvas-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  background: var(--tx-canvas);
+  color: var(--tx-ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--tx-shadow-card);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.tx-canvas-btn:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
+}
+
+.tx-canvas-btn--primary,
+.tx-canvas-btn--primary:hover {
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+}
+
+/* 从浮层跳到左栏时闪一下，告诉眼睛「就是这一块」 */
+.tx-panel.is-highlight {
+  animation: tx-panel-flash 0.9s ease;
+}
+
+@keyframes tx-panel-flash {
+  0% { box-shadow: 0 0 0 2px var(--tx-ink); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-panel.is-highlight { animation: none; }
+}
+
+/* ==========================================================================
+   面板本体：由我们的外壳接管时才变成一条竖栏（具体尺寸在 panel.css 的 #options 段）。
    两种落地方式都算接管：独立页有顶栏，嵌进工作区面板时没有顶栏、但面板骨架照样在
    （见 templates/map/shell.html）。 */
 
@@ -334,8 +659,8 @@ body:has(> #tx-bar) #regenerate,
 }
 
 /* 标签行、底部动作条、拖动条 —— 独立页的入口在顶栏，嵌入时没有可切的东西；
-   元素留在 DOM 里当点击目标 */
-body:has(> #tx-bar) #options .tab,
+   元素留在 DOM 里当点击目标。标签行在独立页放行：它是属性栏的分页条，
+   由 panel.css 重新排版（#sticked 与拖动条仍然收掉）。 */
 body:has(> #tx-bar) #options #sticked,
 body:has(> #tx-bar) #options .drag-trigger,
 :root[data-map-host="embed"] #options .tab,
@@ -346,14 +671,19 @@ body:has(> #tx-bar) #options .drag-trigger,
 
 /* 宽度不够时只留图标：文字收进 title，仍然能看能点，也不用横向滚动 */
 @media (max-width: 1180px) {
+  /* 左右栏都收窄到 248：画布边界跟着走 */
   #tx-bar {
-    gap: 8px;
+    gap: 6px;
+  }
+  .tx-canvas-ui {
+    left: 248px;
+    right: 248px;
   }
   .tx-bar__label {
     display: none;
   }
   .tx-bar__btn {
-    padding: 0 7px;
+    padding: 0 8px;
   }
   .tx-bar__stats {
     display: none;
@@ -361,6 +691,11 @@ body:has(> #tx-bar) #options .drag-trigger,
 }
 
 @media (max-width: 980px) {
+  /* 左栏变成抽屉（默认收起），右栏同时收起，画布铺满两翼 */
+  .tx-canvas-ui {
+    left: 0;
+    right: 0;
+  }
   .tx-bar__panel-toggle {
     display: inline-flex;
   }
@@ -382,4 +717,92 @@ body:has(> #tx-bar) #options .drag-trigger,
   .tx-seg > button {
     padding: 0 8px;
   }
+  /* 小屏画布只剩一条：面包屑与文档卡会盖住半张图，收掉 */
+  .tx-crumbs,
+  .tx-canvas-card {
+    display: none;
+  }
+  .tx-zoom-stack {
+    right: 8px;
+    top: 8px;
+  }
+  /* 窄屏只保留左侧读数，操作提示让位 */
+  .tx-canvas-meta__hint {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   跨文档视图过渡（共享元素）
+   --------------------------------------------------------------------------
+   工作区 / 关系树 / 时间线 / 地图是四个页面，但共用同一副"顶栏 + 左栏 + 画布"
+   骨架。跳转时给同一批角色挂同一个 view-transition-name，浏览器就会把旧盒子
+   直接 morph 到新盒子（位置、宽高一起插值），不再整块硬切。
+   两边页面都要 opt-in，否则过渡不会跑 —— 工作区那几个页面在 experience.css
+   里，地图页只加载本文件，所以这里单独写一份。
+   只在 bar 模式命名：embed 是 iframe 里的一块面板，没有跨文档导航，
+   挂了只会和宿主抢名字。
+   ========================================================================== */
+@view-transition { navigation: auto; }
+
+html[data-map-host='bar'] #tx-bar { view-transition-name: xp-shell-top; }
+html[data-map-host='bar'] .tx-bar__world { view-transition-name: xp-world; }
+
+/* 侧栏只在"还停靠在左边"的断点里共享：≤980 时 #options 变成屏外抽屉，
+   再挂同名会让一条抽屉横穿屏幕飞过去（见 panel.css 窄屏那一段）。 */
+@media (min-width: 981px) {
+  html[data-map-host='bar'] #options { view-transition-name: xp-shell-side; }
+}
+
+/* 根快照：地图画布本身没什么可 morph 的，短一点、软一点的交叉淡入就够。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 400ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 过渡期间这些伪元素铺在页面最上层；不关掉命中测试，动画结束前点哪都没反应。 */
+::view-transition,
+::view-transition-group(*),
+::view-transition-image-pair(*),
+::view-transition-old(*),
+::view-transition-new(*) { pointer-events: none; }
+
+/* 外壳是整块大面积表面：组动画负责"从旧盒子长到新盒子"。 */
+::view-transition-group(xp-shell-top),
+::view-transition-group(xp-shell-side) {
+  animation-duration: 440ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 默认的交叉淡入在中点两张快照各 50% 透明，底下的根快照会透出来闪一下。
+   这里让旧快照先满格跟着盒子走完前半程，到中点再和新快照一对一交接
+   （两者不透明度之和始终为 1）。与 experience.css 同一套节奏。 */
+@keyframes xp-shell-hold-out {
+  0%, 50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes xp-shell-hold-in {
+  0%, 50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+::view-transition-old(xp-shell-top),
+::view-transition-old(xp-shell-side) {
+  animation-name: xp-shell-hold-out;
+  animation-duration: 440ms;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+::view-transition-new(xp-shell-top),
+::view-transition-new(xp-shell-side) {
+  animation-name: xp-shell-hold-in;
+  animation-duration: 440ms;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
 }

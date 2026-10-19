@@ -342,6 +342,11 @@ from .profile import (
     register_page,
 )
 
+from .personal import (
+    profile_data,
+    profile_page,
+)
+
 from .moderators import (
     _moderator_payload,
     moderator_collection,

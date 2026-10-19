@@ -367,14 +367,14 @@ def sanitize_theme(theme) -> dict:
     }
 
 
-def publish_state(document) -> str:
+def publish_state(document, world=None) -> str:
     """算出某份文档相对当前站点的状态（五态发布状态机）。
 
     判断依据是**时间**而不是版本号：``published_at`` 是这份文档上次进入站点的时刻，
     ``updated_at`` 是它最后一次被改的时刻；改过就是 stale——这正是界面上那句
     "Edited since you published"。
     """
-    world = document.world
+    world = world if world is not None else document.world
     if document.hidden or not document.is_published:
         return STATE_EXCLUDED
     if not world.is_published or world.publish_version == 0:

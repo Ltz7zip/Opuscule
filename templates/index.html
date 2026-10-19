@@ -1,5 +1,5 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN"{% if embedded %} data-theme="{{ classic_theme|default:'dark' }}"{% endif %}>
+<html lang="zh-CN" data-theme="{{ classic_theme|default:'dark' }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,17 +14,20 @@
         root.classList.add('tl-embed');
       } else {
         root.classList.add('tl-shell');
-        root.setAttribute('data-theme', 'light');
       }
     })();
   </script>
   <!-- Opuscule 设计语言层：纯变量文件、零选择器，给 style.css 提供 --nb-* 取值，所以排在 style.css 之前。 -->
   <link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
   <link rel="stylesheet" href="{% static 'style.css' %}?v={{ static_version }}" />
+  <!-- 体验层：本页只用它的 View Transition / 共享元素规则，让"工作台 / 关系树 / 时间线"
+       之间跳转时顶栏和左栏能接着飞；不加载 experience.js，经典时间线的交互保持原样。 -->
+  <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
+  <script src="{% static 'theme-toggle.js' %}?v={{ static_version }}" defer></script>
 </head>
 <body class="tl-body">
   <div class="tlx-shell">
-    <!-- ============================ 顶栏（两行） ============================ -->
+    <!-- ============================ 顶栏（单行，右移到侧栏之后） ============================ -->
     <header class="tlx-top">
       <div class="tlx-top-row1">
         <a class="tlx-back" href="{{ world_base|default:'/w/' }}">工作台</a>
@@ -44,22 +47,19 @@
           <div class="save-chip" id="saveChip" hidden role="status" aria-live="polite">
             <span class="sc-dot" aria-hidden="true"></span><span id="saveChipText">已保存</span>
           </div>
-          <button class="tlx-btn" id="tlxShare" type="button">分享</button>
-        </div>
-      </div>
-      <div class="tlx-top-row2">
-        <nav class="tlx-tabs" id="tlxTabs" aria-label="视图切换">
-          <button type="button" data-view="canvas" class="is-active">时间轴</button>
-          <button type="button" data-view="list">列表</button>
-          <button type="button" data-view="calendar">日历</button>
-          <button type="button" data-view="map" disabled>地图</button>
-        </nav>
-        <div class="tlx-top-actions">
           <button class="tlx-chip-btn" id="tlxPrecision" type="button">精度：月</button>
           <button class="tlx-btn tlx-btn--primary" id="tlxNewEvent" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
             新建时间点
           </button>
+          <button class="tlx-btn" id="tlxShare" type="button">分享</button>
+          {% if not embedded %}
+          <button class="theme-toggle" type="button" data-theme-toggle
+                  data-world-api="{{ world_base }}/api/world/world" title="切换到浅色模式">
+            <span class="theme-toggle__glyph" aria-hidden="true"></span>
+            <span class="theme-toggle__text">浅色</span>
+          </button>
+          {% endif %}
         </div>
       </div>
     </header>

@@ -26,13 +26,13 @@
   </style>
 </head>
 <body class="site" data-surface="picker">
-  <a class="skip-link" href="#pickerMain">跳到正文</a>
   <header class="nav">
     <a class="nav-brand" href="/w/">Opuscule</a>
     <nav class="nav-links">
       <a href="/explore">公开世界</a>
     </nav>
     <nav class="nav-links" style="margin-left:auto">
+      <a href="/u/{{ request.user.username }}">我的主页</a>
       <span style="color:var(--ink-dim)">{{ display_name }}</span>
       <a href="/logout">退出</a>
     </nav>
@@ -67,7 +67,7 @@
 
   <footer class="foot">
     <div>{{ app.display }} · 世界观共建工作台</div>
-    <div class="foot-meta"><a href="/explore">公开世界</a> · <a href="/logout">退出</a></div>
+    <div class="foot-meta"><a href="/explore">公开世界</a> · <a href="/u/{{ request.user.username }}">我的主页</a> · <a href="/logout">退出</a></div>
   </footer>
 
   <script>

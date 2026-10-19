@@ -50,10 +50,12 @@ CHANGESET_STATUSES = [
 
 CHANGE_CREATE_DOCUMENT = "create_document"
 CHANGE_UPDATE_DOCUMENT = "update_document"
+CHANGE_EDIT_BLOCKS = "edit_blocks"
 CHANGE_CREATE_TIMELINE_EVENT = "create_timeline_event"
 CHANGE_KINDS = [
     (CHANGE_CREATE_DOCUMENT, "新建文档"),
     (CHANGE_UPDATE_DOCUMENT, "修改文档"),
+    (CHANGE_EDIT_BLOCKS, "编辑正文块"),
     (CHANGE_CREATE_TIMELINE_EVENT, "新建时间线事件"),
 ]
 
@@ -157,6 +159,9 @@ class AiMessage(models.Model):
     )
     role = models.CharField("角色", max_length=12, choices=ROLES)
     content = models.TextField("内容", blank=True, default="")
+    reasoning = models.TextField("思考过程", blank=True, default="")
+    # {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, ...}
+    usage = models.JSONField("用量", default=dict, blank=True)
     # [{"id": "...", "name": "...", "arguments": {...}}]
     tool_calls = models.JSONField("工具调用", default=list, blank=True)
     tool_call_id = models.CharField("工具调用 ID", max_length=80, blank=True, default="")
@@ -176,6 +181,8 @@ class AiMessage(models.Model):
             "id": self.id,
             "role": self.role,
             "content": self.content,
+            "reasoning": self.reasoning,
+            "usage": self.usage if isinstance(self.usage, dict) else {},
             "tool_calls": self.tool_calls if isinstance(self.tool_calls, list) else [],
             "tool_call_id": self.tool_call_id,
             "name": self.name,
@@ -259,6 +266,8 @@ class AiChange(models.Model):
             return self.payload.get("name") or "新建文档"
         if self.kind == CHANGE_UPDATE_DOCUMENT:
             return "修改文档"
+        if self.kind == CHANGE_EDIT_BLOCKS:
+            return self.payload.get("document_name") or "编辑正文块"
         if self.kind == CHANGE_CREATE_TIMELINE_EVENT:
             return self.payload.get("title") or "新建事件"
         return self.get_kind_display()

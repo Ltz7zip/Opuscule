@@ -33,14 +33,20 @@ MAX_MATCHES = 300
 _LINK_SPAN = re.compile(r"\[\[([^\]\n]{1,80})\]\]")
 
 
-def _candidates(world, exclude_document_id=None):
-    """候选名字：{名字: 卡片文档}，长的排前面（最长匹配优先）。"""
+def candidates(world, exclude_document_id=None):
+    """候选名字：{名字: 卡片文档}，长的排前面（最长匹配优先）。
+
+    名单在同一个请求里常被多处使用（逐卡识别、图谱、建议），调用方可自行缓存
+    结果并通过 ``candidates=`` 参数传回，避免反复全量查询和排序。
+    """
     from ..models import DOC_CARD
 
     pairs = []
     cards = (
         world.documents.filter(document_type=DOC_CARD, deleted_at__isnull=True)
         .select_related("card", "entity_type")
+        # 只取识别名字与类型显示要用的列，别把正文 / 地图这些大字段整份读出来
+        .only("id", "name", "entity_type__name", "card__aliases")
     )
     for document in cards:
         if exclude_document_id and document.id == exclude_document_id:
@@ -53,6 +59,17 @@ def _candidates(world, exclude_document_id=None):
                 pairs.append((text, document))
     pairs.sort(key=lambda item: len(item[0]), reverse=True)
     return pairs
+
+
+# 兼容旧的模块内部名字
+_candidates = candidates
+
+
+def _without_document(pairs, exclude_document_id):
+    """共享的候选名单里剔除指定文档（自引用不该链到自己）。"""
+    if not exclude_document_id:
+        return pairs
+    return [item for item in pairs if item[1].id != exclude_document_id]
 
 
 # 英文的复数 / 所有格后缀：链接的时候一起吃掉，别把 "Harrowdeeps" 漏掉
@@ -93,7 +110,8 @@ def _match_span(text: str, name: str, start: int) -> int:
     return end
 
 
-def fuzzy_candidates(world, text: str, exclude_document_id=None, limit: int = 6) -> list[dict]:
+def fuzzy_candidates(world, text: str, exclude_document_id=None, limit: int = 6,
+                     candidates=None) -> list[dict]:
     """"打错一点"的名字：typo-tolerant 提及用。
 
     只在长度 ≥ FUZZY_MIN_LENGTH 的词上做，且距离 ≤ 2，避免把普通词链成卡片。
@@ -101,18 +119,32 @@ def fuzzy_candidates(world, text: str, exclude_document_id=None, limit: int = 6)
     if not text:
         return []
     words = re.findall(r"[A-Za-z][A-Za-z'’-]{%d,}" % (FUZZY_MIN_LENGTH - 1), text)
+    if not words:
+        return []
+    pairs = candidates
+    if pairs is None:
+        pairs = _candidates(world, exclude_document_id)
+    else:
+        pairs = _without_document(pairs, exclude_document_id)
+    # 中文名字不做模糊匹配（误报太多），预先过滤一遍，别在每个词里重复判断
+    english_pairs = [
+        (name, name.casefold(), document)
+        for name, document in pairs
+        if re.match(r"^[A-Za-z]", name)
+    ]
+    if not english_pairs:
+        return []
     seen: set[tuple[str, str]] = set()
     out: list[dict] = []
     for word in dict.fromkeys(words):
-        for name, document in _candidates(world, exclude_document_id):
-            if not re.match(r"^[A-Za-z]", name):
-                continue                       # 中文名字不做模糊匹配（误报太多）
+        folded_word = word.casefold()
+        for name, folded_name, document in english_pairs:
             if abs(len(word) - len(name)) > FUZZY_MAX_DISTANCE:
                 continue
-            if word.casefold() == name.casefold():
+            if folded_word == folded_name:
                 continue                       # 精确命中的在 find_mentions 里处理
-            if _edits_within(word.casefold(), name.casefold(), FUZZY_MAX_DISTANCE):
-                key = (word.casefold(), name.casefold())
+            if _edits_within(folded_word, folded_name, FUZZY_MAX_DISTANCE):
+                key = (folded_word, folded_name)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -137,15 +169,20 @@ def _overlaps(start: int, end: int, spans) -> bool:
     return any(start < s_end and end > s_start for s_start, s_end in spans)
 
 
-def find_mentions(world, text: str, exclude_document_id=None) -> list[dict]:
+def find_mentions(world, text: str, exclude_document_id=None, candidates=None) -> list[dict]:
     """返回 ``[{document_id, name, alias, start, end}]``，按出现位置排序。"""
     if not text:
         return []
+    pairs = candidates
+    if pairs is None:
+        pairs = _candidates(world, exclude_document_id)
+    else:
+        pairs = _without_document(pairs, exclude_document_id)
     spans = _linked_spans(text)
     taken: list[tuple[int, int]] = []
     matches: list[dict] = []
 
-    for name, document in _candidates(world, exclude_document_id):
+    for name, document in pairs:
         start = text.find(name)
         while start >= 0:
             end = _match_span(text, name, start)
@@ -175,14 +212,21 @@ def link_text(matches: list[dict]) -> str:
     return "\n".join(f"{m['start']}-{m['end']} {m['name']}" for m in matches)
 
 
-def detect_new_names(world, text: str, exclude_document_id=None) -> list[str]:
+def detect_new_names(world, text: str, exclude_document_id=None,
+                     candidates=None, known_names=None) -> list[str]:
     """正文里反复出现、但还不是卡片的名字（前端「创建为卡片」的候选）。
 
     只做一个保守的启发式：连续 2-8 个汉字 / 拉丁词，出现两次以上，且不与已有名字相同。
     """
-    from ..models import DOC_CARD
-
-    known = {name.casefold() for name, _doc in _candidates(world, exclude_document_id)}
+    if known_names is None:
+        pairs = candidates
+        if pairs is None:
+            pairs = _candidates(world, exclude_document_id)
+        else:
+            pairs = _without_document(pairs, exclude_document_id)
+        known = {name.casefold() for name, _doc in pairs}
+    else:
+        known = known_names
     counter: dict[str, int] = {}
     for raw in re.findall(r"[\u4e00-\u9fff]{2,6}|[A-Z][a-z]{2,15}", text or ""):
         key = raw.casefold()
@@ -237,7 +281,10 @@ def complete_names(world, query: str, exclude_document_id=None, limit: int = COM
 
     ranked = []
     documents = (world.documents.filter(deleted_at__isnull=True)
-                 .select_related("card", "entity_type"))
+                 .select_related("card", "entity_type")
+                 # 补全只需要名字、类型和描述摘要，其余大字段不必读
+                 .only("id", "name", "document_type", "entity_type__name",
+                       "card__aliases", "card__body", "card__blocks"))
     for document in documents:
         if exclude_document_id and document.id == exclude_document_id:
             continue

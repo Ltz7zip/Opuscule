@@ -31,7 +31,8 @@
    --xp-* 自定义属性里（定义在下面的 :root）；颜色一律从终端 token --tx-*
    派生，不新增色值。它排在 terminal.css 与 polish.css **之后**，是最后一道
    外观层。
-   legacy（经典时间线页 /legacy）不加载本文件，也不加载 experience.js。
+   legacy（经典时间线页 /legacy）只加载本文件的 View Transition 段
+   （为了和关系树 / 工作区之间做跨文档共享元素），不加载 experience.js。
    ========================================================================== */
 
 /* ==========================================================================
@@ -569,6 +570,70 @@ html { scroll-behavior: smooth; }
 ::view-transition-new(xp-world),
 ::view-transition-old(xp-doc-title),
 ::view-transition-new(xp-doc-title) { animation-duration: 380ms; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ---- 外壳共享元素：工作区 / 关系树 / 时间线 ------------------------------
+   三个页面是同一个"左栏 + 顶栏 + 内容"骨架，几何已按工作区对齐：
+     工作区   左栏 268px 贯通顶底；顶栏 40px 只压右列，10px 留白 + 12px 圆角
+     关系树   左栏 268px 贯通顶底；顶栏 40px 只压右列（同工作区）
+     时间线   左栏贯通顶底；顶栏 40px 只压右列（同工作区）
+   同一个角色挂同一个名字，跳转时浏览器会把旧盒子直接 morph 到新盒子
+   （位置、宽高一起插值），顶栏和侧栏不再整块硬切。
+   名字只挂在顶层页：iframe 嵌入态没有跨文档导航，挂了只会和内层抢名字。
+   html:not(.xp-theme-fx)：换主题是同一文档的圆形扩散（见 polish.css），
+   那一刻外壳不参与共享元素，否则整条顶栏 / 侧栏会脱离根快照、跟不上扩散。 */
+html:not(.xp-theme-fx) body[data-surface='workspace']:not(.is-embed) .topbar { view-transition-name: xp-shell-top; }
+html.rt-shell:not(.xp-theme-fx) .rt-screen--editor:not([hidden]) .rt-topbar { view-transition-name: xp-shell-top; }
+html.tl-shell:not(.xp-theme-fx) .tlx-top { view-transition-name: xp-shell-top; }
+
+/* 侧栏只在"还停靠在左边"的断点里共享。窄屏时三页的左栏都会各自变成
+   屏外抽屉（工作区 / 关系树 <900）或顶部横条（时间线 <1025），
+   再挂同名就会让一条横条 / 一个抽屉横穿屏幕飞过去，反而更乱。 */
+@media (min-width: 900px) {
+  html:not(.xp-theme-fx) body[data-surface='workspace']:not(.is-embed) .sidebar { view-transition-name: xp-shell-side; }
+  html.rt-shell:not(.xp-theme-fx) .rt-screen--editor:not([hidden]) .rt-editor-side { view-transition-name: xp-shell-side; }
+}
+@media (min-width: 981px) {
+  html.rt-shell:not(.xp-theme-fx) .rt-screen--picker:not([hidden]) .rt-side,
+  html.rt-shell:not(.xp-theme-fx) .rt-screen--template:not([hidden]) .rt-side { view-transition-name: xp-shell-side; }
+}
+@media (min-width: 1025px) {
+  html.tl-shell:not(.xp-theme-fx) .tlx-side { view-transition-name: xp-shell-side; }
+}
+
+/* 外壳是整块大面积表面：组动画负责"从旧盒子长到新盒子"，
+   快照怎么交接另见下面的 keyframes。 */
+::view-transition-group(xp-shell-top),
+::view-transition-group(xp-shell-side) {
+  animation-duration: 440ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 大块表面的默认交叉淡入是两条对称斜线，中点两张快照各 50% 透明，
+   底下的根快照会透出来闪一下灰。这里让旧快照先满格跟着盒子走完前半程，
+   到中点再和新快照一对一交接（两者不透明度之和始终为 1），
+   既没有发灰窗口，也不会出现两层文字同时可见的重影。 */
+@keyframes xp-shell-hold-out {
+  0%, 50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes xp-shell-hold-in {
+  0%, 50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+::view-transition-old(xp-shell-top),
+::view-transition-old(xp-shell-side) {
+  animation-name: xp-shell-hold-out;
+  animation-duration: 440ms;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+::view-transition-new(xp-shell-top),
+::view-transition-new(xp-shell-side) {
+  animation-name: xp-shell-hold-in;
+  animation-duration: 440ms;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
 
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),

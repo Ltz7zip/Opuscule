@@ -28,7 +28,8 @@ def archive_collection(request):
     """GET 存档列表（只给元信息）；POST 手动存一份（201）。"""
     world = current_world()
     if request.method == "GET":
-        archives = world.archives.all()
+        # 列表只要元信息：别把整份快照（大 JSON）一起读出来；作者一次 join 回来
+        archives = world.archives.select_related("author").defer("payload")
         return json_response({
             "archives": [archive.to_payload() for archive in archives],
             "max": MAX_ARCHIVES,

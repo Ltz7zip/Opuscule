@@ -267,7 +267,7 @@ def build_value_map(card) -> dict:
     return out
 
 
-def resolve_card_values(card) -> dict:
+def resolve_card_values(card, world=None) -> dict:
     """前端直接可用的属性值：``{属性id: {name, value_type, value, display}}``。
 
     引用会带上目标卡片的摘要，公式会算出数字——前端不用再懂类型。
@@ -275,18 +275,31 @@ def resolve_card_values(card) -> dict:
     entity_type = card.effective_type()
     if entity_type is None:
         return {}
+    properties = entity_type.all_properties()
     raw = card.values if isinstance(card.values, dict) else {}
     by_name = {}
-    for prop in entity_type.all_properties():
+    for prop in properties:
         by_name[prop.name] = raw.get(str(prop.id), prop.default_value)
 
+    # 引用属性先把目标 id 收齐，一次批量取回，避免每条引用都单独查一次库
+    ref_ids = set()
+    for prop in properties:
+        if prop.value_type == VT_REFERENCE:
+            target_id = as_int(by_name.get(prop.name))
+            if target_id:
+                ref_ids.add(target_id)
+    targets = {}
+    if ref_ids:
+        world = world if world is not None else card.document.world
+        targets = world.documents.in_bulk(ref_ids)
+
     resolved = {}
-    for prop in entity_type.all_properties():
+    for prop in properties:
         value = by_name.get(prop.name)
         display = ""
         extra = {}
         if prop.value_type == VT_REFERENCE and value:
-            target = card.document.world.documents.filter(pk=as_int(value)).first()
+            target = targets.get(as_int(value))
             if target is not None:
                 extra = {"ref": {"id": target.id, "name": target.name, "type": target.document_type}}
                 display = target.name
@@ -372,6 +385,10 @@ def normalize_blocks(value) -> list[dict]:
         for key in ("url", "tool", "settings", "items", "level"):
             if key in raw and raw.get(key) not in (None, "", []):
                 block[key] = raw.get(key)
+        if btype == "heading":
+            # 旧结构没有「标题级别」，单靠 level 又和缩进语义冲突；单独存一份，
+            # 让 legacy → 编辑器 → legacy 的往返不丢级别（孤立编辑器只认 1..3）。
+            block["heading_level"] = max(1, min(as_int(raw.get("heading_level"), 1), 3))
         if raw.get("collapsed"):
             block["collapsed"] = True               # 折叠的块（toggle）
         if raw.get("checked"):
@@ -775,7 +792,9 @@ def blocks_to_doc(blocks):
             else:
                 content = _inline_from_text(text or (title if btype == "heading" else ""))
             if btype == "heading":
-                nodes.append(_doc_block(bid, "heading", props={"level": 1}, content=content))
+                nodes.append(_doc_block(bid, "heading",
+                                        props={"level": max(1, min(as_int(raw.get("heading_level"), 1), 3))},
+                                        content=content))
             elif btype == "todo":
                 nodes.append(_doc_block(bid, "checkListItem",
                                         props={"checked": bool(raw.get("checked"))}, content=content))
@@ -930,6 +949,8 @@ def _doc_blocks_to_legacy(blocks, out, depth=0) -> None:
             block["checked"] = True
         if legacy_type == "toggle" and props.get("collapsed"):
             block["collapsed"] = True
+        if legacy_type == "heading":
+            block["heading_level"] = max(1, min(as_int(props.get("level"), 1), 3))
         out.append(block)
         children = raw.get("children")
         if children:

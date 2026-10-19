@@ -53,6 +53,9 @@ class EntityType(models.Model):
         return sorted(merged.values(), key=lambda p: (p.position, p.id))
 
     def to_payload(self, with_properties: bool = True) -> dict:
+        # 合并后的属性已经包含自己的全部属性（同名时自己覆盖父类），
+        # 不再单独对 properties 做一次 COUNT——大世界的类型列表因此少一半查询。
+        properties = self.all_properties() if with_properties else None
         payload = {
             "id": self.id,
             "name": self.name,
@@ -61,10 +64,13 @@ class EntityType(models.Model):
             "color": self.color,
             "position": self.position,
             "hidden": self.hidden,
-            "field_count": self.properties.count(),
+            "field_count": (
+                sum(1 for prop in properties if prop.entity_type_id == self.id)
+                if properties is not None else self.properties.count()
+            ),
         }
-        if with_properties:
-            payload["properties"] = [p.to_payload() for p in self.all_properties()]
+        if properties is not None:
+            payload["properties"] = [p.to_payload() for p in properties]
         return payload
 
 

@@ -230,10 +230,15 @@ def get_type(world: World, type_id) -> EntityType | None:
 
 def get_event(world: World, event_id) -> TimelineEvent | None:
     """事件可能挂在文档上，也可能直接挂在世界总时间线上（0.7.0 起）。"""
-    return TimelineEvent.objects.filter(
-        models.Q(document__world=world) | models.Q(timeline__world=world),
-        pk=as_int(event_id),
-    ).first()
+    return (
+        TimelineEvent.objects.filter(
+            models.Q(document__world=world) | models.Q(timeline__world=world),
+            pk=as_int(event_id),
+        )
+        .select_related("timeline__calendar", "document")
+        .prefetch_related("linked_cards")
+        .first()
+    )
 
 
 def save_document_settings(document: Document, patch: dict) -> None:
@@ -265,12 +270,19 @@ def timeline_state(document) -> dict:
     settings_ = document.settings if isinstance(document.settings, dict) else {}
     preferred = (document.calendar_id if isinstance(document, WorldTimeline)
                  else as_int(settings_.get("calendar")))
-    calendar = world.calendars.filter(pk=preferred).first() if preferred else None
-    if calendar is None:
-        calendar = world.calendars.order_by("id").first()
+    calendars = list(world.calendars.order_by("id"))
+    calendar = next((item for item in calendars if item.pk == preferred), None) if preferred else None
+    if calendar is None and calendars:
+        calendar = calendars[0]
     if calendar is None:
         calendar = Calendar.objects.create(world=world, name="通用 12 × 30", mode=CAL_EARTH)
-    events = document.events.all().order_by("year", "month", "day", "hour", "id")
+        calendars = [calendar]
+    events = (
+        document.events.all()
+        .select_related("timeline__calendar", "document")
+        .prefetch_related("linked_cards")
+        .order_by("year", "month", "day", "hour", "id")
+    )
     view = settings_.get("view")
     if not isinstance(view, dict):
         view = {
@@ -282,7 +294,7 @@ def timeline_state(document) -> dict:
         "document": document.to_payload(),
         "origin_year": origin,
         "calendar": calendar.to_payload(),
-        "calendars": [item.to_payload() for item in world.calendars.order_by("id")],
+        "calendars": [item.to_payload() for item in calendars],
         "eras": [era.to_payload(origin) for era in world.eras.order_by("position", "id")],
         "events": [event.to_payload(origin) for event in events],
         "view": view,

@@ -550,53 +550,117 @@ function prefersReducedMotion() {
 }
 
 /**
- * 换主题时走一次 View Transition：整页交叉溶解，而不是"啪"地一下换色。
+ * 换主题时走一次 View Transition：以点击处为圆心做圆形扩散，而不是"啪"地一下换色。
  * 不支持的浏览器、重复触发、以及系统要求减少动效时，都直接切——没有副作用。
+ * origin 是扩散圆心；不传（比如改纪元配色、保存主题）就从屏幕中心扩散。
  */
-function applyThemeAnimated(theme) {
+function applyThemeAnimated(theme, origin) {
   const start = document.startViewTransition;
   if (typeof start !== 'function' || prefersReducedMotion() || applyThemeAnimated._busy) {
     applyTheme(theme);
     return;
   }
   applyThemeAnimated._busy = true;
-  const done = () => { applyThemeAnimated._busy = false; };
+  // polish.css 里"关掉根交叉溶解 + 抬高旧快照"的规则只认这个类：
+  // 换主题时用圆形扩散，普通跨页跳转仍走默认根过渡（共享元素的顶栏 / 侧栏
+  // 才不会被旧快照盖住）。
+  const root = document.documentElement;
+  root.classList.add('xp-theme-fx');
+  const done = () => {
+    applyThemeAnimated._busy = false;
+    root.classList.remove('xp-theme-fx');
+  };
+  const x = origin && Number.isFinite(origin.x) ? origin.x : window.innerWidth / 2;
+  const y = origin && Number.isFinite(origin.y) ? origin.y : window.innerHeight / 2;
+  // 圆心到四角里最远的那个，保证圆能盖满整屏。
+  const radius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+  // 记住本轮动画，收尾时要主动取消（见下方 transition.finished）。
+  let anim = null;
+  const finish = () => {
+    done();
+    // fill: 'both' 会让动画留在 documentElement 的动画列表里。下一次切主题时，
+    // 同一伪元素名会重新出现，上一轮的 clip 就会被重新套上——切到浅色时旧快照
+    // 被上一轮"缩到 0"的裁剪钉死，整屏只剩新快照的白底，也就是那一下闪白。
+    // 等过渡彻底结束（伪元素已移除）再取消，既留住了结束状态，也不污染下一轮。
+    if (anim) {
+      anim.cancel();
+      anim = null;
+    }
+  };
   try {
     const transition = start.call(document, () => applyTheme(theme));
+    if (transition && transition.ready && transition.ready.then) {
+      transition.ready.then(() => {
+        const dark = document.documentElement.dataset.theme !== 'light';
+        const circle = [
+          `circle(0px at ${x}px ${y}px)`,
+          `circle(${radius}px at ${x}px ${y}px)`,
+        ];
+        // 切到深色：旧快照缩回点击点；切到浅色：新快照从点击点铺开。
+        anim = document.documentElement.animate(
+          { clipPath: dark ? circle.slice().reverse() : circle },
+          {
+            duration: 480,
+            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            // 结束状态必须留住：否则动画一结束 clip-path 会弹回"未裁剪"，
+            // 旧快照会整屏闪一帧，再被移除——也就是肉眼看到的白闪。
+            fill: 'both',
+            pseudoElement: dark ? '::view-transition-old(root)' : '::view-transition-new(root)',
+          }
+        );
+      }, done);
+    }
     if (transition && transition.finished && transition.finished.then) {
-      transition.finished.then(done, done);
+      transition.finished.then(finish, finish);
     } else {
-      done();
+      finish();
     }
   } catch (error) {
-    done();
+    finish();
     applyTheme(theme);
   }
 }
 
-/** 任务栏的明暗切换按钮：字形与文字都显示"点下去会切到的那一档"。 */
+/** 点击位置作为扩散圆心；键盘触发（没有真实坐标）时退回按钮中心。 */
+function revealOrigin(event) {
+  if (!event) return null;
+  if (event.detail === 0 && event.currentTarget && event.currentTarget.getBoundingClientRect) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+  if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+    return { x: event.clientX, y: event.clientY };
+  }
+  return null;
+}
+
+/** 任务栏的明暗切换按钮：字形显示"点下去会切到的那一档"，语义交给 title / aria-label。 */
 function syncThemeToggle() {
   const btn = $('#themeToggle');
   if (!btn) return;
   const dark = document.documentElement.dataset.theme !== 'light';
+  const label = dark ? '切换到浅色模式' : '切换到深色模式';
   btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
-  btn.title = dark ? '切换到浅色模式' : '切换到深色模式';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
   const glyph = $('#themeToggleGlyph');
   if (glyph) glyph.innerHTML = iconHtml(dark ? 'sun' : 'moon', 15);
-  const label = $('#themeToggleText');
-  if (label) label.textContent = dark ? '浅色' : '深色';
 }
 
 /** 明暗切换：本地先生效，再把 mode 写回世界主题（下次打开还是这一档）。 */
-async function toggleThemeMode() {
+async function toggleThemeMode(event) {
   if (!S.world) return;
   const prev = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
   const next = prev === 'light' ? 'dark' : 'light';
+  const origin = revealOrigin(event);
   // 纪元自带配色时保留它，只把明暗这一档换掉。
   const era = (S.eras || []).find((item) => item.id === S.eraId);
   const eraTheme = era && era.theme_config && Object.keys(era.theme_config).length ? era.theme_config : null;
   const base = { ...(S.world.theme || {}), ...(eraTheme || {}) };
-  applyThemeAnimated({ ...base, mode: next });
+  applyThemeAnimated({ ...base, mode: next }, origin);
   try {
     const world = await api('/api/world/world', {
       method: 'PUT',
@@ -607,7 +671,7 @@ async function toggleThemeMode() {
   } catch (error) {
     // 只读被拦时 guardWrite 已经提示过了，这里只把界面退回去；
     // 其它失败（断网会进离线队列）保留本地状态，由队列补写。
-    if (error && error.isReadonly) applyThemeAnimated({ ...base, mode: prev });
+    if (error && error.isReadonly) applyThemeAnimated({ ...base, mode: prev }, origin);
   }
 }
 
@@ -729,6 +793,23 @@ async function fetchEntry(id) {
     }));
   }
   await Promise.all(jobs);
+  return entry;
+}
+
+/** 重新拉一份已打开的文档并就地更新（AI 应用改动 / 外部改动后调用）。
+ *  正文面板不会自己重取，entry 不换就一直是缓存里的旧内容；替换 entry.card
+ *  同时换掉 blocks_doc 的数组引用，孤岛靠引用比对才知道要 setDoc。 */
+async function refreshDoc(id) {
+  const key = Number(id);
+  const entry = S.docs.get(key);
+  if (!entry || !entry.document || key === WORLD_TIMELINE_ID) return null;
+  const fresh = await fetchEntry(key);
+  Object.assign(entry.document, fresh.document);
+  entry.card = fresh.card;
+  entry.timeline = fresh.timeline;
+  entry.type = fresh.type;
+  entry.revision = fresh.revision;
+  renderPanels();
   return entry;
 }
 
@@ -3415,8 +3496,8 @@ function renderTimelineFrame(entry) {
     if (frame) frame.src = `${frame.src.split('#')[0]}#reload=${Date.now()}`;
     toast('已重新载入');
   }));
-  bar.appendChild(button('↗', '在新标签页打开', () => {
-    window.open(timelineStandaloneUrl(entry), '_blank', 'noopener');
+  bar.appendChild(button('↗', '在当前页全屏打开', () => {
+    goInApp(timelineStandaloneUrl(entry));
   }));
   bar.appendChild(el('span', 'tl-frame-hint',
     '画布、拖拽、时间段用左侧的经典编辑器；日历与卡片在这里管。'));
@@ -4604,11 +4685,30 @@ function renderTreeFrame(entry) {
 
 /* ================================================================== 地图 */
 /**
+ * 站内换页：在**当前标签页**走掉。
+ *
+ * 以前独立页一律 window.open(..., '_blank')，新标签会把跨文档视图过渡整个吃掉——
+ * 两边页面就算给同一批元素挂了 view-transition-name，浏览器也不会接。
+ * 站外地址仍然开新标签，免得把工作区顶掉。
+ */
+function goInApp(url) {
+  let target;
+  try { target = new URL(url, location.href); } catch (error) { return; }
+  if (target.origin !== location.origin) {
+    window.open(target.href, '_blank', 'noopener');
+    return;
+  }
+  // 站内 <a> 由 experience.js 统一起进度线；这里是脚本直接跳，得自己点一下。
+  if (window.Opus && window.Opus.progress) window.Opus.progress.start();
+  location.href = target.href;
+}
+
+/**
  * 跳到独立地图页：面板里嵌的那一份是窄栏版（原本的右栏收掉了，只留左栏三块面板），
  * 要完整外壳（顶栏 + 两条栏）就走这里。入口在标签页与侧栏那一行的右键菜单上。
  */
 function openStandaloneMap(id) {
-  window.open(`${PAGE_BASE}/map/2d?doc=${id}${eraQuery()}`, '_blank', 'noopener');
+  goInApp(`${PAGE_BASE}/map/2d?doc=${id}${eraQuery()}`);
 }
 
 /**
@@ -6356,7 +6456,8 @@ function decorateChrome() {
     document.documentElement.classList.add('has-rail-sidebar');
   }
   [['#sidebarBtn', 'grip', '收起或展开侧栏'], ['#undoBtn', 'arrow-left', '撤销'],
-   ['#redoBtn', 'arrow-right', '重做'], ['#sbComposeBtn', 'pen-line', '更多']].forEach(([selector, name, label]) => {
+   ['#redoBtn', 'arrow-right', '重做'], ['#paletteBtn', 'search', '命令面板（⌘K）'],
+   ['#sbComposeBtn', 'pen-line', '更多']].forEach(([selector, name, label]) => {
     const node = $(selector);
     if (!node) return;
     node.classList.add('is-icon');
@@ -6364,8 +6465,10 @@ function decorateChrome() {
     node.appendChild(icon(name, 15));
     node.setAttribute('aria-label', label);
   });
+  // 明暗按钮的字形由 JS 按当前档位注入；世界主题没加载成功时也要有图标，
+  // 否则那格会空着（applyTheme 只在拿到主题后才调用 syncThemeToggle）。
+  syncThemeToggle();
   const buttons = [
-    ['#paletteBtn', 'search', '⌘K'],
     ['#suggestBtn', 'star', '建议'],
     ['#exchangeBtn', 'box', '导入导出'],
     ['#typesBtn', 'tag', '类型'],
@@ -8594,6 +8697,11 @@ async function onCanvasMessage(event) {
     });
     return;
   }
+  if (data.type === 'ws-open-page') {          // 面板里点了「全屏」：宿主换页，不开新标签
+    if (isEmbedded()) { postToHost('ws-open-page', data); return; }
+    if (data.url) goInApp(data.url);
+    return;
+  }
   if (data.type !== 'ws-open-doc') return;
   if (isEmbedded()) { postToHost('ws-open-doc', data); return; }
   if (data.id) openDoc(data.id);
@@ -8652,6 +8760,8 @@ function userMenu() {
     body.appendChild(card);
 
     const actions = el('div', 'form-row');
+    actions.appendChild(button('我的主页', '公开的个人页面，可自定义排版与区块',
+      () => { window.location.href = `/u/${viewer.handle}`; }));
     actions.appendChild(button('协作者与邀请…', '谁能进来、谁能改', () => collaboratorsDialog()));
     actions.appendChild(button('修改密码…', '改完当前设备保持登录', () => accountPasswordDialog()));
     actions.appendChild(button('设置邮箱…', '忘记密码时用来收重置链接', () => accountEmailDialog()));

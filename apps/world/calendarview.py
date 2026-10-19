@@ -48,17 +48,8 @@ def phase_of(moon: dict, day_number: float) -> dict:
     }
 
 
-def moon_phases(calendar, year: int, month: int, day: int) -> list[dict]:
-    """某一天的月相列表（按每颗卫星自己的 ``shown`` 策略过滤）。
-
-    ``shown`` 三档：``every_night`` 每晚都画、``quarters`` 只画四相（新月 / 上弦 /
-    满月 / 下弦）、``full_only`` 只画满月。缺省 ``quarters``——月视图上密密麻麻全是
-    月亮反而看不清日期。
-    """
-    moons = calendar.moons if isinstance(calendar.moons, list) else []
-    if not moons:
-        return []
-    day_number = day_of_year(calendar, year, month, day)
+def _visible_phases(moons, day_number: float) -> list[dict]:
+    """按每颗卫星的 ``shown`` 策略过滤出某天要显示的月相（纯计算，无历法查询）。"""
     out = []
     for moon in moons:
         if not isinstance(moon, dict):
@@ -72,6 +63,19 @@ def moon_phases(calendar, year: int, month: int, day: int) -> list[dict]:
             continue
         out.append(info)
     return out
+
+
+def moon_phases(calendar, year: int, month: int, day: int) -> list[dict]:
+    """某一天的月相列表（按每颗卫星自己的 ``shown`` 策略过滤）。
+
+    ``shown`` 三档：``every_night`` 每晚都画、``quarters`` 只画四相（新月 / 上弦 /
+    满月 / 下弦）、``full_only`` 只画满月。缺省 ``quarters``——月视图上密密麻麻全是
+    月亮反而看不清日期。
+    """
+    moons = calendar.moons if isinstance(calendar.moons, list) else []
+    if not moons:
+        return []
+    return _visible_phases(moons, day_of_year(calendar, year, month, day))
 
 
 def day_of_year(calendar, year: int, month: int, day: int) -> float:
@@ -95,12 +99,20 @@ def month_grid(calendar, year: int, month: int) -> dict:
     months = calendar.month_list()
     month = min(max(int(month or 1), 1), len(months))
     days = months[month - 1]["days"]
+    days_per_year = sum(m["days"] for m in months)
+    moons = calendar.moons if isinstance(calendar.moons, list) else []
     rows: list[list[dict | None]] = []
     week: list[dict | None] = [None] * 7
     # 第一天放在第几列：用"当年已过天数"对 7 取模，保证历年一致
-    offset = int(year * calendar.days_per_year) % 7
+    offset = int(year * days_per_year) % 7
+    # 该月之前的累计天数只算一次，逐日递增即可，不必每天重算月份表
+    day_number = year * days_per_year + sum(m["days"] for m in months[: month - 1])
     for day in range(1, days + 1):
-        week[offset] = {"day": day, "moons": moon_phases(calendar, year, month, day), "events": []}
+        week[offset] = {
+            "day": day,
+            "moons": _visible_phases(moons, day_number + day - 1),
+            "events": [],
+        }
         offset += 1
         if offset == 7:
             rows.append(week)
@@ -126,18 +138,22 @@ def place_events(grid: dict, events) -> dict:
     只处理与网格同年同月的事件；日期越界会夹回 [1, 当月天数]。粗精度事件（只有年、
     或只有年月）的 day 缺省为 1，因此落在该月第一天——符合「越模糊越靠前」的一贯原则。
     """
+    # 先把「日 -> 格子」建好，事件落格就是 O(1)，不必逐周逐格找
+    cells_by_day = {}
+    for week in grid["weeks"]:
+        for cell in week:
+            if cell:
+                cells_by_day[cell["day"]] = cell
     for event in events:
         month = getattr(event, "month", 1) or 1
         if grid["month"] == month and getattr(event, "year", 0) == grid["year"]:
             day = min(max(int(getattr(event, "day", 1) or 1), 1), grid["days"])
-            for week in grid["weeks"]:
-                for cell in week:
-                    if cell and cell["day"] == day:
-                        cell["events"].append({
-                            "id": event.id,
-                            "title": event.title,
-                            "precision": event.precision,
-                            "hour": getattr(event, "hour", 0) or 0,
-                        })
-                        break
+            cell = cells_by_day.get(day)
+            if cell is not None:
+                cell["events"].append({
+                    "id": event.id,
+                    "title": event.title,
+                    "precision": event.precision,
+                    "hour": getattr(event, "hour", 0) or 0,
+                })
     return grid

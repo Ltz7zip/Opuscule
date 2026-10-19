@@ -544,6 +544,11 @@ body[data-surface="workspace"]:not(.is-embed) {
   box-shadow: var(--nb-shadow-sm);
 }
 .sidebar { border: 1px solid var(--tx-hairline); }
+/* rail 布局下与地图 / 关系树 / 时间线同宽（268px）：四页侧栏宽度一致，
+   跨页共享元素过渡时不再对宽度做插值。 */
+@media (min-width: 900px) {
+  html.has-rail-sidebar .sidebar { width: 268px; }
+}
 .workspace { border: 0; }
 .panels { border-radius: var(--tx-r-md); }
 
@@ -601,21 +606,21 @@ body.is-embed .topbar {
   --rt-dot: rgba(255, 255, 243, 0.09);
 }
 
-/* 编辑屏：整页应用壳——灰底 + 8px 内边距，编辑器本身是一张圆角白卡 */
+/* 编辑屏：与 /world 同一套外壳几何——10px 留白，侧栏整高，任务栏只压住右列 */
 .rt-app:has(> .rt-screen--editor:not([hidden])) {
-  padding: 8px;
+  padding: 10px;
   height: 100vh;
   gap: 0;
   overflow: hidden;
   background: var(--nb-canvas-sunken);
 }
 .rt-app:has(> .rt-screen--editor:not([hidden])) > .rt-screen--editor {
-  border: 1px solid var(--nb-hairline);
-  border-radius: var(--nb-r-lg);
-  background: var(--nb-canvas);
-  box-shadow: var(--nb-shadow-sm);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
-/* 嵌进工作区 / 发布站点时不套壳：8px 应用壳内衬归零，画布直接贴住宿主面板。
+/* 嵌进工作区 / 发布站点时不套壳：10px 应用壳内衬归零，画布直接贴住宿主面板。
    浅色嵌入由 relationship.css 的同名规则处理，这里补齐深色（is-paper）一档 */
 .rt-body.is-embed .rt-app:has(> .rt-screen--editor:not([hidden])) {
   padding: 0;
@@ -627,21 +632,90 @@ body.is-embed .topbar {
   box-shadow: none;
 }
 .rt-screen--editor {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
   min-height: 0;
-  background: var(--nb-canvas);
+  background: transparent;
   border: 0;
   border-radius: 0;
   overflow: hidden;
 }
+
+/* 左栏：与 /world 侧栏同宽、同圆角、同投影，贯通顶底 */
+.rt-editor-side {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px;
+  background: var(--nb-canvas);
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  box-shadow: var(--nb-shadow-sm);
+  overflow: hidden;
+}
+.rt-side-world { flex: none; }
+.rt-side-world .world-chip {
+  display: flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 10px 0 4px;
+  border-radius: var(--nb-r-sm);
+  color: var(--nb-ink); text-decoration: none;
+}
+.rt-side-world .wc-name {
+  min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.rt-side-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+.rt-side-nav a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--nb-r-sm);
+  color: var(--nb-body);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rt-side-nav a:hover { background: var(--nb-alpha-200); color: var(--nb-ink); }
+.rt-side-nav a.is-active {
+  background: var(--nb-accent);
+  color: var(--nb-on-accent);
+  font-weight: 600;
+}
+.rt-side-nav a.is-active .icon { color: currentColor; }
+.rt-side-foot {
+  flex: none;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--nb-hairline);
+  color: var(--nb-mute);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
 .rt-editor-body {
-  flex: 1;
+  grid-column: 2;
+  grid-row: 2;
+  flex: initial;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  padding: 16px;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 340px);
+  gap: 10px;
+  padding: 0;
   overflow: hidden;
 }
 .rt-editor-main {
@@ -654,15 +728,20 @@ body.is-embed .topbar {
 
 /* ---------------------------------------------------------- 6.2 顶栏 */
 .rt-topbar {
+  grid-column: 2;
+  grid-row: 1;
   flex: none;
-  height: auto;
-  min-height: 56px;
-  flex-wrap: wrap;
-  row-gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  min-width: 0;
+  flex-wrap: nowrap;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 0 10px;
   background: var(--nb-canvas);
-  border-bottom: 1px solid var(--nb-hairline);
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-md);
+  box-shadow: var(--nb-shadow-sm);
+  overflow: hidden;
 }
 .rt-topbar-back {
   flex: none;
@@ -688,7 +767,10 @@ body.is-embed .topbar {
   display: flex;
   align-items: center;
   gap: 0;
+  flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: 12.5px;
   color: var(--nb-mute);
 }
@@ -702,8 +784,15 @@ body.is-embed .topbar {
 .rt-crumbs .sep { padding: 0 6px 0 0; color: var(--nb-dim); }
 .rt-crumbs .current { color: var(--nb-ink); white-space: nowrap; }
 
-.rt-topbar-title { gap: 8px; }
-.rt-topbar-title strong { font-size: 14px; font-weight: 600; color: var(--nb-ink); }
+.rt-topbar-title { gap: 8px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.rt-topbar-title strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nb-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rt-chip {
   padding: 3px 8px;
   border: 0;
@@ -714,7 +803,8 @@ body.is-embed .topbar {
   font-weight: 600;
   line-height: 1;
 }
-.rt-topbar-tools { gap: 6px; }
+.rt-topbar-tools { gap: 6px; flex: none; margin-left: auto; width: auto; overflow: visible; }
+.rt-chip { flex: none; }
 .rt-tool {
   height: 32px;
   padding: 0 12px;
@@ -820,7 +910,32 @@ body.is-embed .topbar {
   background-size: var(--rt-grid) var(--rt-grid);
 }
 .rt-body.is-embed .rt-canvas-wrap { margin: 0; }
-.rt-body.is-embed .rt-topbar { padding: 8px 12px; }
+
+/* 嵌入态回到纵向排版：宿主管导航，左栏收起，顶栏回到通栏细线 */
+.rt-body.is-embed .rt-editor-side { display: none; }
+.rt-body.is-embed .rt-screen--editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--nb-canvas);
+}
+.rt-body.is-embed .rt-topbar {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--nb-canvas);
+  border: 0;
+  border-bottom: 1px solid var(--nb-hairline);
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.rt-body.is-embed .rt-editor-body {
+  flex: 1;
+  padding: 12px;
+  gap: 12px;
+}
 
 .rt-zoom {
   right: 12px;
@@ -1208,64 +1323,90 @@ body.is-embed .topbar {
 .rt-detail-btn.is-danger { margin-left: auto; color: var(--nb-danger); }
 .rt-detail-btn.is-danger:hover { background: var(--nb-alpha-200); color: var(--nb-danger); }
 
-/* ------------------------------------------------------ 6.7 底部导航 */
-.rt-bottomnav {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--nb-hairline);
-  background: var(--nb-canvas);
-}
-.rt-bottomnav-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px;
-  border: 1px solid var(--nb-hairline);
-  border-radius: var(--nb-r-md);
-  background: var(--nb-canvas-sunken);
-}
-.rt-bottomnav-tabs a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: var(--nb-r-md);
-  color: var(--nb-body);
-  font-size: 12.5px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.rt-bottomnav-tabs a:hover { background: var(--nb-alpha-200); color: var(--nb-ink); }
-.rt-bottomnav-tabs a.is-active {
-  background: var(--nb-accent);
-  color: var(--nb-on-accent);
-}
-.rt-bottomnav-meta { color: var(--nb-mute); font-size: 11.5px; }
-
 /* 嵌入态：宿主管导航，这里只留画布与详情 */
-.rt-body.is-embed .rt-crumbs,
-.rt-body.is-embed .rt-bottomnav { display: none; }
+.rt-body.is-embed .rt-crumbs { display: none; }
 
 /* -------------------------------------------------------- 6.8 响应式 */
-@media (max-width: 1180px) {
+/* 顶栏只压右列：空间不够时先收面包屑，再收返回入口，工具与切换按钮始终可见 */
+@media (max-width: 1279px) {
+  .rt-crumbs { display: none; }
+}
+@media (max-width: 1023px) {
+  .rt-topbar-back { display: none; }
+}
+@media (max-width: 940px) {
   .rt-editor-body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
-    gap: 12px;
-    padding: 12px;
+    gap: 10px;
+    padding: 0;
   }
   .rt-detail { max-height: 42vh; }
 }
+/* 窄屏：侧栏收起，任务栏与编辑区各占满整宽（同 /world 的抽屉断点） */
+@media (max-width: 899px) {
+  .rt-screen--editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 40px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .rt-editor-side { display: none; }
+  .rt-topbar { grid-column: 1; grid-row: 1; }
+  .rt-editor-body { grid-column: 1; grid-row: 2; }
+}
 @media (max-width: 860px) {
-  .rt-crumbs { display: none; }
   .rt-search-filter { display: none; }
-  .rt-topbar { padding: 8px 12px; }
-  .rt-editor-body { padding: 10px; }
   .rt-hint { display: none; }
+}
+
+/* ==========================================================================
+   7. 任务栏明暗切换（关系树 / 时间线 / 地图共用）
+   --------------------------------------------------------------------------
+   三页都以 /world 的任务栏为基准，按钮也沿用工作区同一套语义：
+   深色时显示太阳 + 「浅色」，浅色时显示月亮 + 「深色」。
+   尺寸收到 30px 高，能塞进 40px 的任务栏而不撑高它。
+   ========================================================================== */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--nb-hairline);
+  border-radius: var(--nb-r-sm);
+  background: transparent;
+  color: var(--nb-body);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, color 0.16s;
+}
+.theme-toggle:hover {
+  background: var(--nb-alpha-200);
+  border-color: var(--nb-hairline-strong);
+  color: var(--nb-ink);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--nb-ring);
+  outline-offset: 1px;
+}
+.theme-toggle__glyph {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+}
+.theme-toggle__glyph svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (max-width: 980px) {
+  .theme-toggle { padding: 0 8px; }
+  .theme-toggle__text { display: none; }
 }

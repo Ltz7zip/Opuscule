@@ -81,10 +81,16 @@ def index(request, world_slug=None):
         return redirect("/w/")
     if not world_page_allowed(request, world):
         return world_page_denied(request, world)
+    # 整页壳与工作区同色：?theme= 优先（工作区跳转时带着），否则读世界主题。
+    theme_mode = request.GET.get("theme", "")
+    if theme_mode not in ("light", "dark"):
+        theme = world.theme_config if isinstance(world.theme_config, dict) else {}
+        theme_mode = "light" if theme.get("mode") == "light" else "dark"
     return render(request, "index.html", {
         # 0.7.0：经典编辑器直接读写世界的总时间线（不再是一条时间线文档）
         "classic_api_base": f"/w/{world.slug}/api/world/timeline/classic",
         "classic_title": "世界时间线",
+        "classic_theme": theme_mode,
         "world_base": f"/w/{world.slug}",
     })
 

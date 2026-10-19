@@ -52,7 +52,6 @@
   </script>
 </head>
 <body class="site" data-surface="site" data-sw="{% if sw_enabled %}1{% else %}0{% endif %}" data-sw-version="{{ static_version }}" style="--site-primary: {{ theme.primaryColor }}; --site-heading: '{{ theme.headingFont }}', Georgia, serif; --site-body: '{{ theme.bodyFont }}', system-ui, sans-serif;">
-  <a class="skip-link" href="#siteMain">跳到正文</a>
   <header class="nav">
     <a class="nav-brand" href="{% url 'site:home' world.published_slug %}">{{ world.name }}</a>
     <nav class="nav-links">

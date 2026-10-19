@@ -18,6 +18,8 @@ urlpatterns = [
     path("worlds/<int:world_id>/switch", views.world_switch, name="world-switch"),
     # 最近发生的事（通知中心的数据源）
     path("activity", views.activity, name="activity"),
+    # 个人主页（/u/<username>）的资料与排版
+    path("profile", views.profile_data, name="profile-data"),
 
     # 文档树
     path("documents", views.document_collection, name="document-collection"),
@@ -169,6 +171,7 @@ urlpatterns = [
     path("ai/conversations/<int:conversation_id>", ai_views.conversation_detail,
          name="ai-conversation"),
     path("ai/chat", ai_views.chat, name="ai-chat"),
+    path("ai/chat/stream", ai_views.chat_stream, name="ai-chat-stream"),
     path("ai/changesets", ai_views.changeset_collection, name="ai-changesets"),
     path("ai/changesets/<int:changeset_id>", ai_views.changeset_detail, name="ai-changeset"),
     path("ai/changesets/<int:changeset_id>/apply", ai_views.changeset_apply,

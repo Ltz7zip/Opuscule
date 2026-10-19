@@ -18,9 +18,11 @@ from apps.documents.models import Document, Era, TimelineEvent
 from apps.maps.models import MapMarker
 from apps.world.models import DOC_CARD, DOC_TIMELINE, DOC_TYPES, EntityType
 
+from .blocks import BlockEditError, block_outline, preview_operations
 from .models import (
     CHANGE_CREATE_DOCUMENT,
     CHANGE_CREATE_TIMELINE_EVENT,
+    CHANGE_EDIT_BLOCKS,
     CHANGE_UPDATE_DOCUMENT,
 )
 
@@ -107,7 +109,8 @@ TOOLS = [
     ),
     _schema(
         "propose_update_document",
-        "提议修改一份文档：可以改名，或追加一段正文。改动进入变更集等用户确认。",
+        "提议修改一份文档：可以改名，或追加一段正文。改动进入变更集等用户确认。"
+        "要调整正文结构（标题层级、删除/插入块）请改用 propose_edit_blocks。",
         {
             "document_id": {"type": "integer", "description": "要修改的文档 id"},
             "name": {"type": "string", "description": "可选，新名称"},
@@ -115,6 +118,52 @@ TOOLS = [
             "summary": {"type": "string", "description": "这次改动的一句话说明"},
         },
         ["document_id"],
+    ),
+    _schema(
+        "propose_edit_blocks",
+        "提议按块编辑卡片正文：把段落改成标题（可指定 1-3 级）、改正文、改块标题、"
+        "删除块、插入新块。先用 get_document 拿到 outline 里每个块的 id。"
+        "改动进入变更集等用户确认。",
+        {
+            "document_id": {"type": "integer", "description": "要修改的卡片文档 id"},
+            "operations": {
+                "type": "array",
+                "description": "按顺序执行的块操作，最多 40 条",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["update", "delete", "insert"],
+                            "description": "update 改已有块；delete 删除块；insert 插入新块",
+                        },
+                        "block_id": {
+                            "type": "string",
+                            "description": "update / delete 必填；outline 里的块 id",
+                        },
+                        "after_block_id": {
+                            "type": "string",
+                            "description": "insert 可选；插到这个块后面，省略则追加到末尾",
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": ["paragraph", "heading", "quote", "bulleted",
+                                     "numbered", "todo", "code", "callout", "divider"],
+                            "description": "块类型；把段落变成小标题时用 heading",
+                        },
+                        "text": {"type": "string", "description": "块正文；标题块的标题文字也放这里"},
+                        "title": {"type": "string",
+                                  "description": "块标题；只对旧结构卡片有效，标题块请用 text"},
+                        "heading_level": {"type": "integer",
+                                          "description": "标题层级 1-3，仅 type=heading 时有效"},
+                        "level": {"type": "integer", "description": "缩进层级 0-2，仅旧结构卡片有效"},
+                    },
+                    "required": ["action"],
+                },
+            },
+            "summary": {"type": "string", "description": "这次改动的一句话说明"},
+        },
+        ["document_id", "operations"],
     ),
     _schema(
         "propose_create_timeline_event",
@@ -210,6 +259,11 @@ class ToolRunner:
     def _tool_get_document(self, arguments: dict) -> dict:
         document = self._require_document(arguments.get("document_id"))
         payload = document.to_payload(with_card=True)
+        if document.document_type == DOC_CARD:
+            card = getattr(document, "card", None)
+            if card is not None:
+                # 只读大纲：模型需要块 id 才能用 propose_edit_blocks 精准改结构。
+                payload["outline"] = block_outline(card)
         if document.document_type == DOC_TIMELINE:
             payload["events"] = [
                 event.to_payload() for event in document.events.order_by("year", "month", "day", "id")[:MAX_LIMIT]
@@ -334,6 +388,29 @@ class ToolRunner:
             parts.append("追加正文")
         summary = payload["note"] or f"修改文档「{document.name}」：" + "、".join(parts)
         return self._propose(CHANGE_UPDATE_DOCUMENT, payload, summary)
+
+    def _tool_propose_edit_blocks(self, arguments: dict) -> dict:
+        document = self._document(arguments.get("document_id"))
+        if document is None:
+            return {"error": "文档不存在或已删除"}
+        if document.document_type != DOC_CARD:
+            return {"error": "只有卡片文档才有可编辑的正文块"}
+        card = getattr(document, "card", None)
+        if card is None:
+            return {"error": "这张卡片还没有正文"}
+        try:
+            preview = preview_operations(card, arguments.get("operations"))
+        except BlockEditError as exc:
+            return {"error": str(exc)}
+        payload = {
+            "document_id": document.id,
+            "document_name": document.name,
+            "operations": arguments.get("operations"),
+            "preview": preview,
+            "note": _as_text(arguments.get("summary"), 300),
+        }
+        summary = payload["note"] or f"编辑文档「{document.name}」的 {len(preview)} 个块"
+        return self._propose(CHANGE_EDIT_BLOCKS, payload, summary)
 
     def _tool_propose_create_timeline_event(self, arguments: dict) -> dict:
         # 0.7.0：默认记到世界总时间线；只有显式给旧时间线文档时才挂回文档

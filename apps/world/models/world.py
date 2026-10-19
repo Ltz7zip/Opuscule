@@ -89,7 +89,8 @@ class World(models.Model):
         """站点状态：版本、范围、各状态的文档计数（前端分享面板直接用）。"""
         counts = {"live": 0, "stale": 0, "pending": 0, "excluded": 0, "unpublished": 0}
         for document in self.documents.filter(deleted_at__isnull=True).exclude(document_type=DOC_FOLDER):
-            counts[publish_state(document)] = counts.get(publish_state(document), 0) + 1
+            state = publish_state(document, self)
+            counts[state] = counts.get(state, 0) + 1
         return {
             "published": self.is_published,
             "url": self.site_url,

@@ -1098,20 +1098,22 @@ body {
   transition: border-color var(--pf-t) var(--pf-ease);
 }
 
-/* 换主题：支持 View Transitions 的浏览器走一次整页交叉溶解（由 workspace.js 的
-   applyThemeAnimated 触发），不支持的浏览器就是普通切换，没有任何副作用。
-   刻意让旧快照定住、只让新快照淡入——两张半透明叠在一起会发灰。 */
-::view-transition-old(root) {
+/* 换主题：支持 View Transitions 的浏览器从点击处做圆形扩散（由 workspace.js 的
+   applyThemeAnimated 用 clip-path 驱动），不支持的浏览器就是普通切换，没有副作用。
+   这里必须关掉浏览器默认的交叉溶解，否则淡入会和扩散叠在一起发灰。
+   注意作用域：只在换主题的那一瞬挂 html.xp-theme-fx。普通跨页跳转（工作台 ↔
+   关系树 / 时间线）需要保留默认的根过渡和正常层叠，否则旧快照会盖住正在飞的
+   顶栏 / 侧栏（共享元素）。 */
+html.xp-theme-fx::view-transition-old(root),
+html.xp-theme-fx::view-transition-new(root) {
   animation: none;
-  opacity: 1;
+  mix-blend-mode: normal;
 }
-::view-transition-new(root) {
-  animation: pf-view-in var(--pf-t-panel) var(--pf-ease) both;
-}
-@keyframes pf-view-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+html.xp-theme-fx::view-transition-old(root) { z-index: 1; }
+html.xp-theme-fx::view-transition-new(root) { z-index: 2147483646; }
+/* 切到深色时由旧快照收缩，旧图必须压在上面，否则会看到新页面被旧页面盖住。 */
+html.xp-theme-fx[data-theme="dark"]::view-transition-old(root) { z-index: 2147483646; }
+html.xp-theme-fx[data-theme="dark"]::view-transition-new(root) { z-index: 1; }
 
 /* ==========================================================================
    8. 列表错峰
