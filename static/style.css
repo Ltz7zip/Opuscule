@@ -1747,35 +1747,44 @@ html.tl-shell body {
   background: var(--nb-canvas-sunken);
   color: var(--nb-ink);
 }
-/* 与嵌入态取同一组派生值：浮层在画布卡之外也要拿到浅色档 */
+/* 与嵌入态取同一组派生值：浮层在画布卡之外也要拿到当前明暗档 */
 html.tl-shell {
+  --dot: rgba(255, 255, 255, 0.075);
+  --tick-line: rgba(255, 255, 255, 0.16);
+  --stem: rgba(255, 255, 255, 0.16);
+  --sep: var(--nb-hairline);
+  --glass: rgba(24, 24, 27, 0.94);
+  --field: var(--nb-canvas-sunken);
+  color-scheme: dark;
+}
+html.tl-shell[data-theme="light"] {
   --dot: rgba(24, 24, 27, 0.085);
   --tick-line: rgba(24, 24, 27, 0.16);
   --stem: rgba(24, 24, 27, 0.16);
-  --sep: var(--nb-hairline);
   --glass: rgba(255, 255, 255, 0.94);
-  --field: var(--nb-canvas-sunken);
   color-scheme: light;
 }
 
 .tl-shell .tlx-shell {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr) 320px;
+  grid-template-columns: 268px minmax(0, 1fr) 320px;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 10px;
   height: 100%;
-  padding: 8px;
+  padding: 10px;
   background: var(--nb-canvas-sunken);
   font-size: 12.5px;
 }
 .tl-shell .tlx-main { display: contents; }
 
 /* --------------------------------------------------------------- 顶栏 */
+/* 与 /world 同一套骨架：侧栏从顶部贯通到底部，任务栏只占右侧第一行。 */
 .tl-shell .tlx-top {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   grid-row: 1;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  height: 40px;
   min-width: 0;
   background: var(--nb-canvas);
   border: 1px solid var(--nb-hairline);
@@ -1783,16 +1792,16 @@ html.tl-shell {
   box-shadow: var(--nb-shadow-sm);
   overflow: hidden;
 }
-.tl-shell .tlx-top-row1,
-.tl-shell .tlx-top-row2 {
+.tl-shell .tlx-top-row1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
-  padding: 0 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  padding: 0 12px;
   min-width: 0;
 }
-.tl-shell .tlx-top-row2 { border-top: 1px solid var(--nb-hairline-soft); }
 
 .tl-shell .tlx-back {
   font-size: 12.5px;
@@ -1976,7 +1985,7 @@ html.tl-shell {
 /* --------------------------------------------------------------- 左栏 */
 .tl-shell .tlx-side {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2515,7 +2524,7 @@ html.tl-shell {
 
 /* --------------------------------------------------------------- 状态栏 */
 .tl-shell .tlx-status {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   grid-row: 3;
   display: flex;
   align-items: center;

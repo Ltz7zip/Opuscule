@@ -1,18 +1,33 @@
 {# 我们自己的面板骨架（不是对内嵌界面的 DOM 换色）。 #}
 {# 左栏两块：图层 / 标注 —— 与工作区左栏同一套分布。 #}
 {# 服务端渲染，脚本就位后被搬进对应标签页里；内嵌界面自己那份内容留在 DOM 里但不再渲染。 #}
-<section id="tx-panel-layers" class="tx-panel">
-  <div class="tx-panel__head">
-    <span class="tx-panel__icon" data-icon="layers" aria-hidden="true"></span>
-    <label class="tx-field">
-      <span class="tx-field__label">图层预设</span>
+{# 图层：拆成两张卡 —— 「预设 / 不透明度」与「图层清单」。
+   直接摊成一张卡时，几十层叠起来会把整条左栏拉成一整块超长卡片；
+   拆开以后与右栏「视图 / 生成 / 三维」同一套卡片节奏。
+   外层只做分组容器（.tx-panel--split 在 panel.css 里卸掉卡片外观），
+   id 与内部钩子全部保持原位。 #}
+<section id="tx-panel-layers" class="tx-panel tx-panel--split">
+  <section class="tx-panel">
+    <div class="tx-panel__head">
+      <span class="tx-panel__icon" data-icon="layers" aria-hidden="true"></span>
+      <span class="tx-field__label">图层</span>
+    </div>
+    <label class="tx-param">
+      <span class="tx-param__name">预设</span>
       <span id="tx-preset-dd" class="tx-dd-slot"></span>
     </label>
-  </div>
-  {# 统一不透明度：一条总滑杆，按比例缩放各层原有的透明度 #}
-  <div id="tx-layers-opacity"></div>
-  <ul id="tx-layers-list" class="tx-list"></ul>
-  <div class="tx-panel__hint">点一行开关图层，点分组标题收起 / 展开这一组，↑↓ 调整叠放顺序，Ctrl + 点击编辑该层样式。最上面那条滑杆统一调整所有图层的透明度。</div>
+    {# 统一不透明度：一条总滑杆，按比例缩放各层原有的透明度 #}
+    <div id="tx-layers-opacity"></div>
+  </section>
+
+  <section class="tx-panel">
+    <div class="tx-panel__head">
+      <span class="tx-panel__icon" data-icon="list" aria-hidden="true"></span>
+      <span class="tx-field__label">图层清单</span>
+    </div>
+    <ul id="tx-layers-list" class="tx-list"></ul>
+    <div class="tx-panel__hint">点一行开关图层，点分组标题收起 / 展开这一组，↑↓ 调整叠放顺序，Ctrl + 点击编辑该层样式。最上面那条滑杆统一调整所有图层的透明度。</div>
+  </section>
 </section>
 
 <section id="tx-panel-markers" class="tx-panel">

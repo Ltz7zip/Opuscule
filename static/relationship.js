@@ -915,7 +915,7 @@
       host.innerHTML = '<div class="rt-detail-empty">'
         + '<span data-icon="users" data-icon-size="20" aria-hidden="true"></span>'
         + '<strong>还没有选中人物</strong>'
-        + '<p>点一张卡片，这里会显示它的人物信息与关系。</p>'
+        + '<p>单击一张卡片，这里会显示它的人物简介与关系；双击可打开人物卡片。</p>'
         + '</div>';
       hydrateIcons(host);
       return;
@@ -1110,17 +1110,20 @@
       beginDrag(event, node, el);
     });
 
+    /* 双击人物：跳到它归属的那张人物卡片；备注没有卡片，双击仍然是改内容。 */
     el.addEventListener('dblclick', function (event) {
       event.stopPropagation();
-      if (READONLY) return;
-      if (node.kind === 'note') editNote(node, el); else editName(node, el);
+      if (node.kind === 'note') {
+        if (!READONLY) editNote(node, el);
+        return;
+      }
+      openCard(node);
     });
 
+    /* 单击只做一件事：选中并在右侧栏显示简介，不离开当前页面。 */
     el.addEventListener('click', function (event) {
       event.stopPropagation();
       if (event.target.closest && event.target.closest('.rt-handle')) return;
-      // 嵌在宿主里时点人 = 让宿主打开那张卡（发布站点是跳站点页，工作区是开面板）
-      if (EMBED) { openCardInHost(node); return; }
       select(node.id);
     });
     el.addEventListener('contextmenu', function (event) {
@@ -1813,7 +1816,18 @@
     }).catch(function (err) { toast(err.message || '分配失败'); });
   }
 
-  /* ------------------------------------------------- 只读嵌入：点人告诉宿主 */
+  /* ------------------------------------------------- 双击人物：打开卡片 */
+  /* 独立页：回工作区深链（/w/<slug>#doc=<id>）；
+     嵌在宿主里：交给宿主开（发布站点跳站点页，工作区开标签页）。 */
+  function openCard(node) {
+    if (!node.card) {
+      toast((node.name || '这位人物') + '：还没有关联卡片');
+      return;
+    }
+    if (EMBED) { openCardInHost(node); return; }
+    location.href = PAGE + '#doc=' + node.card;
+  }
+
   /* 发一条消息给宿主页面：
      · 发布站点认 slug，直接跳那张卡的站点页；
      · 工作区认 id，在自己里面把那张卡开成标签页。
@@ -1952,6 +1966,22 @@
     if (button.dataset.action === 'zoom-out') zoomBy(1 / 1.15);
     if (button.dataset.action === 'fit') fit();
   });
+
+  /* 全屏：同标签换页，不再开新标签（新标签会把跨文档过渡整个吃掉）。
+     嵌在宿主里时 iframe 自己跳只会换掉一块面板，所以把地址交给宿主，
+     由宿主在自己的标签页上走。 */
+  var openFull = $('rtOpenFull');
+  if (openFull) {
+    openFull.addEventListener('click', function (event) {
+      if (!EMBED) return;                    // 独立页：交给浏览器原生跳转
+      event.preventDefault();
+      if (window.parent === window) return;
+      window.parent.postMessage({
+        type: 'ws-open-page',
+        url: new URL(openFull.href, window.location.href).href
+      }, window.location.origin);
+    });
+  }
 
   /* ------------------------------------------- 搜索 / 筛选 / 右侧详情栏 */
   var searchInput = $('rtSearch');

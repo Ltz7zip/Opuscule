@@ -1433,8 +1433,9 @@
       badge.hidden = true;
       button.appendChild(badge);
       // 放在"谁在这里"前面：都是"关于这个世界正在发生什么"
+      // （顶栏重排后 #presence 在 .tb-status 分组里，不再直属 .tb-right）
       const presence = $('#presence');
-      if (presence && presence.parentNode === host) host.insertBefore(button, presence);
+      if (presence && presence.parentNode) presence.parentNode.insertBefore(button, presence);
       else host.insertBefore(button, host.firstChild);
       panel = el('div', 'notice-panel');
       panel.id = 'noticePanel';

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 
 from ..normalize import blocks_to_text
@@ -81,8 +82,11 @@ def timeline_events(world: World, era=None):
     timeline = world_timeline(world)
     if timeline is None:
         return TimelineEvent.objects.none()
-    query = timeline.events.select_related("document", "featured_card").order_by(
-        "year", "month", "day", "hour", "id"
+    query = (
+        timeline.events
+        .select_related("document", "featured_card", "timeline__calendar")
+        .prefetch_related("linked_cards")
+        .order_by("year", "month", "day", "hour", "id")
     )
     if era is not None:
         query = query.filter(era=era)
@@ -157,7 +161,7 @@ def search_documents(world: World, keyword: str, limit: int = 400) -> list[dict]
             parts.append({"text": text[cursor:], "hit": False})
         return parts or [{"text": text, "hit": False}]
 
-    for document in site_documents(world).prefetch_related("events"):
+    for document in site_documents(world).select_related("card").prefetch_related("events"):
         card = getattr(document, "card", None)
         parts = [document.name]
         if card is not None:
@@ -280,7 +284,7 @@ def publish_preview(world: World) -> dict:
     first_time = not world.is_published      # 第一次发布：所有该上站的都是"新增"
     added, changed, removed = [], [], []
     for document in world.documents.filter(deleted_at__isnull=True).exclude(document_type=DOC_FOLDER):
-        state = publish_state(document)
+        state = publish_state(document, world)
         if first_time and state == "unpublished":
             state = "pending"
         entry = {"id": document.id, "name": document.name, "type": document.document_type,
@@ -315,7 +319,7 @@ def era_summary(world: World, era) -> dict:
             "cards": list(event.linked_cards.all())[:6],
         })
     linked_documents = [
-        document for document in site_documents(world)
+        document for document in site_documents(world).select_related("card")
         if document.era_id == era.id
         or (getattr(document, "card", None) is not None
             and document.card.visible_in_era(era.id))
@@ -323,12 +327,26 @@ def era_summary(world: World, era) -> dict:
     return {"era": era, "events": rows, "documents": linked_documents[:24]}
 
 
-def site_eras(world: World) -> list[dict]:
-    """站点上"有内容"的纪元（有事件、或挂着文档）。"""
-    counts = {item["id"]: item["count"] for item in site_filters(world)["eras"]}
+def site_eras(world: World, counts=None) -> list[dict]:
+    """站点上"有内容"的纪元（有事件、或挂着文档）。
+
+    ``counts`` 可以传 ``site_filters(world)["eras"]``，让同一页里已经算过的
+    纪元文档数直接复用，省一次整表遍历。
+    """
+    era_counts = site_filters(world)["eras"] if counts is None else counts
+    counts = {item["id"]: item["count"] for item in era_counts}
+    # 一次聚合把所有纪元的事件数取回来，避免每个纪元都单独 count 一次
+    timeline = world_timeline(world)
+    event_counts = {}
+    if timeline is not None:
+        event_counts = {
+            row["era_id"]: row["total"]
+            for row in timeline.events.order_by().values("era_id").annotate(total=Count("id"))
+            if row["era_id"] is not None
+        }
     rows = []
     for era in world.eras.order_by("position", "id"):
-        events = timeline_events(world, era).count()
+        events = event_counts.get(era.id, 0)
         if era.id in counts or events:
             rows.append({"id": era.id, "name": era.name, "theme": era.theme,
                          "description": era.description, "cover": era.cover,
@@ -337,11 +355,15 @@ def site_eras(world: World) -> list[dict]:
     return rows
 
 
-def site_filters(world: World) -> dict:
-    """筛选 chip 的选项：有哪些类型、哪些纪元（只列站点上真有的）。"""
+def site_filters(world: World, documents=None) -> dict:
+    """筛选 chip 的选项：有哪些类型、哪些纪元（只列站点上真有的）。
+
+    ``documents`` 可传入已经取好的站点文档 QuerySet，与 ``site_sections``
+    共用同一份查询缓存。
+    """
     types: dict[str, dict] = {}
     eras: dict[int, dict] = {}
-    for document in site_documents(world):
+    for document in (documents if documents is not None else site_documents(world)):
         if document.entity_type_id:
             entry = types.setdefault(str(document.entity_type_id), {
                 "slug": str(document.entity_type_id),
@@ -460,16 +482,16 @@ def _unlock_key(world: World) -> str:
 
 def document_by_slug(world: World, slug: str):
     """站点页：按 slug 找文档（允许用 id 兜底）。"""
-    query = site_documents(world)
+    query = site_documents(world).select_related("card")
     document = query.filter(slug=slug).first()
     if document is None and slug.isdigit():
         document = query.filter(pk=int(slug)).first()
     return document
 
 
-def related_documents(document) -> list[dict]:
+def related_documents(document, world=None) -> list[dict]:
     """页面底部的"相关"：引用了它 / 它引用了谁 / 一起出现在事件里。"""
-    world = document.world
+    world = world if world is not None else document.world
     card = getattr(document, "card", None)
     out: list[dict] = []
     seen = {document.id}
@@ -481,20 +503,27 @@ def related_documents(document) -> list[dict]:
         out.append({"id": target.id, "name": target.name, "slug": target.slug, "reason": reason})
 
     if card is not None:
-        for entry in card.resolved_values().values():
+        values = card.resolved_values(world=world)
+        # 引用目标先把 id 收齐，一次取回，避免每条引用都单独查一次库
+        ref_ids = [
+            entry["ref"]["id"] for entry in values.values()
+            if entry.get("value_type") == "reference" and entry.get("ref")
+        ]
+        references = world.documents.in_bulk(ref_ids)
+        for entry in values.values():
             if entry.get("value_type") == "reference" and entry.get("ref"):
-                target = world.documents.filter(pk=entry["ref"]["id"]).first()
+                target = references.get(entry["ref"]["id"])
                 push(target, f"引用（{entry.get('name')}）")
         # 反向引用
-        for other in site_documents(world).filter(document_type="card"):
+        for other in site_documents(world).select_related("card").filter(document_type="card"):
             other_card = getattr(other, "card", None)
             if other_card is None:
                 continue
-            for entry in other_card.resolved_values().values():
+            for entry in other_card.resolved_values(world=world).values():
                 if entry.get("value_type") == "reference" and entry.get("ref", {}).get("id") == document.id:
                     push(other, "被引用")
 
-    for event in document.linked_events.all():
+    for event in document.linked_events.select_related("document").all():
         push(event.document, f"出现在「{event.title}」")
     for event in document.events.prefetch_related("linked_cards").all():
         for linked in event.linked_cards.all():

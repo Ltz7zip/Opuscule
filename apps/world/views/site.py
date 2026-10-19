@@ -400,16 +400,39 @@ def state(request):
         online = []
         trash_count = 0
     else:
-        roots = world.documents.filter(parent__isnull=True, deleted_at__isnull=True).order_by("position", "id")
-        documents = [document.to_payload(with_children=True) for document in roots]
+        # 一次取回整棵树，在内存里按 parent 分组；避免每个有子节点的文档各查一次。
+        # 只取序列化要用的列：地图的 map_data 等大字段不必跟着首屏一起读出来。
+        all_documents = list(
+            world.documents.filter(deleted_at__isnull=True)
+            .only(
+                "id", "document_type", "name", "slug", "parent_id", "position",
+                "era_id", "era_ids", "entity_type_id", "settings", "cover", "icon",
+                "pinned", "hidden", "is_published", "published_slug", "published_version",
+                "published_at", "updated_at",
+            )
+            .order_by("position", "id")
+        )
+        children_map: dict[int, list] = {}
+        for document in all_documents:
+            if document.parent_id:
+                children_map.setdefault(document.parent_id, []).append(document)
+        documents = [
+            document.to_payload(with_children=True, world=world, children_map=children_map)
+            for document in all_documents if document.parent_id is None
+        ]
         online = [entry.to_payload() for entry in Presence.online(world)]
         trash_count = world.documents.filter(deleted_at__isnull=False).count()
 
     # 每个纪元里看不见的卡片：唯一口径是 Card.visible_in_era（前端不再自己算）
-    cards = list(Card.objects.filter(document__world=world, document__deleted_at__isnull=True))
+    # 只取判断可见性需要的列，别把卡片正文一起读出来
+    cards = list(
+        Card.objects.filter(document__world=world, document__deleted_at__isnull=True)
+        .only("document_id", "era_mode", "era_ids")
+    )
+    eras = list(world.eras.all())
     era_hidden = {
         str(era.id): [card.document_id for card in cards if not card.visible_in_era(era.id)]
-        for era in world.eras.all()
+        for era in eras
     }
     timeline = WorldTimeline.objects.filter(world=world).first()
     return json_response({
@@ -417,7 +440,7 @@ def state(request):
         "viewer": permissions.viewer_payload(request.user, world),
         "online": online,
         "types": [entity_type.to_payload() for entity_type in world.types.all()],
-        "eras": [era.to_payload() for era in world.eras.all()],
+        "eras": [era.to_payload() for era in eras],
         "calendars": [calendar.to_payload() for calendar in world.calendars.all()],
         "documents": documents,
         # 纪元 -> 这一版里看不见的卡片 id（口径见 Card.visible_in_era）

@@ -165,14 +165,6 @@
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.skip-link {
-  position: absolute; left: 12px; top: -60px; z-index: 100;
-  padding: 8px 14px; border-radius: 999px;
-  background: var(--mn-primary); color: var(--mn-primary-ink); font-size: 12.5px;
-  transition: top var(--mn-dur) var(--mn-ease);
-}
-.skip-link:focus { top: 10px; }
-
 /* ------------------------------------------------------------ 危险操作 */
 /* 删除一律红：文字按钮红字红边、纯图标按钮红图标，悬停有淡红底 */
 .mini-btn.is-danger, .link-btn, .danger,
@@ -214,8 +206,6 @@ button[data-danger="1"]:hover {
   /* 顶栏按钮变多之后，宽屏也先收文字，别挤成两行 */
   .tb-right .tb-btn > span:not(.icon) { display: none; }
   .tb-right .tb-btn { width: var(--mn-h); padding: 0; justify-content: center; }
-  .tb-right .tb-btn#paletteBtn { width: auto; padding: 0 10px; }
-  .tb-right .tb-btn#paletteBtn > span { display: inline; }
   .era-chip > span { display: none; }
   .era-chip { padding: 0 10px; }
 }
@@ -223,8 +213,6 @@ button[data-danger="1"]:hover {
 @media (max-width: 1279px) {
   .tb-right .tb-btn > span:not(.icon) { display: none; }   /* ⌘K / 类型 / 纪元 … 只留图标 */
   .tb-right .tb-btn { width: var(--mn-h); padding: 0; justify-content: center; }
-  .tb-right .tb-btn#paletteBtn { width: auto; padding: 0 10px; }
-  .tb-right .tb-btn#paletteBtn > span { display: inline; }
   .tb-side { min-width: 0; }
   .tb-nav { gap: 2px; }
 }

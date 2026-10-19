@@ -1605,11 +1605,6 @@ body { background-image: none; }
 }
 .ro-icon { color: var(--tx-warning); }
 
-.skip-link {
-  background: var(--tx-green);
-  color: var(--tx-on-green);
-  border-radius: var(--tx-r-sm);
-}
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 /* 底部导航（移动端） */
@@ -2247,6 +2242,81 @@ html.has-rail-sidebar .app > .body { grid-column: 2; grid-row: 2; min-height: 0;
 /* 侧栏那条顶栏分割线跟着顶栏走：顶栏现在不从窗口左边开始了 */
 html.has-rail-sidebar .topbar { border-left: 0; height: 40px; }
 
+/* ==========================================================================
+   顶栏重排：左侧面包屑 + 右侧三组控件
+   --------------------------------------------------------------------------
+   原先是把 3 个图标按钮 / 命令面板 / 明暗 / 保存状态 / 纪元 / 在线头像 /
+   账号胶囊平铺成一条，中间还夹了三条 20px 的分隔线：控件高低不一（26 / 30），
+   分隔线又把本来就窄的条切碎。现在按语义分成三组——
+     编辑动作（侧栏 / 撤销 / 重做）｜工具（搜索 / 明暗）｜状态（保存 / 纪元 / 在线 / 账号）
+   组内 2px、组间 12px；按钮统一 30px 方形，状态区用 24px 的小件降一级。
+   ========================================================================== */
+.topbar {
+  --tb-ctl: var(--tx-h-ctl);   /* 30px：与账号胶囊、纪元 chip 同一档 */
+  gap: 12px;
+}
+.topbar > .tb-side:first-child {
+  flex: 1 1 auto;
+  min-width: 0;                /* 面包屑可省略，不再用 220px 的占位把两侧撑开 */
+}
+.topbar .tb-crumb {
+  height: 26px;
+  max-width: min(320px, 100%);
+  min-width: 0;
+  margin-left: 0;
+  padding: 0 8px;
+  border-radius: var(--tx-r-sm);
+  background: var(--tx-canvas-soft);
+  color: var(--tx-body);
+  font-size: var(--tx-fs-ui);
+}
+.topbar .tb-crumb[hidden] { display: none; }   /* 作者样式会盖掉 [hidden] 的 display:none */
+.topbar .tb-crumb .crumb-icon { color: var(--tx-mute); }
+
+.topbar .tb-right,
+.topbar .tb-group {
+  display: flex;
+  align-items: center;
+}
+.topbar .tb-right {
+  flex: 0 0 auto;
+  gap: 12px;                   /* 组间距 */
+  margin-left: auto;
+}
+.topbar .tb-group { gap: 2px; } /* 组内间距 */
+.topbar .tb-status { gap: 8px; }
+
+/* 图标按钮：正方形。terminal 的 `.topbar .tb-btn { padding: 0 8px }` 会
+   在 30px 里再吃掉 16px，图标就贴边了——这里显式归零。 */
+.topbar .tb-btn.is-icon {
+  width: var(--tb-ctl);
+  height: var(--tb-ctl);
+  padding: 0;
+  justify-content: center;
+}
+
+/* 账号 / 纪元统一高度（presence 头像单独降到 24px，见下） */
+.topbar .user-chip,
+.topbar .era-chip { height: var(--tb-ctl); }
+
+/* 保存状态：给一个不抢戏的底，避免它夹在胶囊之间像一行散字 */
+.topbar .save-state {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--tx-r-sm);
+  background: var(--tx-canvas-soft);
+  white-space: nowrap;
+}
+.topbar .save-state[data-kind="offline"] { border-bottom: 0; }
+
+/* 在线头像：与账号胶囊里的 24px 头像对齐 */
+.topbar .presence .pr {
+  width: 24px;
+  height: 24px;
+  margin-left: -7px;
+  font-size: 10px;
+}
+
 /* 「图片」取源面板：上传文件 / 粘贴链接 两个页签（封面、图片块共用） */
 .img-src-card { width: min(420px, 92vw); }
 .img-src-tabs {
@@ -2400,16 +2470,6 @@ input[type="range"]:focus-visible { box-shadow: var(--tx-focus-ring); }
 
 /* 复选框 / 单选框 */
 input[type="checkbox"], input[type="radio"] { accent-color: var(--tx-green); }
-
-/* 跳转链接：绿底上压的是 on-primary 墨色，不是近黑文字 */
-.skip-link {
-  background: var(--tx-green);
-  color: var(--tx-on-green);
-  border-radius: var(--tx-r-sm);
-  font-size: var(--tx-fs-ui);
-  font-weight: 500;
-  padding: 6px 12px;
-}
 
 /* 标签页上的关闭钮：2px 方格，不是圆形 */
 .tab .t-close,

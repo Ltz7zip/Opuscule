@@ -1,5 +1,5 @@
 {% load static %}<!DOCTYPE html>
-<html lang="zh-CN" data-theme="{% if embed %}{{ theme_mode }}{% else %}light{% endif %}"{% if not embed %} class="rt-shell"{% endif %}>
+<html lang="zh-CN" data-theme="{% if embed %}{{ theme_mode|default:'dark' }}{% else %}light{% endif %}"{% if not embed %} class="rt-shell"{% endif %}>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -34,7 +34,7 @@
        data-trees-url="{{ api_base }}/relationship/trees">
 
     <!-- ================= 第一步：选模版（图1） ================= -->
-    <section class="rt-screen rt-screen--picker" data-screen="picker">
+    <section class="rt-screen rt-screen--picker" data-screen="picker"{% if doc_id and not doc_missing %} hidden{% endif %}>
       <aside class="rt-side">
         <header class="rt-side-head">
           <span class="rt-side-glyph" data-icon="network" data-icon-size="19" aria-hidden="true"></span>
@@ -104,7 +104,36 @@
     </section>
 
     <!-- ================= 第三步：编辑区（图4-图7） ================= -->
-    <section class="rt-screen rt-screen--editor" data-screen="editor" hidden>
+    <section class="rt-screen rt-screen--editor" data-screen="editor"{% if not doc_id or doc_missing %} hidden{% endif %}>
+      <aside class="rt-editor-side" aria-label="工作区导航">
+        <div class="rt-side-world">
+          <a class="world-chip" href="{{ page_base }}" title="返回工作台">
+            <span class="wc-avatar" aria-hidden="true">{{ world.name|first|upper }}</span>
+            <span class="wc-name">{{ world.name }}</span>
+          </a>
+        </div>
+        <nav class="rt-side-nav" aria-label="主导航">
+          <a href="{{ page_base }}">
+            <span data-icon="house" data-icon-size="16" aria-hidden="true"></span>工作台
+          </a>
+          <a href="{{ page_base }}/timeline">
+            <span data-icon="route" data-icon-size="16" aria-hidden="true"></span>时间线
+          </a>
+          <a class="is-active" href="{{ page_base }}/relation" aria-current="page">
+            <span data-icon="network" data-icon-size="16" aria-hidden="true"></span>关系树
+          </a>
+          <a href="{{ page_base }}/map/2d">
+            <span data-icon="map" data-icon-size="16" aria-hidden="true"></span>地图
+          </a>
+          <a href="/explore">
+            <span data-icon="compass" data-icon-size="16" aria-hidden="true"></span>探索
+          </a>
+        </nav>
+        <div class="rt-side-foot">
+          <span id="rtTreeStats">共 0 位人物 · 0 条关系</span>
+        </div>
+      </aside>
+
       <header class="rt-topbar">
         <a class="rt-topbar-back" href="{{ page_base }}" title="返回工作台">
           <span data-icon="arrow-left" data-icon-size="16"></span> 工作台
@@ -130,10 +159,17 @@
           <span class="rt-tool-sep" aria-hidden="true"></span>
           <button type="button" class="rt-tool rt-write" data-action="relations" title="可用关系">关系清单</button>
           <button type="button" class="rt-tool rt-tool--ghost" data-action="fit" title="缩放到适应">适应</button>
-          <a class="rt-tool rt-embed-only" id="rtOpenFull" target="_blank" rel="noopener"
-             title="在新标签页里全屏编辑" aria-label="在新标签页里全屏编辑">
+          <a class="rt-tool rt-embed-only" id="rtOpenFull"
+             title="在当前页全屏编辑" aria-label="在当前页全屏编辑">
             <span data-icon="external-link" data-icon-size="15"></span>
           </a>
+          {% if not embed %}
+          <button class="theme-toggle" type="button" data-theme-toggle
+                  data-world-api="{{ api_base }}/world" title="切换到浅色模式">
+            <span class="theme-toggle__glyph" aria-hidden="true"></span>
+            <span class="theme-toggle__text">浅色</span>
+          </button>
+          {% endif %}
           <span class="rt-save" id="rtSaveState" role="status" aria-live="polite">已保存</span>
         </div>
       </header>
@@ -188,22 +224,12 @@
             </p>
           </div>
 
-          <p class="rt-hint">在空白处 <b>右键</b> 就能添加人物 · 拖动节点可调整位置</p>
+          <p class="rt-hint">在空白处 <b>右键</b> 就能添加人物 · 拖动节点可调整位置 · <b>双击</b>人物打开卡片</p>
         </section>
 
         <aside class="rt-detail" id="rtNodeDetail" aria-label="人物详情"></aside>
       </div>
 
-      <div class="rt-bottomnav">
-        <nav class="rt-bottomnav-tabs" aria-label="主导航">
-          <a href="{{ page_base }}">工作台</a>
-          <a href="{{ page_base }}/timeline">时间线</a>
-          <a class="is-active" href="{{ page_base }}/relation" aria-current="page">关系树</a>
-          <a href="{{ page_base }}/map">地图</a>
-          <a href="/explore">探索</a>
-        </nav>
-        <span class="rt-bottomnav-meta" id="rtTreeStats">共 0 位人物 · 0 条关系</span>
-      </div>
     </section>
 
     <!-- ================ 打不开：文档不在（被删 / 进了回收站） ================ -->
@@ -273,6 +299,7 @@
   </div>
 
   <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
+  <script src="{% static 'theme-toggle.js' %}?v={{ static_version }}"></script>
   <script>
     window.__WORLD__ = {
       slug: "{{ world.slug|escapejs }}",

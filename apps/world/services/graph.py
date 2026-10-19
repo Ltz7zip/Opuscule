@@ -63,7 +63,7 @@ def build_graph(world, *, query: str = "", hide_isolated: bool = False, limit: i
         )
     documents = list(
         documents_qs
-        .select_related("entity_type")
+        .select_related("card", "entity_type")
         .order_by("document_type", "position", "id")[:limit]
     )
     by_id = {d.id: d for d in documents}
@@ -88,7 +88,7 @@ def build_graph(world, *, query: str = "", hide_isolated: bool = False, limit: i
         card = getattr(document, "card", None)
         if card is None:
             continue
-        for entry in card.resolved_values().values():
+        for entry in card.resolved_values(world=world).values():
             if entry.get("value_type") != "reference":
                 continue
             ref = entry.get("ref")
@@ -109,11 +109,15 @@ def build_graph(world, *, query: str = "", hide_isolated: bool = False, limit: i
     from . import autolink
 
     scans = [d for d in documents if d.document_type == DOC_CARD][:MAX_MENTION_SCAN]
+    # 候选名单只建一次，逐卡扫描时复用（否则每张卡都会重新查一遍全世界的卡片）
+    name_pairs = autolink.candidates(world) if scans else []
     for document in scans:
         card = getattr(document, "card", None)
         if card is None or not card.body:
             continue
-        for match in autolink.find_mentions(world, card.body, exclude_document_id=document.id)[:40]:
+        for match in autolink.find_mentions(
+            world, card.body, exclude_document_id=document.id, candidates=name_pairs,
+        )[:40]:
             add_link(document.id, match["document_id"], "mention", match["matched"])
 
     # 邻域裁剪

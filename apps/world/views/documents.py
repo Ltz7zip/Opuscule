@@ -55,7 +55,7 @@ def document_collection(request):
     world = current_world()
 
     if request.method == "GET":
-        query = world.documents.filter(deleted_at__isnull=True)
+        query = world.documents.filter(deleted_at__isnull=True).select_related("card")
         doc_type = request.GET.get("type")
         if doc_type:
             query = query.filter(document_type=doc_type)
@@ -66,7 +66,7 @@ def document_collection(request):
         if keyword:
             query = query.filter(name__icontains=keyword)
         return json_response({
-            "documents": [document.to_payload(with_card=True)
+            "documents": [document.to_payload(with_card=True, world=world)
                           for document in query.order_by("position", "id")]
         })
 
@@ -124,13 +124,13 @@ def document_detail(request, doc_id):
     """单篇文档：读 / 改（改名、移动、隐藏、置顶、封面、设置）/ 删（软删或彻底删）。"""
     world = current_world()
     permanent = request.GET.get("hard") in ("1", "true", "yes")
-    document = world.documents.filter(pk=as_int(doc_id)).first()
+    document = world.documents.filter(pk=as_int(doc_id)).select_related("card").first()
     if document is None:
         return json_response(DOC_NOT_FOUND, status=404)
 
     if request.method == "GET":
         with_children = request.GET.get("children") in ("1", "true", "yes")
-        payload = document.to_payload(with_card=True, with_children=with_children)
+        payload = document.to_payload(with_card=True, with_children=with_children, world=world)
         payload["revision"] = as_int((document.settings or {}).get("revision"), 0)
         return json_response(payload)
 
@@ -189,7 +189,7 @@ def document_detail(request, doc_id):
 
     document.save()
     touch_document(document, label="修改文档", author=request.user)
-    result = document.to_payload(with_card=True)
+    result = document.to_payload(with_card=True, world=world)
     result["revision"] = as_int((document.settings or {}).get("revision"), 0)
     return json_response(result)
 
@@ -249,10 +249,14 @@ def document_duplicate(request, doc_id):
 def trash_collection(request):
     """回收站：软删掉的文档，可以还原或彻底删。"""
     world = current_world()
-    documents = world.documents.filter(deleted_at__isnull=False).order_by("-deleted_at", "id")
+    documents = list(
+        world.documents
+        .filter(deleted_at__isnull=False)
+        .order_by("-deleted_at", "id")
+    )
     return json_response({
-        "documents": [document.to_payload() for document in documents],
-        "count": documents.count(),
+        "documents": [document.to_payload(world=world) for document in documents],
+        "count": len(documents),
     })
 
 
@@ -338,10 +342,11 @@ def card_detail(request, doc_id):
     card, _created = Card.objects.get_or_create(document=document, defaults={"entity_type": document.entity_type})
 
     if request.method == "GET":
+        entity_type = card.effective_type()
         return json_response({
-            "document": document.to_payload(),
-            "card": card.to_payload(with_doc=True),
-            "entity_type": (card.effective_type().to_payload() if card.effective_type() else None),
+            "document": document.to_payload(world=world),
+            "card": card.to_payload(with_doc=True, world=world),
+            "entity_type": (entity_type.to_payload() if entity_type else None),
             "revision": as_int((document.settings or {}).get("revision"), 0),
         })
 
@@ -354,8 +359,8 @@ def card_detail(request, doc_id):
             "error": "这份文档刚被别人改过，已经刷新成最新内容",
             "conflict": True,
             "revision": current_revision,
-            "document": document.to_payload(),
-            "card": card.to_payload(with_doc=True),
+            "document": document.to_payload(world=world),
+            "card": card.to_payload(with_doc=True, world=world),
         }, status=409)
 
     try:
@@ -365,7 +370,7 @@ def card_detail(request, doc_id):
     card.save()
     touch_document(document, label="编辑卡片", author=request.user)
     return json_response({
-        "document": document.to_payload(),
-        "card": card.to_payload(with_doc=True),
+        "document": document.to_payload(world=world),
+        "card": card.to_payload(with_doc=True, world=world),
         "revision": as_int((document.settings or {}).get("revision"), 0),
     })

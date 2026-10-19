@@ -1,5 +1,5 @@
 /* ==========================================================================
-   map/panel.css —— 地图面板与对话框的终端皮肤
+   map/panel.css —— 地图编辑器面板与对话框的皮肤
    --------------------------------------------------------------------------
    地图页嵌的是一套外来的地图应用（本文说「地图应用」）。它的界面**整套**都吃
    自己那十个调色变量（--bg-main / --bg-light / --header…），而那些变量是运行时
@@ -7,16 +7,17 @@
    由 options.app.ui.themeColor 推导）——也就是说，改它的颜色不能靠改它的样式表，
    而要盖掉这几个 CSS 变量。
 
-   所以把它套进本项目的终端外观，分两层：
+   所以把它套进本项目的 Minimalist 外观，分两层：
 
-     1. 变量重映射：用 !important 把那一套变量接到终端取值上。
+     1. 变量重映射：用 !important 把那一套变量接到 tokens.css 的取值上。
         内联的非 important 声明打不过样式表里的 important 声明 —— 一处改动，
         面板、对话框、表格、按钮一起换色，而且不会随样式/主题切换被打回去。
      2. 纪律覆写：地图应用是一套"紫边 + 斜体标题 + 圆角药丸"的语言，这里只改
-        **规范要求的那几件**：4px 圆角、发丝线分层、机器语言用等宽、电光绿只给
-        主 CTA 与选中态、只有模态档有投影、标题不斜体。
+        **规范要求的那几件**：1px 描边分层、12px 圆角基准、叙述用 Geist、
+        机器语言（数字/快捷键）才用 Geist Mono、主 CTA 与选中态 = 主色实心 +
+        反色字、只有模态档有投影、标题不斜体。
 
-   取值来源与 static/terminal.css 同源（见 DESIGN.md）。
+   颜色 / 字体 / 圆角 / 控件高度统一来自 static/map/tokens.css。
    ========================================================================== */
 
 /* -------------------------------------------------------------------------- */
@@ -57,7 +58,7 @@
   color: var(--tx-body);
   font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
-  padding-bottom: var(--tx-2);
+  padding: var(--tx-2);
   box-shadow: none;
   overflow-y: auto;
   overflow-x: hidden;
@@ -65,18 +66,88 @@
   scrollbar-color: var(--tx-hairline-strong) transparent;
 }
 
-/* 有顶栏时：贴着顶栏往下的整条左栏。
-   必须用 fixed —— 地图应用把 #options 放在 position:relative、高度为 0 的
-   #optionsContainer 里，absolute 的 top/bottom 在零高包含块里会塌成 0 高。 */
+/* 有顶栏时：左栏是应用外壳的一根立柱 —— 从顶栏底下开始、贴左贴底，
+   只有一条右边线；底部让给整宽状态栏 28px。必须用 fixed —— 地图应用把
+   #options 放在 position:relative、高度为 0 的 #optionsContainer 里，
+   absolute 的 top/bottom 在零高包含块里会塌成 0 高。 */
 body:has(> #tx-bar) #options {
   position: fixed !important;
   top: var(--tx-h-bar) !important;
   left: 0 !important;
   right: auto !important;
-  bottom: 0 !important;
-  width: 300px;
+  bottom: 28px !important;
+  z-index: 87;
+  box-sizing: border-box;
+  width: 272px !important;
   max-height: none;
   margin: 0 !important;
+  padding: var(--tx-3);
+  /* 栏底透明：卡片之间的空隙直接透出地图，去掉与画布之间的硬接缝 */
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* 编辑器式分页条：钉在左栏顶部，滚到哪儿都还能切页。
+   「►」收起键在这里没有意义（顶栏已有面板开关），收掉。 */
+body:has(> #tx-bar) #options .tab {
+  position: sticky;
+  /* 负 inset 抵掉 #options 的 12px 内边距：吸附时与流内位置重合，
+     避免 sticky 下移 12px 后压住内容顶部 4px。 */
+  top: calc(var(--tx-3) * -1);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: auto;
+  min-height: 0;
+  margin: calc(var(--tx-3) * -1) calc(var(--tx-3) * -1) var(--tx-2);
+  padding: var(--tx-3);
+  border-bottom: 1px solid var(--tx-hairline);
+  /* 分页条是唯一压在地图上的控件：磨砂而不是实心，
+     地图透过来但滚上来的内容仍被 blur 化开，可读性不丢 */
+  background: color-mix(in srgb, var(--tx-canvas) 42%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+
+body:has(> #tx-bar) #options #optionsHide {
+  display: none !important;
+}
+
+/* 分页键：安静的一枚，选中 = 主色实心。写成两段选择器，
+   压过下面 `#options button` 那条 ID 级默认样式。 */
+#options .tab > button {
+  flex: 1 1 auto;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--tx-r-sm);
+  background: transparent;
+  color: var(--tx-mute);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#options .tab > button:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: transparent;
+  color: var(--tx-ink);
+}
+
+#options .tab > button.active,
+#options .tab > button.pressed {
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 /* 嵌在工作区面板里（embed）：没有顶栏，而且面板本身就窄 —— 同一份骨架挪到**右边**贴边，
@@ -88,11 +159,16 @@ body:has(> #tx-bar) #options {
   left: auto !important;
   right: 0 !important;
   bottom: 0 !important;
-  width: 300px;
+  box-sizing: border-box;
+  /* 地图应用会在挂载时给 #options 写内联宽度（330px），这里压回设计宽度，
+     否则加上左右内边距会溢出到 347px */
+  width: 300px !important;
   max-height: none;
   margin: 0 !important;
-  border-right: 0;
-  border-left: 1px solid var(--tx-hairline);
+  /* 与独立页同一套：栏底透明，透出底下的地图；卡片自己仍有背景 */
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   /* 嵌进去以后面板没法再收起来（没有顶栏按钮，也没有那个 ► 箭头），
      所以不许 Tab / Esc 那一类开关把它藏了 */
   display: block !important;
@@ -120,6 +196,11 @@ body:has(> #tx-bar) #options {
   display: none !important;
 }
 
+/* 画布底板：地图应用写死黑色，浅色主题下会露出黑边 */
+#map {
+  background-color: var(--tx-canvas-sunken);
+}
+
 #options ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -142,10 +223,10 @@ body:has(> #tx-bar) #options {
 }
 
 /* 说明文字：用 --tx-mute 而不是更低的 --tx-dim —— 提示语是要读的，
-   压到 dim 在暖近黑上只有 2.9:1，白读 */
+   压到 dim 在深底上对比度不够 */
 #options .tip {
   font-family: var(--tx-sans);
-  font-size: var(--tx-fs-mono);
+  font-size: 12px;
   font-style: normal;
   color: var(--tx-mute);
   margin-left: var(--tx-2);
@@ -160,16 +241,18 @@ body:has(> #tx-bar) #options {
 #dialogs a,
 .ui-dialog a,
 .ui-widget-content a {
-  color: var(--tx-green);
-  text-decoration: none;
+  color: var(--tx-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--tx-hairline-strong);
+  text-underline-offset: 2px;
 }
 
 #options a:hover,
 #aboutContent a:hover,
 #dialogs a:hover,
 .ui-dialog a:hover {
-  color: var(--tx-green-hover);
-  text-decoration: underline;
+  color: var(--tx-body);
+  text-decoration-color: currentColor;
 }
 
 /* 关于页是长篇叙述，放宽行距、收掉两端对齐 */
@@ -250,18 +333,19 @@ body:has(> #tx-bar) #options {
   border: 1px solid var(--tx-hairline);
   border-radius: var(--tx-r-sm);
   color: var(--tx-ink);
-  font-family: var(--tx-mono);
+  font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
-  padding: 2px 6px;
+  padding: 4px 8px;
 }
 
 #options input:focus-visible,
 #options select:focus-visible,
 #dialogs input:focus-visible,
 #dialogs select:focus-visible {
-  outline: none;
-  box-shadow: var(--tx-focus-ring);
-  border-color: var(--tx-green-line);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 1px;
+  border-color: var(--tx-hairline-strong);
+  box-shadow: none;
 }
 
 #options input[type="range"],
@@ -325,25 +409,32 @@ body:has(> #tx-bar) #options {
   color: var(--tx-body);
   font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
-  padding: 2px 8px;
+  font-weight: 500;
+  padding: 4px 10px;
   cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 #options button:hover,
 .tabcontent button:hover,
 #dialogs button:hover {
   background: var(--tx-canvas-raised);
+  border-color: var(--tx-hairline-strong);
   color: var(--tx-ink);
 }
 
-/* 选中态：绿只出现在这里和主 CTA 上 */
+/* 选中态：主色实心 + 反色字（整个项目统一的一种「开着」） */
 #options button.active,
 #options button.pressed,
 .tabcontent button.active,
 .tabcontent button.pressed {
-  background: var(--tx-green-wash);
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 /* 视图模式那三个按钮并排，等宽 */
@@ -363,23 +454,66 @@ body:has(> #tx-bar) #options {
   display: none !important;
 }
 
-#options .tx-panel {
-  padding: 0 var(--tx-2) var(--tx-2);
+/* 面板卡片：图标 + 标题 + 计数 pill，一块一块地摆在栏里。
+   卡片与栏同色（--tx-canvas），靠 1px 发丝线 + 一层极浅阴影浮起来 ——
+   与画布里的 .card 同一套写法，色块不再抢内容。 */
+#options .tx-panel,
+.tx-rail .tx-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--tx-3);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas);
+  box-shadow: var(--tx-shadow-card);
 }
 
-#options .tx-panel__head {
+/* 图层那块是个分组容器：卡片外观交给里面两张卡，自己只负责间距 */
+#options .tx-panel--split {
+  gap: var(--tx-3);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+#options .tx-panel + .tx-panel,
+.tx-rail .tx-panel + .tx-panel {
+  margin-top: var(--tx-3);
+}
+
+/* 容器用的是 flex gap，里面的卡片不要再叠一层外边距 */
+#options .tx-panel--split > .tx-panel + .tx-panel {
+  margin-top: 0;
+}
+
+#options .tx-panel__head,
+.tx-rail .tx-panel__head {
   display: flex;
   align-items: center;
-  margin: var(--tx-3) 0 var(--tx-2);
+  gap: var(--tx-2);
+  margin: 0 0 2px;
 }
 
 /* 分组小标题 + 计数（工作区左栏的同一种写法） */
-#options .tx-field__label {
+#options .tx-field__label,
+.tx-rail .tx-field__label {
   flex: none;
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
-  letter-spacing: var(--tx-eyebrow-spacing);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  letter-spacing: 0;
   color: var(--tx-mute);
+}
+
+/* 卡片标题：13/600，与下面正文拉开一档 */
+#options .tx-panel__head > .tx-field__label,
+.tx-rail .tx-panel__head > .tx-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tx-ink);
 }
 
 /* 面板标题前的记号：与图层行、组标题同一列宽，整条左栏因此只有一条对齐线 */
@@ -391,21 +525,28 @@ body:has(> #tx-bar) #options {
   flex: none;
   width: 15px;
   height: 15px;
-  margin-right: var(--tx-2);
-  color: var(--tx-dim);
+  margin-right: 0;
+  color: var(--tx-mute);
 }
 
+/* 计数 = 主色实心 pill，靠右站 */
 #options .tx-panel__count {
-  margin-left: var(--tx-1);
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
-  color: var(--tx-dim);
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+  color: var(--tx-on-green);
+  font-family: var(--tx-sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 分组标题右侧的小按钮：这一枚始终显示（它是空列表时唯一入口）。
    要写成 .tx-iconbtn.tx-iconbtn--shown —— 单类的修饰符压不过后面那条 #options .tx-iconbtn { opacity: 0 } */
 #options .tx-iconbtn.tx-iconbtn--shown {
-  margin-left: auto;
+  margin-left: 0;
   opacity: 1;
 }
 
@@ -428,27 +569,48 @@ body:has(> #tx-bar) #options {
   list-style: none;
 }
 
+/* 图层清单有三十多项：装进卡片里自己滚，别把整条左栏拉成一张超长卡。
+   高度跟着视口走 —— 900 高时约 440，缩到 720 也还看得到下面的标注 / 生长。 */
+#tx-layers-list {
+  max-height: clamp(240px, calc(100vh - 460px), 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tx-hairline-strong) transparent;
+}
+
+#tx-layers-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+#tx-layers-list::-webkit-scrollbar-thumb {
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-hairline-strong);
+}
+
 /* ——— 分组：一栏 = 标题 + 一条竖线挂着的那些行 ———
    标题是按钮（点一下收起 / 展开，收起的组记在浏览器里）；行装在 .tx-group__body 里，
    靠左侧竖线 + 缩进表达「这些条目属于上面那一栏」，栏与栏之间用发丝线断开。 */
 
 #options .tx-group {
-  margin: var(--tx-2) 0 0;
-  padding: var(--tx-2) 0 0;
-  border-top: 1px solid var(--tx-hairline-soft);
+  margin: var(--tx-3) 0 0;
+  padding: 0;
+  border-top: 0;
+  border-bottom: 0;
   background: transparent;
   cursor: default;
 }
 
 #options .tx-group:first-child {
   margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
 }
 
 #options .tx-group__head {
   display: grid;
-  grid-template-columns: 18px 1fr auto auto;
+  /* 组头只是清单里的一个小标题：箭头 + 名字，计数靠右；
+     分组图标在这里是多余的记号（每行本来就有语义图标） */
+  grid-template-columns: 12px 1fr auto;
   align-items: center;
   gap: var(--tx-2);
   width: 100%;
@@ -461,21 +623,27 @@ body:has(> #tx-bar) #options {
   transition: background-color 0.12s ease;
 }
 
+/* 箭头挪到标题左边，与画布里的折叠组一处写法 */
+#options .tx-group__chev {
+  order: -1;
+}
+
 #options .tx-group__head:hover {
-  background: var(--tx-canvas-raised);
+  background: var(--tx-canvas-soft);
 }
 
 #options .tx-group__head:focus-visible {
-  outline: none;
-  box-shadow: var(--tx-focus-ring);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 1px;
+  box-shadow: none;
 }
 
-/* 这一栏的行：左边一条竖线把它们和标题拴在一起 */
+/* 这一栏的行：与标题同一条左缘，不再靠竖线 + 缩进 */
 #options .tx-group__body {
   display: block;
-  margin: 0 0 var(--tx-1) 10px;
-  padding: 0 0 0 var(--tx-2);
-  border-left: 1px solid var(--tx-hairline);
+  margin: 0;
+  padding: 0;
+  border-left: 0;
   list-style: none;
 }
 
@@ -483,13 +651,16 @@ body:has(> #tx-bar) #options {
   display: none;
 }
 
+/* 行与行之间留 2px：悬停底色是一块块分开的，不会连成一条长条 */
+#tx-layers-list .tx-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 组头的图标不参与排版：标题行只留箭头 + 名字 + 计数 */
 #options .tx-group__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  color: var(--tx-dim);
+  display: none;
 }
 
 #options .tx-group__head:hover .tx-group__icon {
@@ -497,9 +668,11 @@ body:has(> #tx-bar) #options {
 }
 
 #options .tx-group__name {
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
-  letter-spacing: var(--tx-eyebrow-spacing);
+  font-family: var(--tx-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--tx-mute);
 }
 
@@ -539,18 +712,14 @@ body:has(> #tx-bar) #options {
   padding: 0;
   min-height: 0;
   border-radius: var(--tx-r-sm);
-  border-bottom: 1px solid var(--tx-hairline-soft);
+  border-bottom: 0;
   transition:
     background-color 0.12s ease,
     box-shadow 0.12s ease;
 }
 
-#options .tx-row:last-child {
-  border-bottom: 0;
-}
-
 #options .tx-row:hover {
-  background: var(--tx-canvas-raised);
+  background: var(--tx-canvas-soft);
 }
 
 /* 开着的层：左边一道 2px 绿条（状态的第一眼线索，不靠把字压暗来区分） */
@@ -609,7 +778,7 @@ body:has(> #tx-bar) #options {
 }
 
 #options .tx-row__name {
-  color: var(--tx-mute);
+  color: var(--tx-body);
   font-size: var(--tx-fs-ui);
   white-space: nowrap;
   overflow: hidden;
@@ -618,7 +787,7 @@ body:has(> #tx-bar) #options {
 }
 
 #options .tx-row.is-on .tx-row__name {
-  color: var(--tx-body);
+  color: var(--tx-ink);
 }
 
 #options .tx-row:hover .tx-row__name {
@@ -636,6 +805,54 @@ body:has(> #tx-bar) #options {
 
 #options .tx-row:hover .tx-row__key {
   color: var(--tx-mute);
+}
+
+/* 图层行的状态：开着 = 主色实心「可见」药丸，关掉 = 一枚安静的灰字「隐藏」。
+   快捷键字母只在 title 里保留（Ctrl + 点击的提示还在），右端留给状态。 */
+#tx-layers-list .tx-row__key {
+  display: none;
+}
+
+/* 药丸已经是状态的第一眼线索，左边那道绿条重复了 */
+#tx-layers-list .tx-row::before {
+  display: none;
+}
+
+/* 关掉的行整体压暗一档（与画布的 opacity-60 同义），指上去再提亮 */
+#tx-layers-list .tx-row {
+  opacity: 0.62;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease;
+}
+
+#tx-layers-list .tx-row.is-on,
+#tx-layers-list .tx-row:hover {
+  opacity: 1;
+}
+
+#tx-layers-list .tx-row__main::after {
+  content: "隐藏";
+  justify-self: end;
+  padding: 1px 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--tx-mute);
+  font-family: var(--tx-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+#tx-layers-list .tx-row.is-on .tx-row__main::after {
+  content: "可见";
+  padding: 2px 8px;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-green);
+  color: var(--tx-on-green);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 /* 排序按钮：平时隐去，指到那一行才出现（安静优先） */
@@ -681,7 +898,7 @@ body:has(> #tx-bar) #options {
   margin: 0;
   min-height: var(--tx-h-row);
   padding: 0 var(--tx-1) 0 var(--tx-2);
-  border-bottom: 1px solid var(--tx-hairline-soft);
+  border-bottom: 0;
   border-radius: var(--tx-r-sm);
   transition: background-color 0.12s ease;
 }
@@ -692,7 +909,7 @@ body:has(> #tx-bar) #options {
 }
 
 #options .tx-grow:hover {
-  background: var(--tx-canvas-raised);
+  background: var(--tx-canvas);
 }
 
 #options .tx-grow__name {
@@ -717,14 +934,15 @@ body:has(> #tx-bar) #options {
 /* 按钮：地图应用的 `#options button` 是 ID 级规则，所以这里带上 #options 前缀 */
 #options .tx-grow > button,
 #options .tx-grow__all {
-  height: 22px;
+  height: 26px;
   padding: 0 var(--tx-2);
   border: 1px solid var(--tx-hairline);
   border-radius: var(--tx-r-sm);
   background: transparent;
   color: var(--tx-body);
   font-family: var(--tx-sans);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -736,6 +954,7 @@ body:has(> #tx-bar) #options {
 #options .tx-grow > button:hover:not(:disabled),
 #options .tx-grow__all:hover {
   background: var(--tx-canvas-raised);
+  border-color: var(--tx-hairline-strong);
   color: var(--tx-ink);
 }
 
@@ -786,18 +1005,21 @@ body:has(> #tx-bar) #options {
 }
 
 #options .tx-marker.is-selected {
-  background: var(--tx-green-wash);
+  background: var(--tx-canvas-raised);
+  box-shadow: inset 0 0 0 1px var(--tx-hairline);
 }
 
 #options .tx-marker.is-selected .tx-row__name {
-  color: var(--tx-green);
+  color: var(--tx-ink);
+  font-weight: 600;
 }
 
-#options .tx-panel__hint {
-  margin-top: var(--tx-3);
-  font-size: var(--tx-fs-mono);
-  line-height: 1.6;
-  color: var(--tx-dim);
+#options .tx-panel__hint,
+.tx-rail .tx-panel__hint {
+  margin-top: var(--tx-2);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--tx-mute);
 }
 
 /* ——— 我们自己的下拉（原生 select 的弹层是系统画的，管不到，所以换掉） ——— */
@@ -903,16 +1125,22 @@ body:has(> #tx-bar) #options {
 #options .tx-dd__item.is-current,
 #tx-rail-right .tx-dd__item.is-current,
 .tx-card .tx-dd__item.is-current {
-  color: var(--tx-green);
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--tx-hairline);
 }
 
 /* 当前项前面点一颗实心标：不用颜色也能认出选了哪个 */
 #options .tx-dd__item.is-current::before,
 #tx-rail-right .tx-dd__item.is-current::before,
 .tx-card .tx-dd__item.is-current::before {
-  content: "●";
-  font-size: 0.6em;
-  color: var(--tx-green);
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--tx-r-pill);
+  background: currentColor;
 }
 
 #options .tx-dd__item:hover,
@@ -934,12 +1162,16 @@ body:has(> #tx-bar) #options {
   position: fixed;
   top: var(--tx-h-bar);
   right: 0;
-  bottom: 0;
+  bottom: 28px;
   z-index: 88;
-  width: 300px;
-  padding: 0 0 var(--tx-4);
-  background: var(--tx-canvas);
-  border-left: 1px solid var(--tx-hairline);
+  box-sizing: border-box;
+  width: 288px;
+  padding: var(--tx-3);
+  /* 与左栏同一套：栏底透明，卡片之间的空隙透出地图，不再有实心竖条 */
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
   color: var(--tx-body);
@@ -950,21 +1182,12 @@ body:has(> #tx-bar) #options {
   scrollbar-color: var(--tx-hairline-strong) transparent;
 }
 
-.tx-rail .tx-panel {
-  padding: var(--tx-1) var(--tx-3) var(--tx-3);
+.tx-rail .tx-panel:first-child {
+  margin-top: 0;
 }
 
 .tx-rail .tx-panel__head {
-  display: flex;
-  align-items: center;
-  margin: var(--tx-3) 0 var(--tx-2);
-}
-
-.tx-rail .tx-field__label {
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
-  letter-spacing: var(--tx-eyebrow-spacing);
-  color: var(--tx-mute);
+  margin: 0 0 2px;
 }
 
 .tx-param {
@@ -1001,9 +1224,9 @@ body:has(> #tx-bar) #options {
 }
 
 .tx-slider__value {
-  color: var(--tx-green);
+  color: var(--tx-ink);
   font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
+  font-size: var(--tx-fs-code);
 }
 
 /* 左栏那条滑杆落在 #options 里，而地图应用有一套 ID 级的
@@ -1060,8 +1283,9 @@ body:has(> #tx-bar) #options {
 
 .tx-slider input[type="range"]:focus-visible,
 #options .tx-slider input[type="range"]:focus-visible {
-  outline: none;
-  box-shadow: var(--tx-focus-ring);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 3px;
+  box-shadow: none;
 }
 
 .tx-param__name {
@@ -1085,13 +1309,14 @@ body:has(> #tx-bar) #options {
   border-radius: var(--tx-r-sm);
   color: var(--tx-ink);
   font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
+  font-size: var(--tx-fs-code);
 }
 
 .tx-input:focus-visible {
-  outline: none;
-  border-color: var(--tx-green-line);
-  box-shadow: var(--tx-focus-ring);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 1px;
+  border-color: var(--tx-hairline-strong);
+  box-shadow: none;
 }
 
 /* 数字用的小输入（如「新标注默认大小」）：跟着内容定宽，别抢整行 */
@@ -1120,7 +1345,7 @@ input.tx-check[type="checkbox"] {
 #options input.tx-input {
   border: 1px solid var(--tx-hairline);
   background: var(--tx-canvas-sunken);
-  font-size: var(--tx-fs-mono);
+  font-size: var(--tx-fs-code);
   text-align: left;
 }
 
@@ -1130,9 +1355,10 @@ input.tx-check[type="checkbox"] {
 }
 
 #options input.tx-input:focus-visible {
-  outline: none;
-  border-color: var(--tx-green-line);
-  box-shadow: var(--tx-focus-ring);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 1px;
+  border-color: var(--tx-hairline-strong);
+  box-shadow: none;
 }
 
 .tx-btns {
@@ -1146,11 +1372,12 @@ input.tx-check[type="checkbox"] {
   height: var(--tx-h-ctl);
   padding: 0 var(--tx-3);
   border: 1px solid var(--tx-hairline);
-  border-radius: var(--tx-r-sm);
-  background: transparent;
-  color: var(--tx-body);
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas);
+  color: var(--tx-ink);
   font-family: var(--tx-sans);
   font-size: var(--tx-fs-ui);
+  font-weight: 600;
   cursor: pointer;
   transition:
     border-color 0.12s ease,
@@ -1159,30 +1386,34 @@ input.tx-check[type="checkbox"] {
 }
 
 .tx-btn:hover {
-  background: var(--tx-canvas-raised);
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
   color: var(--tx-ink);
 }
 
-/* 一组里只有主 CTA 吃绿 */
+/* 一组里只有主 CTA 吃实心 */
 .tx-btn--primary {
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 .tx-btn--primary:hover {
-  background: var(--tx-green-wash);
-  color: var(--tx-green-hover);
+  background: var(--tx-green-hover);
+  border-color: var(--tx-green-hover);
+  color: var(--tx-on-green);
 }
 
 @media (max-width: 1180px) {
   .tx-rail {
-    width: 260px;
+    width: 248px;
   }
   /* 左栏的同一条：要写成和它一样特异度才压得住。
      注意地图应用启动时会给 #options 写内联 width:300px，内联样式压过普通声明，
      所以这里的宽度必须带 !important，否则平板/手机上永远是 300px。 */
   body:has(> #tx-bar) #options {
-    width: 260px !important;
+    width: 248px !important;
   }
 }
 
@@ -1192,14 +1423,13 @@ input.tx-check[type="checkbox"] {
     display: none;
   }
 
-  /* 常驻 300px 的左栏在平板上会盖掉近半个地图、手机上几乎整张图。
-     这里改成从左边滑出的抽屉：收起时整体移出屏幕，顶栏按钮负责开合。
-     （顶栏高度已由上面的 top 让位，遮罩从顶栏下沿开始。） */
+  /* 常驻左栏在平板上会盖掉近半个地图、手机上几乎整张图。
+     这里改成从左边滑出的抽屉：收起时整体移出屏幕，顶栏按钮负责开合。 */
   body:has(> #tx-bar) #options {
     /* 同上：要压过 #options 的内联 width:300px */
     width: min(320px, 84vw) !important;
     z-index: 89;
-    transform: translateX(-100%);
+    transform: translateX(calc(-100% - 8px));
     visibility: hidden;
     transition: transform 0.22s ease, visibility 0.22s;
   }
@@ -1213,7 +1443,7 @@ input.tx-check[type="checkbox"] {
   /* 抽屉遮罩：点空白处收起。顶栏 z-index 90 在它上面，仍可操作。 */
   .tx-scrim {
     position: fixed;
-    inset: var(--tx-h-bar) 0 0 0;
+    inset: 0;
     z-index: 88;
     background: rgb(0 0 0 / 0.32);
   }
@@ -1231,8 +1461,8 @@ input.tx-check[type="checkbox"] {
 
 .tx-card {
   position: fixed;
-  left: calc(300px + var(--tx-4));
-  bottom: var(--tx-4);
+  left: calc(272px + var(--tx-3));
+  bottom: calc(28px + var(--tx-3));
   z-index: 92;
   width: 320px;
   background: var(--tx-canvas-soft);
@@ -1254,10 +1484,11 @@ input.tx-check[type="checkbox"] {
 }
 
 .tx-card__title {
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
-  letter-spacing: var(--tx-eyebrow-spacing);
-  color: var(--tx-mute);
+  font-family: var(--tx-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--tx-ink);
 }
 
 .tx-card__close {
@@ -1321,7 +1552,7 @@ input.tx-check[type="checkbox"] {
 
 @media (max-width: 1180px) {
   .tx-card {
-    left: calc(260px + var(--tx-3));
+    left: calc(248px + var(--tx-3));
   }
 }
 
@@ -1363,14 +1594,15 @@ input.tx-check[type="checkbox"] {
   border-bottom: 1px solid var(--tx-hairline);
   border-radius: var(--tx-r-sm) var(--tx-r-sm) 0 0;
   color: var(--tx-ink);
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-ui);
-  letter-spacing: var(--tx-eyebrow-spacing);
+  font-family: var(--tx-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
   padding: var(--tx-2) var(--tx-3);
 }
 
 .ui-dialog-title {
-  font-weight: 400;
+  font-weight: 600;
 }
 
 /* jQuery UI 关闭按钮 */
@@ -1396,7 +1628,7 @@ input.tx-check[type="checkbox"] {
   padding: var(--tx-2) var(--tx-3);
 }
 
-/* jQuery UI 的按钮：常态安静，主按钮（地图应用用 .ui-state-active 标）点绿 */
+/* jQuery UI 的按钮：常态安静，主按钮（地图应用用 .ui-state-active 标）实心 */
 .ui-button,
 .ui-state-default,
 .ui-widget-content .ui-state-default {
@@ -1405,7 +1637,7 @@ input.tx-check[type="checkbox"] {
   border-radius: var(--tx-r-sm);
   color: var(--tx-body);
   font-family: var(--tx-sans);
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .ui-button:hover,
@@ -1418,9 +1650,10 @@ input.tx-check[type="checkbox"] {
 
 .ui-state-active,
 .ui-button:active {
-  background: var(--tx-green-wash);
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 /* 表格 / 列表类浮层 */
@@ -1564,7 +1797,7 @@ input.tx-check[type="checkbox"] {
   border-radius: var(--tx-r-sm);
   color: var(--tx-ink);
   font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
+  font-size: var(--tx-fs-code);
   text-align: right;
 }
 
@@ -1629,17 +1862,18 @@ input.tx-check[type="checkbox"] {
   border: 1px solid var(--tx-hairline-strong);
   border-radius: var(--tx-r-sm);
   background: var(--tx-canvas-sunken);
-  color: var(--tx-green);
+  color: var(--tx-on-green);
   font-family: var(--tx-sans);
-  font-size: var(--tx-fs-mono);
-  line-height: 13px;
+  font-size: 10px;
+  line-height: 12px;
   text-align: center;
 }
 
 #options3d .checkbox:checked + .checkbox-label:before {
   content: "✓";
   border-color: var(--tx-green);
-  background: var(--tx-green-wash);
+  background: var(--tx-green);
+  color: var(--tx-on-green);
 }
 
 #options3d .checkbox-label i {
@@ -1695,8 +1929,7 @@ input.tx-check[type="checkbox"] {
   align-items: center;
   justify-content: center;
   padding: var(--tx-5);
-  background: rgba(8, 8, 7, 0.62);
-  backdrop-filter: blur(2px);
+  background: rgb(0 0 0 / 0.5);
 }
 
 #dialogs .tx-modal__panel {
@@ -1721,9 +1954,10 @@ input.tx-check[type="checkbox"] {
 }
 
 #dialogs .tx-modal__head .tx-field__label {
-  font-family: var(--tx-mono);
-  font-size: var(--tx-fs-ui);
-  letter-spacing: var(--tx-eyebrow-spacing);
+  font-family: var(--tx-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
   color: var(--tx-ink);
 }
 
@@ -1776,14 +2010,15 @@ input.tx-check[type="checkbox"] {
   border-radius: var(--tx-r-sm);
   color: var(--tx-ink);
   font-family: var(--tx-mono);
-  font-size: var(--tx-fs-mono);
+  font-size: var(--tx-fs-code);
   text-align: left;
 }
 
 #dialogs .tx-modal input.tx-input:focus-visible {
-  outline: none;
-  border-color: var(--tx-green-line);
-  box-shadow: var(--tx-focus-ring);
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 1px;
+  border-color: var(--tx-hairline-strong);
+  box-shadow: none;
 }
 
 /* 规模滑杆：与左栏同一种（4px 绿轨 + 圆滑块） */
@@ -1846,13 +2081,19 @@ input.tx-check[type="checkbox"] {
 }
 
 #dialogs .tx-modal .tx-dd__item.is-current {
-  color: var(--tx-green);
+  background: var(--tx-canvas-raised);
+  color: var(--tx-ink);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--tx-hairline);
 }
 
 #dialogs .tx-modal .tx-dd__item.is-current::before {
-  content: "●";
-  font-size: 0.6em;
-  color: var(--tx-green);
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--tx-r-pill);
+  background: currentColor;
 }
 
 #dialogs .tx-modal .tx-dd__item:hover {
@@ -1870,13 +2111,15 @@ input.tx-check[type="checkbox"] {
 }
 
 #dialogs .tx-modal .is-primary {
-  background: var(--tx-green-wash);
-  border-color: var(--tx-green-line);
-  color: var(--tx-green);
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+  font-weight: 600;
 }
 
 #dialogs .tx-modal .is-primary:hover {
-  background: var(--tx-green);
+  background: var(--tx-green-hover);
+  border-color: var(--tx-green-hover);
   color: var(--tx-on-green);
 }
 
@@ -1909,9 +2152,9 @@ input.tx-check[type="checkbox"] {
 /* -------------------------------------------------------------------------- */
 
 #burgEditor #burgPreviewObject {
-  background: var(--tx-canvas-sunken, #0d0c0b);
-  border: 1px solid var(--tx-hairline, #2c2a27);
-  border-radius: var(--tx-r-sm, 4px);
+  background: var(--tx-canvas-sunken, #0a0a0a);
+  border: 1px solid var(--tx-hairline, rgba(250, 250, 250, 0.1));
+  border-radius: var(--tx-r-sm, 6px);
 }
 
 #burgEditor #burgPreviewObject > .tx-burgplan {
@@ -1922,4 +2165,1114 @@ input.tx-check[type="checkbox"] {
 
 #burgEditor #burgPreviewObject > .tx-burgplan > svg {
   display: block;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 10. 地图原生浮层：提示条、便签、拖放遮罩、导览按钮、助手气泡、高度图完成面板     */
+/*     这些元素没有 .tx-* 结构，上游给的是渐变光晕 / 紫边 / 奶油底 / 红色脉冲；     */
+/*     这里只换皮，不动 display（上游用行内样式控制显隐）。                        */
+/* -------------------------------------------------------------------------- */
+
+/* 底部提示条：上游每次 tip() 都会写行内 background 渐变，必须 !important 才压得住 */
+#tooltip {
+  left: 50%;
+  bottom: 16px;
+  width: auto;
+  max-width: min(560px, 80vw);
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  background: var(--tx-canvas-soft) !important;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-card);
+  color: var(--tx-ink);
+  text-shadow: none;
+  font-family: var(--tx-sans);
+  font-size: 13px !important; /* 上游会写行内 calc(14px + .5vw) */
+  line-height: 1.5;
+}
+
+/* 上游把 opacity 置 1 但不一定有空内容：空提示会留下一个小胶囊 */
+#tooltip:empty {
+  display: none;
+}
+
+/* 便签：固定右上，窄屏自适应 */
+#notes {
+  top: 16px;
+  right: 16px;
+  width: min(320px, calc(100vw - 32px));
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-card);
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* 有顶栏时让开顶栏与右栏；嵌入模式没有 #tx-bar，保持贴边 */
+body:has(> #tx-bar) #notes {
+  top: calc(var(--tx-h-bar) + var(--tx-3));
+  right: calc(288px + var(--tx-3));
+}
+
+@media (max-width: 1180px) {
+  body:has(> #tx-bar) #notes {
+    right: calc(248px + var(--tx-3));
+  }
+}
+
+@media (max-width: 980px) {
+  body:has(> #tx-bar) #notes {
+    right: var(--tx-3);
+  }
+}
+
+#notesHeader {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--tx-hairline);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+#notesBody {
+  padding: 12px;
+  line-height: 1.6;
+}
+
+/* 拖放遮罩 */
+#mapOverlay {
+  background: rgb(0 0 0 / 0.55);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  text-shadow: none;
+}
+
+/* 导览入口：圆形改成圆角方块，与面板按钮同一档 */
+#tourPromptButton {
+  right: 16px;
+  bottom: 118px;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--tx-r-md);
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  box-shadow: var(--tx-shadow-card);
+}
+
+/* 应用外壳下：让导览按钮避开右侧面板，落在画布右下角 */
+body:has(> #tx-bar) #tourPromptButton {
+  right: calc(288px + var(--tx-3)) !important;
+  bottom: calc(28px + 56px + var(--tx-3)) !important;
+  z-index: 30;
+}
+
+@media (max-width: 1180px) {
+  body:has(> #tx-bar) #tourPromptButton {
+    right: calc(248px + var(--tx-3)) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  body:has(> #tx-bar) #tourPromptButton {
+    right: var(--tx-3) !important;
+    bottom: calc(28px + 56px + var(--tx-3)) !important;
+  }
+}
+
+:root[data-map-host="embed"] #tourPromptButton {
+  right: calc(300px + var(--tx-3)) !important;
+}
+
+#tourPromptButton svg path {
+  fill: var(--tx-body);
+  stroke: var(--tx-body);
+}
+
+/* 助手气泡：主色实心 + 反色字形 */
+#assistantBubble {
+  background: var(--tx-green);
+  border-radius: var(--tx-r-pill);
+  box-shadow: var(--tx-shadow-card);
+}
+
+#assistantBubble:focus-visible {
+  outline: 2px solid var(--tx-ink);
+  outline-offset: 2px;
+}
+
+#assistantBubble > .assistantBubbleBadge {
+  background: transparent;
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-on-green);
+}
+
+/* 高度图编辑的「完成」浮窗：宽高由上游行内样式缩放，这里只换皮肤 */
+#exitCustomization > div {
+  width: auto;
+  min-width: 12em;
+  padding: 4px;
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  box-shadow: var(--tx-shadow-card);
+}
+
+#finalizeHeightmap {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--tx-green);
+  border: 1px solid var(--tx-green);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-on-green);
+  font-family: var(--tx-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  animation: none; /* 上游的 glowing 是红色脉冲，和单色体系冲突 */
+  cursor: pointer;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 11. 编辑器页签：样式 / 选项 / 工具 / 关于                                     */
+/* -------------------------------------------------------------------------- */
+
+/* 内容区不再使用上游的 12px 内缩与 0.9 透明度，交给面板统一留白 */
+#options .tabcontent {
+  padding: 0;
+  opacity: 1;
+}
+
+#styleContent,
+#optionsContent,
+#toolsContent,
+#aboutContent {
+  font-family: var(--tx-sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--tx-body);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 11.1 样式页签                                                                */
+/* -------------------------------------------------------------------------- */
+
+#styleContent .head {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  margin: 0 0 var(--tx-2);
+}
+
+#styleContent .head:first-child {
+  margin-top: 0;
+}
+
+#styleContent .head > p {
+  flex: none;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--tx-mute);
+}
+
+/* 预设按钮：与下拉同款 */
+#styleContent #stylePreset {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--tx-h-row);
+  margin: 0;
+  padding: 0 26px 0 10px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+
+#styleContent #stylePreset > span {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#styleContent #stylePreset::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  width: 0;
+  height: 0;
+  margin-top: -2px;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid var(--tx-mute);
+  pointer-events: none;
+}
+
+#styleContent #stylePreset:hover {
+  background: var(--tx-canvas-raised);
+  border-color: var(--tx-hairline-strong);
+}
+
+/* 方形图标按钮 */
+#styleContent .sideButton {
+  flex: none;
+  width: var(--tx-h-row);
+  height: var(--tx-h-row);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-mute);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .12s, color .12s, border-color .12s;
+}
+
+#styleContent .sideButton:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
+  color: var(--tx-ink);
+}
+
+/* 元素 / 分组下拉 */
+#styleContent #styleElementSelect,
+#styleContent #styleGroupSelect {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: var(--tx-h-row);
+  margin: 0;
+  padding: 0 24px 0 9px;
+  background-color: var(--tx-canvas-sunken);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--tx-mute) 50%),
+    linear-gradient(135deg, var(--tx-mute) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) calc(50% - 2px),
+    calc(100% - 9px) calc(50% - 2px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  appearance: none;
+  cursor: pointer;
+}
+
+#styleContent #styleElementSelect:hover,
+#styleContent #styleGroupSelect:hover {
+  border-color: var(--tx-hairline-strong);
+}
+
+/* 表单主体 */
+#styleContent .schema-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tx-2);
+  margin: var(--tx-2) 0 0;
+}
+
+/* 分区卡片 */
+#styleContent .schema-form details[data-section] {
+  margin: 0;
+  background: var(--tx-canvas-soft);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-md);
+  overflow: hidden;
+}
+
+#styleContent .schema-form details[data-section] > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  min-height: 38px;
+  margin: 0;
+  padding: 0 10px;
+  background: transparent;
+  font-family: var(--tx-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tx-ink);
+  cursor: pointer;
+  user-select: none;
+}
+
+#styleContent .schema-form details[data-section][open] > summary {
+  border-bottom: 1px solid var(--tx-hairline);
+}
+
+#styleContent .schema-form details[data-section] > summary::before {
+  width: 10px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--tx-mute);
+  opacity: 1;
+}
+
+#styleContent .schema-form details[data-section] > summary > .title {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tx-ink);
+}
+
+#styleContent .schema-form details[data-section] > summary > .preview {
+  margin-left: auto;
+  max-width: 46%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+#styleContent .schema-form details[data-section] > summary > .preview .chip {
+  display: block;
+  box-sizing: border-box;
+  width: 44px;
+  height: 24px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-xxs);
+}
+
+#styleContent .schema-form details[data-section] > .body {
+  padding: 2px 10px 8px;
+}
+
+/* 行 */
+#styleContent .schema-form .row {
+  display: flex;
+  align-items: center;
+  gap: var(--tx-2);
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--tx-hairline-soft);
+}
+
+#styleContent .schema-form .row:last-child {
+  border-bottom: 0;
+}
+
+#styleContent .schema-form .row > label {
+  flex: 0 0 6.5em;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tx-mute);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#styleContent .schema-form .row > .ctl {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+#styleContent .schema-form .ctl > .inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#styleContent .schema-form .ctl > select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 22px 0 8px;
+  background-color: var(--tx-canvas-sunken);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--tx-mute) 50%),
+    linear-gradient(135deg, var(--tx-mute) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) calc(50% - 2px),
+    calc(100% - 8px) calc(50% - 2px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  appearance: none;
+  cursor: pointer;
+}
+
+#styleContent .schema-form .ctl > select:hover {
+  border-color: var(--tx-hairline-strong);
+}
+
+#styleContent .schema-form .ctl input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+}
+
+#styleContent .schema-form .ctl input[type="number"] {
+  flex: none;
+  width: 52px;
+  height: 26px;
+  margin: 0;
+  padding: 0 6px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-xxs);
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: 11px;
+  text-align: right;
+}
+
+#styleContent .schema-form .ctl input[type="color"] {
+  flex: none;
+  width: 34px;
+  height: 26px;
+  padding: 2px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-xxs);
+  cursor: pointer;
+}
+
+#styleContent .schema-form .ctl input[type="checkbox"] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--tx-green);
+  cursor: pointer;
+}
+
+#styleContent .schema-form .ctl .unit {
+  flex: none;
+  font-family: var(--tx-mono);
+  font-size: 11px;
+  color: var(--tx-mute);
+  opacity: 1;
+}
+
+/* slider-input 自定义元素 */
+#styleContent slider-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#styleContent slider-input > input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#styleContent .schema-form input[type="range"] {
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+#styleContent .schema-form input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--tx-hairline-strong);
+  border-radius: var(--tx-r-pill);
+}
+
+#styleContent .schema-form input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  background: var(--tx-green);
+  border: 1px solid var(--tx-canvas-soft);
+  border-radius: 50%;
+  appearance: none;
+}
+
+/* 重置按钮 */
+#styleContent .schema-form .reset {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--tx-r-xxs);
+  color: var(--tx-dim);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .12s, color .12s;
+}
+
+#styleContent .schema-form .reset:hover {
+  background: var(--tx-canvas-sunken);
+  color: var(--tx-ink);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 11.2 选项页签                                                                */
+/* -------------------------------------------------------------------------- */
+
+#optionsContent > p {
+  margin: var(--tx-4) 0 var(--tx-1);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tx-ink);
+}
+
+#optionsContent > p:first-child {
+  margin-top: 0;
+}
+
+#optionsContent table,
+#optionsContent tbody {
+  display: block;
+  width: 100%;
+  border-spacing: 0;
+}
+
+#optionsContent tr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--tx-hairline-soft);
+}
+
+#optionsContent tr:last-child {
+  border-bottom: 0;
+}
+
+#optionsContent td {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  line-height: 1.3;
+}
+
+#optionsContent td:empty {
+  display: none;
+}
+
+#optionsContent td:nth-child(1) {
+  flex: 0 0 18px;
+  justify-content: center;
+}
+
+#optionsContent td:nth-child(2) {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--tx-body);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#optionsContent td:nth-child(3) {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+/* 带按钮的行：右侧单元不参与收缩，保证按钮文案完整（如 Load Google Translate） */
+#optionsContent td:nth-child(3):has(> button) {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+#optionsContent td:nth-child(4) {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  min-width: 22px;
+}
+
+#optionsContent td[colspan="2"] {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+/* 行内左侧图标 */
+#optionsContent td i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--tx-r-xxs);
+  color: var(--tx-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color .12s, color .12s;
+}
+
+#optionsContent td i:hover {
+  background: var(--tx-canvas-sunken);
+  color: var(--tx-ink);
+}
+
+#optionsContent td span {
+  flex: none;
+  font-family: var(--tx-mono);
+  font-size: 11px;
+  color: var(--tx-mute);
+}
+
+/* 数字输入 */
+#optionsContent input[type="number"] {
+  height: 28px;
+  margin: 0;
+  padding: 0 7px;
+  background: var(--tx-canvas-sunken);
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-xxs);
+  color: var(--tx-ink);
+  font-family: var(--tx-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+#optionsContent input[type="number"]:hover,
+#optionsContent input[type="number"]:focus {
+  border-color: var(--tx-hairline-strong);
+  outline: none;
+}
+
+#optionsContent input.paired {
+  flex: none;
+  width: 58px;
+  background: var(--tx-canvas-sunken);
+  text-align: right;
+}
+
+#optionsContent input.long {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  background: var(--tx-canvas-sunken);
+  text-align: left;
+}
+
+/* 下拉 */
+#optionsContent select {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 84px;
+  max-width: 100%;
+  height: 28px;
+  text-overflow: ellipsis;
+  margin: 0;
+  padding: 0 22px 0 8px;
+  background-color: var(--tx-canvas-sunken);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--tx-mute) 50%),
+    linear-gradient(135deg, var(--tx-mute) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) calc(50% - 2px),
+    calc(100% - 8px) calc(50% - 2px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  appearance: none;
+  cursor: pointer;
+}
+
+#optionsContent select:hover {
+  border-color: var(--tx-hairline-strong);
+}
+
+/* 无模板等空下拉：虚线边框表示「暂无可选项」 */
+#optionsContent select:empty {
+  border-style: dashed;
+  background-image: none;
+  cursor: default;
+}
+
+/* 行内按钮（如“加载谷歌翻译”） */
+#optionsContent td button {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+
+#optionsContent td button:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
+}
+
+/* 滑杆 */
+#optionsContent input[type="range"] {
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 108px;
+  min-width: 64px;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  appearance: none;
+  cursor: pointer;
+}
+
+#optionsContent input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--tx-hairline-strong);
+  border-radius: var(--tx-r-pill);
+}
+
+#optionsContent input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  background: var(--tx-green);
+  border: 1px solid var(--tx-canvas-soft);
+  border-radius: 50%;
+  appearance: none;
+}
+
+#optionsContent slider-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#optionsContent slider-input > input[type="range"] {
+  flex: 1 1 auto;
+}
+
+/* 数值输出 */
+#optionsContent output {
+  flex: none;
+  min-width: 30px;
+  padding: 2px 5px;
+  background: var(--tx-canvas-sunken);
+  border-radius: var(--tx-r-xxs);
+  color: var(--tx-ink) !important;
+  font-family: var(--tx-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* 底部操作组 */
+#optionsContent > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--tx-3);
+  padding-top: var(--tx-2);
+  border-top: 1px solid var(--tx-hairline);
+}
+
+#optionsContent > div:last-child button {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--tx-h-row);
+  margin: 0;
+  padding: 0 4px;
+  background: transparent;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+
+#optionsContent > div:last-child button:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
+}
+
+#optionsContent #optionsReset {
+  background: var(--tx-green);
+  border-color: var(--tx-green);
+  color: var(--tx-on-green);
+}
+
+#optionsContent #optionsReset:hover {
+  background: var(--tx-green-hover);
+  border-color: var(--tx-green-hover);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 11.3 工具页签                                                                */
+/* -------------------------------------------------------------------------- */
+
+#toolsContent .separator {
+  margin: var(--tx-4) 0 var(--tx-2);
+  font-family: var(--tx-sans);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--tx-mute);
+}
+
+#toolsContent .separator:first-child {
+  margin-top: 0;
+}
+
+#toolsContent .separator::before,
+#toolsContent .separator::after {
+  border-bottom: 1px solid var(--tx-hairline);
+}
+
+#toolsContent > .grid,
+#toolsContent #regenerateFeature,
+#toolsContent #addFeature {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+#toolsContent button {
+  height: var(--tx-h-row);
+  margin: 0;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--tx-hairline);
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-body);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color .12s, color .12s, border-color .12s;
+}
+
+#toolsContent button:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong);
+  color: var(--tx-ink);
+}
+
+#toolsContent button:active {
+  background: var(--tx-ink);
+  border-color: var(--tx-ink);
+  color: var(--tx-canvas);
+}
+
+#toolsContent #addedMarkerType {
+  display: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 11.4 关于页签                                                                */
+/* -------------------------------------------------------------------------- */
+
+#aboutContent .aboutActions {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 var(--tx-3);
+}
+
+#aboutContent .aboutActions button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--tx-h-row);
+  margin: 0;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid var(--tx-hairline) !important;
+  border-radius: var(--tx-r-sm);
+  color: var(--tx-ink);
+  font-family: var(--tx-sans);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+
+#aboutContent .aboutActions button:hover {
+  background: var(--tx-canvas-sunken);
+  border-color: var(--tx-hairline-strong) !important;
+}
+
+#aboutContent .aboutActions #startTourButton {
+  background: var(--tx-green);
+  border-color: var(--tx-green) !important;
+  color: var(--tx-on-green);
+}
+
+#aboutContent .aboutActions #startTourButton:hover {
+  background: var(--tx-green-hover);
+  border-color: var(--tx-green-hover) !important;
+}
+
+#aboutContent p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--tx-body);
+}
+
+#aboutContent a {
+  color: var(--tx-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--tx-hairline-strong);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+#aboutContent a:hover {
+  text-decoration-color: var(--tx-ink);
+}
+
+/* Patreon / 赞助块：去掉品牌橙，换成中性卡片 */
+#aboutContent > div[style*="background-color"] {
+  width: auto !important;
+  margin: var(--tx-3) 0 0 !important;
+  padding: 8px 10px !important;
+  background: var(--tx-canvas-soft) !important;
+  border: 1px solid var(--tx-hairline) !important;
+  border-radius: var(--tx-r-sm);
+}
+
+#aboutContent > div[style*="background-color"] a {
+  color: var(--tx-ink) !important;
+  text-decoration: none !important;
+  font-family: var(--tx-sans) !important;
+  font-size: 12px !important;
+  font-weight: 600;
+}
+
+#aboutContent > div[style*="background-color"] div,
+#aboutContent > div[style*="background-color"] div > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+#aboutContent > div[style*="background-color"] svg {
+  display: block;
+  width: 11px;
+  height: 11px;
+  fill: var(--tx-ink) !important;
+}
+
+/* 其他项目 / 本地化说明 */
+#aboutContent > div[style*="text-align"] {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--tx-body);
+}
+
+#aboutContent > div[style*="text-align"] p {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+/* 乌克兰旗帜块：限宽并裁掉圆角外的内容 */
+#aboutContent > div[style*="justify-content"] {
+  padding: 6px 0;
+}
+
+#aboutContent > div[style*="justify-content"] a {
+  display: block;
+  width: 72% !important;
+  border-radius: var(--tx-r-sm);
+  overflow: hidden;
+  opacity: .9;
+}
+
+#aboutContent > div[style*="justify-content"] svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 社交分享图（Facebook/Twitter 等）与单色体系不协调，隐藏 */
+#aboutContent .share-buttons {
+  display: none;
 }

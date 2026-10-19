@@ -99,6 +99,9 @@ urlpatterns = [
     # 维护页：直接把反代指过来，或设 OPUSCULE_MAINTENANCE=1 全站打烊
     path("maintenance", maintenance.maintenance_page, name="maintenance"),
 
+    # 个人主页：/u/<username>（公开可读，本人登录后进入编辑模式）
+    re_path(r"^u/(?P<username>[^/]+)/?$", world_views.profile_page, name="profile-page"),
+
     # 首页进世界选择页（用户视角：这里就是"网站首页"）
     path("", RedirectView.as_view(url="/w/", permanent=False)),
 ]

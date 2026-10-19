@@ -390,7 +390,7 @@ LOGGING = {
 # 不设则不显示——本地开发与测试不受影响。派生展示串见 world/version.py 的 app_info()。
 # 注意：``World.publish_version`` 是"内容发布次数"，是数据，**不是**程序版本。
 APP_NAME = "Opuscule"
-APP_VERSION = os.environ.get("OPUSCULE_VERSION", "0.7.0")        # 三段式基础号
+APP_VERSION = os.environ.get("OPUSCULE_VERSION", "0.8.1")        # 三段式基础号
 APP_CHANNEL = os.environ.get("OPUSCULE_CHANNEL", "dev")          # dev/alpha/beta/release
 APP_CHANNEL_SEQ = os.environ.get("OPUSCULE_CHANNEL_SEQ", "")     # alpha/beta 的轮次 N（默认 1）
 APP_BUILD = os.environ.get("OPUSCULE_BUILD", "").strip()         # CI 构建号（不设则不显示）

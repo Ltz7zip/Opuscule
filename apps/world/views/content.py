@@ -305,11 +305,30 @@ def _table_column(prop) -> dict:
     }
 
 
-def _table_row(doc: Document, properties: list) -> dict:
-    """一行（= 一张卡片）：原始值 + 公式列算出来的值，前端可直接用。"""
+def _table_row(doc: Document, properties: list, type_cache: dict | None = None) -> dict:
+    """一行（= 一张卡片）：原始值 + 公式列算出来的值，前端可直接用。
+
+    ``type_cache`` 按类型 id 缓存 ``all_properties()``：表格最多 400 行，
+    同一类型的属性定义不必每行都沿继承链查一遍库。
+    """
     card = getattr(doc, "card", None)
     raw = dict(card.values or {}) if card is not None else {}
-    values_by_name = build_value_map(card) if card is not None else {}
+    if card is None:
+        values_by_name = {}
+    elif type_cache is None:
+        values_by_name = build_value_map(card)
+    else:
+        # 等价于 card.effective_type()，但直接用行上的 doc，省一次反向关系访问
+        entity_type = card.entity_type or doc.entity_type
+        type_properties = []
+        if entity_type is not None:
+            type_properties = type_cache.get(entity_type.id)
+            if type_properties is None:
+                type_properties = entity_type.all_properties()
+                type_cache[entity_type.id] = type_properties
+        values_by_name = {
+            prop.name: raw.get(str(prop.id), prop.default_value) for prop in type_properties
+        }
     values = {}
     for prop in properties:
         if prop.value_type == VT_FORMULA:
@@ -459,11 +478,16 @@ def table_payload(world: World, document: Document) -> dict:
 
     documents = Document.objects.filter(
         world=world, deleted_at__isnull=True, document_type=DOC_CARD,
-    ).select_related("card")
+    ).select_related("card", "card__entity_type", "entity_type")
     if entity_type is not None:
         documents = documents.filter(entity_type=entity_type)
 
-    rows = [_table_row(doc, all_properties) for doc in documents.order_by("position", "id")[:400]]
+    # 当前类型的属性已经算过了，直接放进缓存；其余类型按需补齐
+    type_cache: dict[int, list] = {entity_type.id: all_properties} if entity_type is not None else {}
+    rows = [
+        _table_row(doc, all_properties, type_cache)
+        for doc in documents.order_by("position", "id")[:400]
+    ]
     name_cache = _table_name_cache(world, all_properties, view)
 
     filter_view = view["filter"]
@@ -712,7 +736,10 @@ def search(request):
     results = []
     # 按最近改动排序：新的在前，前端再按「今天 / 昨天 / 更早」分组
     documents = (Document.objects.filter(world=world, deleted_at__isnull=True)
-                 .select_related("card").order_by("-updated_at", "-id"))
+                 .select_related("card")
+                 .only("id", "name", "document_type", "updated_at",
+                       "card__aliases", "card__body", "card__values")
+                 .order_by("-updated_at", "-id"))
     for document in documents:
         haystack_parts = [document.name]
         card = getattr(document, "card", None)
@@ -767,11 +794,27 @@ def suggestions(request):
         return json_response({"enabled": False, "entities": [], "empty_cards": [],
                               "orphans": [], "events": []})
 
-    cards = list(Card.objects.filter(document__world=world).select_related("document"))
+    cards = list(
+        Card.objects.filter(document__world=world)
+        .select_related("document")
+        .only("document_id", "aliases", "values", "blocks", "body", "document__name")
+    )
+    # 名字名单只查一次：逐卡统计时复用，避免每张卡都全量查一遍候选
+    pairs = autolink.candidates(world)
+    known_all = {name.casefold() for name, _document in pairs}
+    bodies: dict[int, str] = {}
     counted: dict[str, int] = {}
     for card in cards:
         body = card.body or blocks_to_text(card.blocks)
-        for name in autolink.detect_new_names(world, body, exclude_document_id=card.document_id):
+        bodies[card.document_id] = body
+        # 语义与 exclude_document_id 一致：把自己卡片的有效名字从已知名单里拿掉
+        own = {
+            text.casefold()
+            for text in ((name or "").strip() for name in card.mention_names())
+            if 1 < len(text) <= autolink.MAX_NAME
+        }
+        known = known_all - own if own else known_all
+        for name in autolink.detect_new_names(world, body, known_names=known):
             name = (name or "").strip()
             if len(name) < 2 or name.startswith("的") or name == world.name:
                 continue
@@ -793,7 +836,7 @@ def suggestions(request):
     orphans = [
         {"id": card.document_id, "name": card.document.name}
         for card in cards
-        if card.document_id not in referenced and (card.body or blocks_to_text(card.blocks)).strip()
+        if card.document_id not in referenced and bodies.get(card.document_id, "").strip()
     ][:12]
 
     events = [
@@ -839,7 +882,10 @@ def backlinks(request, doc_id):
     card = getattr(document, "card", None)
     names = [document.name] + list((card.aliases if card is not None else []) or [])
     found = []
-    for other in Document.objects.filter(world=world, deleted_at__isnull=True).exclude(pk=document.pk):
+    for other in (Document.objects.filter(world=world, deleted_at__isnull=True)
+                  .exclude(pk=document.pk).select_related("card")
+                  .only("id", "name", "document_type",
+                        "card__aliases", "card__body", "card__blocks")):
         other_card = getattr(other, "card", None)
         body = (other_card.body if other_card is not None else "") or ""
         if other_card is not None and not body.strip():
@@ -848,10 +894,11 @@ def backlinks(request, doc_id):
         matched = next((name for name in names if name and name in haystack), "")
         if not matched:
             continue
+        position = haystack.find(matched)
         found.append({"id": other.id, "name": other.name,
                       "type": other.document_type, "matched": matched,
-                      "snippet": haystack[max(0, haystack.find(matched) - 20):
-                                         haystack.find(matched) + len(matched) + 30].replace("\n", " ")})
+                      "snippet": haystack[max(0, position - 20):
+                                         position + len(matched) + 30].replace("\n", " ")})
     return json_response({"mentions": found, "count": len(found)})
 
 

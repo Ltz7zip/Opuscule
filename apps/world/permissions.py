@@ -48,6 +48,8 @@ OPEN_WRITE_PREFIXES = (
     # AI 横切层（0.6.0）：凭据挂在"我"身上、会话与变更集按世界归属，
     # 视图里用 can_read / can_edit 自己守门，不放行的话只读成员连聊天都发不出。
     "/api/world/ai/",
+    # 个人主页属于"我"而不是某个世界，视图里校验登录后只写自己的那份。
+    "/api/world/profile",
 )
 
 # 这些读接口跟"某一个世界的数据"无关，未登录也放行：
@@ -64,6 +66,8 @@ PUBLIC_READ_PATHS = (
     "/api/world/moderation",
     # 凭据不属于任何世界，视图里自己校验登录后再按 user 过滤。
     "/api/world/ai/credentials",
+    # 个人主页：匿名也能读公开主页，视图内再按 is_public 守门。
+    "/api/world/profile",
 )
 
 # 从"带文档 id 的读路径"里抠出 id（documents/12、cards/12、maps/12/data…）。
@@ -163,29 +167,30 @@ def is_moderator(user) -> bool:
     return user.groups.filter(name=MODERATOR_GROUP).exists()
 
 
-def platform_role_of(user) -> str:
+def platform_role_of(user, moderator: bool | None = None) -> str:
     """平台身份：``superuser`` / ``moderator`` / ``staff`` / ``user``；未登录返回空串。
 
     优先级 站长 > 管理员 > 工作人员 > 普通用户——同一个人只落在最靠前的那一层。
+    ``moderator`` 可由调用方传入已查好的结果，免得多查一次用户组。
     """
     if not user or not getattr(user, "is_authenticated", False):
         return ""
     if user.is_superuser:
         return PLATFORM_SUPERUSER
-    if is_moderator(user):
+    if (is_moderator(user) if moderator is None else moderator):
         return PLATFORM_MODERATOR
     if user.is_staff:
         return PLATFORM_STAFF
     return PLATFORM_USER
 
 
-def can_moderate(user) -> bool:
+def can_moderate(user, moderator: bool | None = None) -> bool:
     """有没有平台治理能力（封禁 / 解封公开 wiki）：站长或管理员。
 
     批次 C 的封禁功能用它守门；批次 B 先把这条判据定下来。注意这**不是**"能改别人世界
     里的内容"——那是 ``is_privileged``（只认站长），管理员治的是"公开 wiki 的可见性"。
     """
-    return bool(is_privileged(user) or is_moderator(user))
+    return bool(is_privileged(user) or (is_moderator(user) if moderator is None else moderator))
 
 
 def moderators():
@@ -445,26 +450,45 @@ def ensure_membership(user, world: World, role: str = ROLE_EDITOR, invited_by=No
 
 
 def viewer_payload(user, world: World | None) -> dict:
-    """给前端的"我是谁、我能干什么"。"""
+    """给前端的"我是谁、我能干什么"。
+
+    权限判断原本各查一次成员身份 / 用户组，这里先取一次再复用，
+    响应内容与逐项调用 ``role_of`` / ``can_edit`` / ``can_admin`` 完全一致。
+    """
     authenticated = bool(user and getattr(user, "is_authenticated", False))
-    role = role_of(user, world)
-    membership = membership_for(user, world)
-    platform_role = platform_role_of(user)
+    setup_needed = not users_exist()
+    privileged = is_privileged(user)
+    membership = membership_for(user, world) if authenticated else None
+    moderator = is_moderator(user)
+    if authenticated:
+        role = ROLE_OWNER if privileged else (membership.role if membership else ROLE_VIEWER)
+    else:
+        role = "guest"
+    if setup_needed:
+        editable = adminable = True
+    elif not authenticated:
+        editable = adminable = False
+    elif privileged:
+        editable = adminable = True
+    else:
+        editable = bool(membership and membership.can_edit())
+        adminable = bool(membership and membership.role == ROLE_OWNER)
+    platform_role = platform_role_of(user, moderator=moderator)
     return {
         "authenticated": authenticated,
-        "needs_setup": not users_exist(),
+        "needs_setup": setup_needed,
         "username": (user.get_full_name() or user.username) if authenticated else "",
         "handle": user.username if authenticated else "",
         "email": user.email if authenticated else "",
         "initial": ((user.get_full_name() or user.username)[:1].upper() if authenticated else ""),
         "role": role,
         "role_label": dict(Membership._meta.get_field("role").choices).get(role, "游客"),
-        "can_edit": can_edit(user, world),
-        "can_admin": can_admin(user, world),
+        "can_edit": editable,
+        "can_admin": adminable,
         "joined": bool(membership),
         # 平台身份（与世界角色正交）：站长 / 管理员 / 工作人员 / 普通用户。
         "platform_role": platform_role,
         "platform_role_label": PLATFORM_ROLE_LABELS.get(platform_role, ""),
-        "is_moderator": is_moderator(user),
-        "can_moderate": can_moderate(user),
+        "is_moderator": moderator,
+        "can_moderate": bool(privileged or moderator),
     }

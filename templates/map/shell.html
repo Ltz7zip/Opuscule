@@ -1,10 +1,10 @@
 {% load static %}
 {# 地图页外壳：项目「终端设计语言」的皮肤。 #}
-{#   tokens.css —— 本页共用的 --tx-* 取值（地图页不加载 terminal.css，原因见该文件头） #}
-{#   panel.css  —— Opuscule 面板与对话框的换肤（含 Opuscule 调色变量的重映射） #}
-{#   shell.css  —— 顶栏 + 让位规则（让位只在顶栏存在时生效） #}
-{# 三份都常驻；顶栏本体只在非 embed 时渲染，所以脚本禁用 / iframe 嵌入都不会崩。 #}
-{# 这一段要在样式表之前：CSS 靠 data-map-host 分辨落地方式 —— #}
+{# 样式表（map/tokens.css、map/shell.css、map/panel.css、opuscule.css） #}
+{# 已移到 app.html 的 <head>：跨文档视图过渡要求新页面在首帧就带着 #}
+{# @view-transition，放在 body 里的样式表可能赶不上第一次渲染。 #}
+{# 顶栏本体只在非 embed 时渲染，所以脚本禁用 / iframe 嵌入都不会崩。 #}
+{# 这一段要在渲染之前：CSS 靠 data-map-host 分辨落地方式 —— #}
 {#   bar   独立页：顶栏在，面板是左栏（默认布局） #}
 {#   embed 嵌进工作区面板 / 发布站点的那一份：同一份面板骨架被挪到右边 #}
 {# 只读的嵌入也走 embed —— 只读不等于要换另一套外壳。 #}
@@ -14,16 +14,12 @@
     "{% if shell.show_bar %}bar{% else %}embed{% endif %}";
   {% if not shell.can_edit %}document.documentElement.dataset.mapReadonly = "1";{% endif %}
 </script>
-<link rel="stylesheet" href="{% static 'map/tokens.css' %}?v={{ static_version }}" />
-<link rel="stylesheet" href="{% static 'map/shell.css' %}?v={{ static_version }}" />
-<link rel="stylesheet" href="{% static 'map/panel.css' %}?v={{ static_version }}" />
-{# Opuscule 设计语言层：本文件只重定义 --tx-* 变量、不含任何选择器，对使用方是安全的。 #}
-{# 地图页不加载 terminal.css（要躲它的全局元素规则、不是躲 token），改用本层单独做 token 重映射。必须放在 map/tokens.css 之后。 #}
-{# 删掉下面这一行即可回滚。 #}
-<link rel="stylesheet" href="{% static 'opuscule.css' %}?v={{ static_version }}" />
+{# 图标集：顶栏与面板的图标都从这里取；嵌入版没有顶栏，但面板一样要图标。 #}
+{# defer：同步脚本会挡住后面的 <header>，首次渲染时外壳还没有顶栏， #}
+{# 跨文档过渡就拿不到 xp-shell-top 的共享元素快照。 #}
+<script src="{% static 'icons.js' %}?v={{ static_version }}" defer></script>
 {% if shell.show_bar %}
-{# 图标集：顶栏的按钮都有图标；宽度不够时只留图标（文字由 CSS 收起） #}
-<script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'theme-toggle.js' %}?v={{ static_version }}" defer></script>
 {# 分布与工作区顶栏一致：左＝文档名 + 计数，中＝视图分段，右＝世界地图▾ / 工作区 / ☰ #}
 <header
   id="tx-bar"
@@ -71,6 +67,20 @@
     <a class="tx-bar__btn" href="{{ shell.home_url }}" data-icon="house" title="回到工作区"
       ><span class="tx-bar__label">工作区</span></a>
 
+    <button class="theme-toggle" type="button" data-theme-toggle
+            data-world-api="{{ shell.home_url }}/api/world/world" title="切换到浅色模式">
+      <span class="theme-toggle__glyph" aria-hidden="true"></span>
+      <span class="theme-toggle__text">浅色</span>
+    </button>
+
+    {# 主操作：写在顶栏上，不用先拉开 ☰ 再找 —— 与画布编辑器同一种排法 #}
+    {% if shell.can_edit %}
+    <button type="button" class="tx-bar__btn tx-bar__btn--primary" data-icon="save"
+            data-action="save" title="保存到这个世界">
+      <span class="tx-bar__label">保存</span>
+    </button>
+    {% endif %}
+
     <details class="tx-menu tx-menu--actions">
       <summary title="菜单" aria-label="菜单"><span aria-hidden="true">☰</span></summary>
       <div class="tx-menu__panel" role="menu">
@@ -95,6 +105,157 @@
     </details>
   </div>
 </header>
+
+{# 画布浮层：地图是主体，但「我在哪 / 看的是哪张图 / 现在什么视图」不该藏在面板里。 #}
+{# 四角各一块，pointer-events 只落在自己的控件上，地图照常拖拽缩放。 #}
+<div class="tx-canvas-ui">
+  <nav class="tx-crumbs" aria-label="位置">
+    <a href="{{ shell.home_url }}">工作区</a>
+    {% if shell.world_name %}<span class="tx-crumbs__sep" aria-hidden="true">/</span>
+    <span class="tx-crumbs__muted">{{ shell.world_name }}</span>{% endif %}
+    <span class="tx-crumbs__sep" aria-hidden="true">/</span>
+    <span class="tx-crumbs__current" aria-current="page">{{ shell.doc_name|default:"地图" }}</span>
+  </nav>
+
+  <article class="tx-canvas-card">
+    <span class="tx-canvas-card__title">{{ shell.doc_name|default:"地图" }}</span>
+    {% if shell.stats %}<span class="tx-canvas-card__meta">{{ shell.stats }}</span>{% endif %}
+    <span class="tx-canvas-card__pill" data-canvas-view>{% if shell.view == '3d' %}地形{% else %}平面{% endif %}</span>
+  </article>
+
+  <div class="tx-zoom-stack" role="group" aria-label="缩放">
+    <button type="button" data-canvas-zoom="in" title="放大" aria-label="放大">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    </button>
+    <button type="button" data-canvas-zoom="out" title="缩小" aria-label="缩小">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+    </button>
+    <button type="button" data-canvas-zoom="reset" title="复位缩放" aria-label="复位缩放">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    </button>
+  </div>
+
+  <div class="tx-canvas-meta">
+    <span class="tx-canvas-meta__dot" aria-hidden="true"></span>
+    <span data-canvas-view-meta>{% if shell.view == '3d' %}地形视图{% else %}平面视图{% endif %}</span>
+    <span class="tx-canvas-meta__sep" aria-hidden="true">·</span>
+    <span data-canvas-layers>图层 —</span>
+    <span class="tx-canvas-meta__hint">拖拽平移 · 滚轮缩放</span>
+  </div>
+
+  <div class="tx-canvas-actions">
+    <button type="button" class="tx-canvas-btn" data-canvas-panel>图层面板</button>
+    {% if shell.can_edit %}
+    <button type="button" class="tx-canvas-btn tx-canvas-btn--primary" data-canvas-save>保存</button>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  /* 浮层只是画布上的第二处入口，真正的行为仍由原按钮承担：
+     缩放转发给右栏的 data-zoom，保存转发给顶栏的 data-action，图层面板转发给标签页。
+     这样嵌入版 / 无脚本降级仍是一条路，不会出现两套状态。 */
+  (function () {
+    var ui = document.querySelector(".tx-canvas-ui");
+    if (!ui) return;
+    var narrow = window.matchMedia("(max-width: 980px)");
+
+    ui.addEventListener("click", function (e) {
+      var zoom = e.target.closest("[data-canvas-zoom]");
+      if (zoom) {
+        var target = document.querySelector(
+          '#tx-rail-right button[data-zoom="' + zoom.dataset.canvasZoom + '"]'
+        );
+        if (target) target.click();
+        return;
+      }
+
+      if (e.target.closest("[data-canvas-save]")) {
+        var save = document.querySelector('#tx-bar [data-action="save"]');
+        if (save) save.click();
+        return;
+      }
+
+      if (e.target.closest("[data-canvas-panel]")) {
+        if (narrow.matches) {
+          document.body.classList.add("tx-panel-open");
+          var toggle = document.querySelector(".tx-bar__panel-toggle");
+          if (toggle) toggle.setAttribute("aria-expanded", "true");
+          var scrim = document.querySelector(".tx-scrim");
+          if (scrim) scrim.hidden = false;
+          return;
+        }
+        if (typeof window.showOptions === "function") window.showOptions();
+        var tab = document.getElementById("layersTab");
+        if (tab) tab.click();
+        var panel = document.getElementById("tx-panel-layers");
+        if (panel) {
+          panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          panel.classList.add("is-highlight");
+          window.setTimeout(function () {
+            panel.classList.remove("is-highlight");
+          }, 900);
+        }
+      }
+    });
+
+    /* 视图文案跟着顶栏分段走：地图应用自己会写 aria-pressed，这里只读它 */
+    var seg = document.querySelector(".tx-seg");
+    var pill = ui.querySelector("[data-canvas-view]");
+    var meta = ui.querySelector("[data-canvas-view-meta]");
+
+    function syncView() {
+      var pressed = seg.querySelector('[aria-pressed="true"]');
+      var mode = pressed ? pressed.dataset.viewMode : "standard";
+      var label = mode === "mesh" ? "地形" : mode === "globe" ? "地球仪" : "平面";
+      pill.textContent = label;
+      meta.textContent = label + "视图";
+    }
+
+    if (seg && pill && meta) {
+      new MutationObserver(syncView).observe(seg, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["aria-pressed"]
+      });
+      syncView();
+    }
+
+    /* 左下状态条的「图层 N」：数左栏那份清单里开着的行。
+       清单是后渲染的（模板在本段脚本之后），等 DOM 就位再接观察者。 */
+    function initLayerCount() {
+      var out = ui.querySelector("[data-canvas-layers]");
+      var list = document.getElementById("tx-layers-list");
+      if (!out || !list) return;
+      var frame = 0;
+
+      function paint() {
+        frame = 0;
+        var on = list.querySelectorAll(".tx-row.is-on").length;
+        var all = list.querySelectorAll(".tx-row").length;
+        out.textContent = all ? "图层 " + on + "/" + all : "图层 —";
+      }
+
+      function schedule() {
+        if (!frame) frame = window.requestAnimationFrame(paint);
+      }
+
+      new MutationObserver(schedule).observe(list, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"]
+      });
+      paint();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initLayerCount, { once: true });
+    } else {
+      initLayerCount();
+    }
+  })();
+</script>
 {# 抽屉遮罩：只在窄屏拉开面板时显示，点一下收起（display 由 panel.css 的窄屏段打开） #}
 <div class="tx-scrim" hidden></div>
 <script>

@@ -11,9 +11,15 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import queue
+import threading
 import uuid
 
 from django.core.cache import cache
+from django.db import close_old_connections
+from django.http import StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -47,10 +53,12 @@ from apps.world.views.common import (
 )
 
 from . import providers, services
+from .blocks import BlockEditError, apply_operations
 from .crypto import encrypt_secret, key_hint
 from .models import (
     CHANGE_CREATE_DOCUMENT,
     CHANGE_CREATE_TIMELINE_EVENT,
+    CHANGE_EDIT_BLOCKS,
     CHANGE_UPDATE_DOCUMENT,
     PROVIDERS,
     STATUS_APPLIED,
@@ -67,6 +75,8 @@ from .models import (
 #: 但限流仍然要防误触与脚本刷接口。
 CHAT_RATE_LIMIT = 20
 CHAT_RATE_WINDOW = 60
+
+logger = logging.getLogger(__name__)
 
 VALID_DOC_TYPES = {value for value, _label in DOC_TYPES}
 VALID_PRECISIONS = {value for value, _label in PRECISIONS}
@@ -320,6 +330,102 @@ def chat(request):
     return json_response(result)
 
 
+def _sse(payload: dict) -> str:
+    return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def chat_stream(request):
+    """``chat`` 的流式版本：用 SSE 逐段吐出思考、正文、工具与用量。"""
+    world, denied = _readable_world(request)
+    if denied is not None:
+        return denied
+    if not world.ai_enabled:
+        return json_response({"error": "这个世界还没有开启 AI 功能"}, status=403)
+    if _rate_limited(request.user.id):
+        return json_response({"error": "请求太频繁，请稍后再试"}, status=429)
+
+    payload = parse_json(request)
+    text = as_text(payload.get("message"), 8000)
+    if not text:
+        return json_response({"error": "说点什么吧"}, status=400)
+
+    conversation_id = as_int(payload.get("conversation_id"), 0)
+    if conversation_id:
+        conversation = world.ai_conversations.filter(
+            pk=conversation_id, user=request.user,
+        ).first()
+        if conversation is None:
+            return json_response({"error": "未找到该会话"}, status=404)
+    else:
+        document = None
+        document_id = as_int(payload.get("document_id"), 0)
+        if document_id:
+            document = get_document(world, document_id)
+            if document is None:
+                return json_response({"error": "未找到该文档"}, status=404)
+        conversation = AiConversation.objects.create(
+            world=world, user=request.user, document=document,
+        )
+
+    user = request.user
+    can_edit = permissions.can_edit(user, world)
+
+    def event_stream():
+        channel: queue.Queue = queue.Queue()
+
+        def emit(event):
+            channel.put(event)
+
+        def worker():
+            # 流式生成器可能在新线程里跑，连接要单独建立 / 收尾。
+            close_old_connections()
+            try:
+                result = services.run_chat(
+                    world, user, conversation, text, can_edit=can_edit, on_event=emit,
+                )
+                channel.put({"_result": result})
+            except providers.NoCredentialError:
+                channel.put({
+                    "type": "error",
+                    "error": "还没有配置 AI 供应商与 API Key",
+                    "code": "no_credential",
+                })
+            except providers.ProviderError as exc:
+                channel.put({"type": "error", "error": str(exc)})
+            except Exception:  # noqa: BLE001 - 线程里的异常必须转成事件
+                logger.exception("AI 流式对话失败")
+                channel.put({"type": "error", "error": "服务器内部错误"})
+            finally:
+                close_old_connections()
+                channel.put(None)
+
+        threading.Thread(target=worker, daemon=True).start()
+        yield _sse({"type": "start", "conversation": conversation.to_payload()})
+        while True:
+            item = channel.get()
+            if item is None:
+                break
+            if "_result" in item:
+                result = item["_result"]
+                yield _sse({
+                    "type": "done",
+                    "message": result.get("message"),
+                    "changeset": result.get("changeset"),
+                    "conversation": conversation.to_payload(with_messages=True),
+                })
+                continue
+            yield _sse(item)
+
+    response = StreamingHttpResponse(
+        event_stream(), content_type="text/event-stream; charset=utf-8",
+    )
+    response["Cache-Control"] = "no-cache, no-transform"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
 # --------------------------------------------------------------------------- #
 # 变更集
 # --------------------------------------------------------------------------- #
@@ -416,6 +522,8 @@ def _apply_change(change: AiChange, world, user) -> dict:
         return _apply_create_document(world, user, payload)
     if change.kind == CHANGE_UPDATE_DOCUMENT:
         return _apply_update_document(world, user, payload)
+    if change.kind == CHANGE_EDIT_BLOCKS:
+        return _apply_edit_blocks(world, user, payload)
     if change.kind == CHANGE_CREATE_TIMELINE_EVENT:
         return _apply_create_timeline_event(world, user, payload)
     raise ChangeError("不认识的改动类型")
@@ -536,6 +644,24 @@ def _apply_update_document(world, user, payload: dict) -> dict:
 
     touch_document(document, label="AI 修改文档", author=user)
     return {"document_id": document.id, "name": document.name}
+
+
+def _apply_edit_blocks(world, user, payload: dict) -> dict:
+    document = get_document(world, as_int(payload.get("document_id"), 0))
+    if document is None:
+        raise ChangeError("文档不存在或已删除")
+    if document.document_type != DOC_CARD:
+        raise ChangeError("只有卡片文档才有可编辑的正文块")
+    card, _created = Card.objects.get_or_create(
+        document=document, defaults={"entity_type": document.entity_type},
+    )
+    try:
+        count = apply_operations(card, payload.get("operations"))
+    except BlockEditError as exc:
+        raise ChangeError(str(exc)) from exc
+
+    touch_document(document, label="AI 编辑正文块", author=user)
+    return {"document_id": document.id, "name": document.name, "operations": count}
 
 
 def _apply_create_timeline_event(world, user, payload: dict) -> dict:

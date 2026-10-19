@@ -1,0 +1,146 @@
+{% comment %}
+  个人主页的一个区块。`block` 由 personal.py 的 _decorate() 补齐：
+  id / type / visible / label / region，note 另带 title、content。
+  本人可见全部区块（含隐藏的），工具栏只在编辑模式下出现。
+{% endcomment %}
+<section class="profile-block block-{{ block.type }}{% if not block.visible %} is-off{% endif %}"
+         data-block-id="{{ block.id }}" data-block-type="{{ block.type }}"
+         data-visible="{% if block.visible %}1{% else %}0{% endif %}">
+  {% if profile.editable %}
+    <div class="block-tools">
+      <span class="block-label">{{ block.label }}</span>
+      <span class="block-actions">
+        <button type="button" data-act="up" title="上移" aria-label="上移">↑</button>
+        <button type="button" data-act="down" title="下移" aria-label="下移">↓</button>
+        <button type="button" data-act="hide" title="隐藏这个区块">隐藏</button>
+        <button type="button" data-act="show" title="重新显示这个区块">显示</button>
+        {% if block.type == 'note' %}
+          <button type="button" data-act="remove" title="删除这个区块" aria-label="删除">×</button>
+        {% endif %}
+      </span>
+    </div>
+  {% endif %}
+
+  <div class="block-body">
+    {% if block.type == 'bio' %}
+      <h2>个人简介</h2>
+      {% if profile.bio %}
+        <p class="block-text">{{ profile.bio|linebreaksbr }}</p>
+      {% else %}
+        <p class="block-empty">还没有写简介。{% if profile.editable %}右侧「自定义主页」里可以补上。{% endif %}</p>
+      {% endif %}
+
+    {% elif block.type == 'stats' %}
+      <h2>数字统计</h2>
+      <div class="stat-row">
+        <div class="stat"><b>{{ profile.stats.worlds }}</b><span>世界</span></div>
+        <div class="stat"><b>{{ profile.stats.documents }}</b><span>文档</span></div>
+        <div class="stat"><b>{{ profile.stats.events }}</b><span>时间线事件</span></div>
+      </div>
+
+    {% elif block.type == 'links' %}
+      <h2>外部链接</h2>
+      {% if profile.links %}
+        <ul class="link-list">
+          {% for link in profile.links %}
+            <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="block-empty">还没有添加链接。</p>
+      {% endif %}
+
+    {% elif block.type == 'genres' %}
+      <h2>题材标签</h2>
+      {% if profile.genres %}
+        <ul class="genre-list">
+          {% for genre in profile.genres %}<li>{{ genre }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p class="block-empty">我还没有给世界打题材标签。</p>
+      {% endif %}
+
+    {% elif block.type == 'pinned' %}
+      <h2>精选世界</h2>
+      {% if profile.pinned_worlds %}
+        <div class="world-grid">
+          {% for world in profile.pinned_worlds %}
+            <a class="world-card" href="{{ world.url }}" style="--world-color: {{ world.color }}">
+              <span class="world-card-top">
+                <span class="world-dot"></span>
+                <span class="world-name">{{ world.name }}</span>
+                {% if world.published %}<span class="world-flag">已发布</span>{% endif %}
+              </span>
+              {% if world.description %}<span class="world-desc">{{ world.description|truncatechars:96 }}</span>{% endif %}
+              <span class="world-foot">
+                {% for genre in world.genres %}<span class="world-genre">{{ genre }}</span>{% endfor %}
+                <span class="world-time">{{ world.updated }}</span>
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="block-empty">还没有精选世界。{% if profile.editable %}编辑时在右侧勾选即可。{% endif %}</p>
+      {% endif %}
+
+    {% elif block.type == 'worlds' %}
+      <h2>全部世界</h2>
+      {% if profile.worlds %}
+        <div class="world-grid">
+          {% for world in profile.worlds %}
+            <a class="world-card" href="{{ world.url }}" style="--world-color: {{ world.color }}">
+              <span class="world-card-top">
+                <span class="world-dot"></span>
+                <span class="world-name">{{ world.name }}</span>
+                {% if world.published %}<span class="world-flag">已发布</span>{% endif %}
+              </span>
+              {% if world.description %}<span class="world-desc">{{ world.description|truncatechars:96 }}</span>{% endif %}
+              <span class="world-foot">
+                {% for genre in world.genres %}<span class="world-genre">{{ genre }}</span>{% endfor %}
+                <span class="world-time">{{ world.updated }}</span>
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="block-empty">还没有可以展示的世界。</p>
+      {% endif %}
+
+    {% elif block.type == 'activity' %}
+      <h2>最近动态</h2>
+      {% if profile.activity %}
+        <ul class="activity-list">
+          {% for item in profile.activity %}
+            <li>
+              <a href="{{ item.url }}">{{ item.text }}</a>
+              <span class="activity-sub">{{ item.sub }} · {{ item.time }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="block-empty">最近还没有动静。</p>
+      {% endif %}
+
+    {% elif block.type == 'note' %}
+      {% if profile.editable %}
+        <div class="note-read">
+          {% if block.title %}<h2>{{ block.title }}</h2>{% endif %}
+          {% if block.content %}
+            <p class="block-text">{{ block.content|linebreaksbr }}</p>
+          {% else %}
+            <p class="block-empty">还没有写内容，进入编辑模式即可补充。</p>
+          {% endif %}
+        </div>
+        <div class="note-edit">
+          <input class="note-title" data-note-title type="text" maxlength="80"
+                 value="{{ block.title }}" placeholder="区块标题（可留空）" />
+          <textarea class="note-content" data-note-content rows="4"
+                    placeholder="写点什么…">{{ block.content }}</textarea>
+        </div>
+      {% else %}
+        {% if block.title %}<h2>{{ block.title }}</h2>{% endif %}
+        <p class="block-text">{{ block.content|linebreaksbr }}</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>

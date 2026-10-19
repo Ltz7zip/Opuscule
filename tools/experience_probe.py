@@ -1080,43 +1080,6 @@ def run(pw) -> None:
     check(bool(tti) and tti < 3000,
           "§4.5 TTI（首屏画完 + 主线程静 500ms）< 3s", f"{tti}ms")
 
-    site_home = None
-    try:
-        opener_last = ensure_login(make_opener())
-        with opener_last.open(f"{BASE}/api/world/publish", timeout=15) as response:
-            publish = json.loads(response.read()).get("publish") or {}
-        raw = (publish.get("url") or "").strip()
-        if publish.get("published") and raw:
-            site_home = raw if raw.startswith("http") else BASE + raw
-    except Exception:                                  # noqa: BLE001
-        site_home = None
-    if site_home:
-        last.goto(site_home, wait_until="networkidle")
-        last.wait_for_timeout(1200)
-        skip = last.evaluate("""() => {
-          const link = document.querySelector('.skip-link');
-          const main = document.querySelector('#siteMain');
-          if (!link) return null;
-          const box = link.getBoundingClientRect();
-          return {href: link.getAttribute('href'), text: link.innerText.trim(),
-                  hiddenUntilFocus: box.top < 0 || box.left < 0,
-                  main: !!main};
-        }""")
-        check(bool(skip) and skip["href"] == "#siteMain" and skip["main"],
-              "§13.3 只读站点有 skip link（跳到正文）", str(skip))
-        # 键盘 Tab 一下它应该浮出来
-        last.keyboard.press("Tab")
-        last.wait_for_timeout(200)
-        shown = last.evaluate("""() => {
-          const link = document.querySelector('.skip-link');
-          if (!link) return null;
-          const box = link.getBoundingClientRect();
-          return {top: Math.round(box.top), focused: document.activeElement === link};
-        }""")
-        check(bool(shown) and (shown["focused"] or shown["top"] >= 0),
-              "§13.3 skip link 在键盘聚焦时可见", str(shown))
-    else:
-        notes.append("  · 站点没发布，§13.3 skip link 这一项跳过")
     ctx_last.close()
 
     # ---------------------------------------------------- 编辑器级降级块

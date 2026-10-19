@@ -151,8 +151,18 @@ def _gate(request, world: World):
     return render(request, "site/password.html", _password_context(world))
 
 
-def _site_base(world: World, sections=None, request=None) -> dict:
-    filters = publish_service.site_filters(world)
+def _site_base(world: World, sections=None, request=None, filters=None, eras=None) -> dict:
+    # 首页 / 搜索 / 纪元页 / 文档页都要同一份站点文档：这里只取一次，
+    # 让 filters、sections 共用 QuerySet 缓存，避免同一页反复扫全表。
+    documents = None
+    if filters is None or sections is None:
+        documents = publish_service.site_documents(world)
+    if filters is None:
+        filters = publish_service.site_filters(world, documents=documents)
+    if sections is None:
+        sections = publish_service.site_sections(world, documents=documents)
+    if eras is None:
+        eras = publish_service.site_eras(world, counts=filters["eras"])
     # 主题值会被写进 <body style> 与内联 style：这里是站点唯一的出口，统一清洗一遍
     # （主色只放行 #rgb..rrggbbaa，字体名只放行安全字符）。见 2026-10-15 体检 F3。
     theme = sanitize_theme(world.theme)
@@ -163,24 +173,24 @@ def _site_base(world: World, sections=None, request=None) -> dict:
         # 模板把它写到 <html data-theme>，terminal.css 按它切表面台阶。
         "theme_mode": "light" if theme.get("mode") == "light" else "dark",
         "audience_label": publish_service.AUDIENCE_LABELS.get(world.audience, ""),
-        "sections": publish_service.site_sections(world) if sections is None else sections,
+        "sections": sections,
         "noindex": world.audience != "public",
         "site_types": filters["types"],
-        "site_eras": publish_service.site_eras(world),
+        "site_eras": eras,
         "query": ((request.GET.get("q") or "").strip() if request is not None else ""),
-        "active_filter": (_active_filter(request, world) if request is not None
+        "active_filter": (_active_filter(request, world, filters["types"]) if request is not None
                           else {"type_slug": "", "era_id": 0, "label": "全部", "active": False}),
     }
 
 
-def _active_filter(request, world: World) -> dict:
+def _active_filter(request, world: World, types=None) -> dict:
     """解析 ?type= / ?era=，并给出 chip 上显示的名字。"""
     type_slug = (request.GET.get("type") or "").strip()
     era_id = as_int(request.GET.get("era"), 0)
     label = "全部"
     if type_slug:
-        match = next((item for item in publish_service.site_filters(world)["types"]
-                      if item["slug"] == type_slug), None)
+        type_options = types if types is not None else publish_service.site_filters(world)["types"]
+        match = next((item for item in type_options if item["slug"] == type_slug), None)
         label = match["name"] if match else type_slug
     elif era_id:
         era = world.eras.filter(pk=era_id).first()
@@ -195,13 +205,15 @@ def home(request, slug):
     gated = _gate(request, world)
     if gated:
         return gated
-    active = _active_filter(request, world)
+    filters = publish_service.site_filters(world)
+    active = _active_filter(request, world, filters["types"])
     documents = publish_service.filter_documents(
         publish_service.site_documents(world),
         type_slug=active["type_slug"], era_id=active["era_id"],
     )
     keyword = (request.GET.get("q") or "").strip()
     hits = publish_service.search_documents(world, keyword) if keyword else []
+    eras = publish_service.site_eras(world, counts=filters["eras"])
     context = _site_base(
         world,
         # 筛选时不再塞「世界时间线」那一格：它不参与按类型 / 纪元过滤，
@@ -210,6 +222,8 @@ def home(request, slug):
             world, documents=documents, include_timeline=not active["active"]
         ),
         request=request,
+        filters=filters,
+        eras=eras,
     )
     context.update({
         "cards": documents.filter(document_type=DOC_CARD)[:24],
@@ -217,7 +231,7 @@ def home(request, slug):
         "active_filter": active,
         "query": keyword,
         "hits": hits,
-        "eras": publish_service.site_eras(world),
+        "eras": eras,
     })
     return render(request, "site/home.html", context)
 
@@ -231,7 +245,8 @@ def search(request, slug):
         return gated
 
     keyword = (request.GET.get("q") or "").strip()
-    active = _active_filter(request, world)
+    filters = publish_service.site_filters(world)
+    active = _active_filter(request, world, filters["types"])
     hits = publish_service.search_documents(world, keyword) if keyword else []
     if active["active"]:
         allowed = set(
@@ -246,7 +261,7 @@ def search(request, slug):
     # 按钮上方写清"已显示 x / y 条"。
     per_page = max(20, min(200, as_int(request.GET.get("show"), 20) or 20))
     paged = publish_service.paginate(hits, page=1, per_page=per_page)
-    context = _site_base(world, request=request)
+    context = _site_base(world, request=request, filters=filters)
     context.update({
         "query": keyword,
         "hits": paged["items"],
@@ -274,7 +289,7 @@ def era_page(request, slug, era_id):
         raise Http404("纪元不存在")
     context = _site_base(world, request=request)
     context.update(publish_service.era_summary(world, era))
-    context["all_eras"] = publish_service.site_eras(world)
+    context["all_eras"] = context["site_eras"]
     return render(request, "site/era.html", context)
 
 
@@ -299,7 +314,7 @@ def page(request, slug, doc_slug):
     context.update({
         "document": document,
         "card": getattr(document, "card", None),
-        "related": publish_service.related_documents(document),
+        "related": publish_service.related_documents(document, world),
         "is_timeline": document.document_type == DOC_TIMELINE,
         # 地图 / 关系树 / 图谱：站点上直接把工作区的只读画布嵌进来
         "canvas_embed": document.document_type in ("map", DOC_TREE, "graph"),   # 地图 / 关系树 / 图谱都嵌只读画布
@@ -312,7 +327,7 @@ def page(request, slug, doc_slug):
     })
     if context["card"] is not None:
         context["properties"] = [
-            entry for entry in context["card"].resolved_values().values()
+            entry for entry in context["card"].resolved_values(world=world).values()
             if entry.get("display")
         ]
     return render(request, "site/page.html", context)
@@ -330,7 +345,7 @@ def _timeline_page(request, world: World, timeline):
         "timeline_embed": "",
         "events": publish_service.timeline_events(world),
         "timeline": timeline,
-        "eras": publish_service.site_eras(world),
+        "eras": context["site_eras"],
     })
     return render(request, "site/page.html", context)
 
@@ -349,7 +364,7 @@ def _missing_document(request, world: World, doc_slug: str):
     context.update({
         "removed": ghost is not None,
         "ghost_name": ghost.name if ghost is not None else "",
-        "related": publish_service.related_documents(ghost)[:6] if ghost is not None else [],
+        "related": publish_service.related_documents(ghost, world)[:6] if ghost is not None else [],
     })
     return render(request, "site/missing.html", context, status=404)
 

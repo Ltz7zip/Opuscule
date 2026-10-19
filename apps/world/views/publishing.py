@@ -117,7 +117,7 @@ def publish_preview_view(request):
 def publish_log_view(request):
     """发布记录（最近在前）：每次发布会动了哪些文档。"""
     world = current_world()
-    logs = world.publish_logs.all()[:30]
+    logs = world.publish_logs.select_related("author").all()[:30]
     return json_response({"logs": [log.to_payload() for log in logs]})
 
 

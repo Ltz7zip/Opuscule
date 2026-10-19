@@ -143,3 +143,4 @@ from .entity import EntityType, PropertyDef
 from .membership import MemberEvent, Membership
 from .invite import InviteCode
 from .governance import ModerationEvent, Report
+from .profile import UserProfile

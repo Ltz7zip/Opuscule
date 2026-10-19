@@ -176,7 +176,12 @@ def _event_collection(request, owner):
     world = current_world()
     origin = axis_origin(owner)
     if request.method == "GET":
-        return json_response({"events": [event.to_payload(origin) for event in owner.events.all()]})
+        events = (
+            owner.events
+            .select_related("timeline__calendar", "document")
+            .prefetch_related("linked_cards")
+        )
+        return json_response({"events": [event.to_payload(origin) for event in events]})
 
     event = _clean_event_payload(world, parse_json(request), owner, None)
     event.save()
@@ -576,12 +581,27 @@ def calendar_month(request, calendar_id):
     grid = calendarview.month_grid(calendar, int(round(display_year + _world_axis_origin(world))), month)
 
     document_id = as_int(request.GET.get("document"), 0)
+    # 只有同年同月的事件会落进网格，先在数据库里筛掉其余的，别把整个世界的事件都拉回来
+    month_filter = Q(month=grid["month"])
+    if grid["month"] == 1:
+        # place_events 把 month=0 也当作 1 月（``or 1``），这里保持一致
+        month_filter |= Q(month=0)
     if document_id:
         document = get_document(world, document_id)
-        events = list(document.events.all()) if document is not None else []
+        events = (
+            document.events.filter(year=grid["year"]).filter(month_filter)
+            .only("id", "title", "precision", "year", "month", "day", "hour")
+            if document is not None else []
+        )
     else:
-        events = list(TimelineEvent.objects.filter(
-            Q(document__world=world) | Q(timeline__world=world)))
+        events = (
+            TimelineEvent.objects.filter(
+                Q(document__world=world) | Q(timeline__world=world),
+                year=grid["year"],
+            )
+            .filter(month_filter)
+            .only("id", "title", "precision", "year", "month", "day", "hour")
+        )
     calendarview.place_events(grid, events)      # 就地塞进对应格子
     grid["year"] = int(display_year) if display_year.is_integer() else round(display_year, 4)
     return json_response(grid)

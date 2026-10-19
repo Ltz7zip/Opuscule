@@ -1,57 +1,110 @@
 /* ==========================================================================
-   map/tokens.css —— 地图页用的终端 token
+   map/tokens.css —— 地图页 token
    --------------------------------------------------------------------------
-   取值镜像 static/terminal.css 的 --tx-*（同一套规范，见 DESIGN.md）。
+   视觉遵循 Minimalist 设计库：单色中性、结构性 1px 描边、近零投影、
+   12px 圆角基准、4px 间距节奏、Geist / Geist Mono 字体。
+   强调色不再使用电光绿，而是「主色实心 + 反色字」。
 
    为什么单独一份：地图页**不加载** terminal.css —— 那份文件里有 html/body/
    button/input[type=range] 这类全局元素规则，套到地图应用（外来地图）的界面上会翻车。
    所以只把 token 抽出来，让 shell.css（顶栏）与 panel.css（面板/对话框）共用一份，
    避免两处各写一遍颜色而漂移。
 
-   规范纪律（改动前请对照 DESIGN.md）：
-     · 电光绿是唯一强调色，只给主 CTA / 焦点环 / 选中态；
-     · 全项目只有模态档一道投影；
-     · 正文不吃绿色；机器语言一律等宽。
+   规范纪律：
+     · 单色：层次靠表面台阶 + 1px 描边，不靠彩色；
+     · 选中态 = --tx-green 实心底 + --tx-on-green 字色；
+     · 正文不吃强调色；机器语言（数字/快捷键）才用等宽。
    ========================================================================== */
 
+/* ------------------------------------------------------------------ 字体 */
+/* Minimalist 字体体系：Geist / Geist Mono / DM Serif Display（本地 woff2，SIL OFL） */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/geist-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/geist-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/geist-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/geist-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "DM Serif Display";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/dm-serif-display-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "DM Serif Display";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/dm-serif-display-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
-  /* 表面：暖近黑的三级台阶 + 凹进去的一级 */
-  --tx-canvas: #121110;
-  --tx-canvas-soft: #1a1917;
-  --tx-canvas-raised: #201f1c;
-  --tx-canvas-sunken: #0d0c0b;
+  /* 表面：四级台阶（画布 / 浮起 / 更高 / 凹进） */
+  --tx-canvas: #18181b;
+  --tx-canvas-soft: #202023;
+  --tx-canvas-raised: #27272a;
+  --tx-canvas-sunken: #0a0a0a;
 
   /* 线：层次的全部来源 */
-  --tx-hairline: #2c2a27;
-  --tx-hairline-strong: #3d3a36;
-  --tx-hairline-soft: #242220;
+  --tx-hairline: rgba(250, 250, 250, 0.1);
+  --tx-hairline-strong: rgba(250, 250, 250, 0.18);
+  --tx-hairline-soft: rgba(250, 250, 250, 0.06);
 
   /* 墨色 */
-  --tx-ink: #f4f2ee;
-  --tx-body: #c9c5be;
-  --tx-mute: #8f8b84;
-  --tx-dim: #67635d;
-  --tx-ink-mono: #e6e3dd;
+  --tx-ink: #fafafa;
+  --tx-body: #a6a6ae;
+  --tx-mute: #71717a;
+  --tx-dim: #52525b;
+  --tx-ink-mono: #e4e4e7;
 
-  /* 强调 */
-  --tx-green: #3ddc97;
-  --tx-green-hover: #5ee7ae;
-  --tx-green-press: #2bbf7f;
-  --tx-green-dim: #1f8f5f;
-  --tx-on-green: #0d1114;
-  --tx-green-wash: rgba(61, 220, 151, 0.12);
-  --tx-green-line: rgba(61, 220, 151, 0.32);
+  /* 强调：Minimalist 的 primary（浅色实心 + 深色字） */
+  --tx-green: #fafafa;
+  --tx-green-hover: #ffffff;
+  --tx-green-press: #d4d4d8;
+  --tx-green-dim: #a1a1aa;
+  --tx-on-green: #18181b;
+  --tx-green-wash: rgba(250, 250, 250, 0.1);
+  --tx-green-line: rgba(250, 250, 250, 0.28);
 
-  /* 语义 */
-  --tx-success: #3ddc97;
-  --tx-warning: #e8b055;
-  --tx-danger: #f0736a;
-  --tx-info: #7cb7e8;
+  /* 语义色：只在确实需要区分状态时出现 */
+  --tx-success: #4ade80;
+  --tx-warning: #eab308;
+  --tx-danger: #ef4444;
+  --tx-info: #60a5fa;
 
   /* 圆角：三档，不插值 */
-  --tx-r-xxs: 2px;
-  --tx-r-sm: 4px;
-  --tx-r-md: 6px;
+  --tx-r-xxs: 4px;
+  --tx-r-sm: 6px;
+  --tx-r-md: 12px;
   --tx-r-pill: 9999px;
 
   /* 间距：4px 基准 */
@@ -62,27 +115,28 @@
   --tx-5: 24px;
 
   /* 字号 */
-  --tx-fs-ui: 12.5px;
+  --tx-fs-ui: 13px;
   --tx-fs-body: 15px;
   --tx-fs-mono: 11px;
   --tx-fs-code: 12px;
 
   /* 字体：叙述无衬线、机器语言等宽 */
-  --tx-sans: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --tx-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --tx-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --tx-mono: "Geist Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* 眉标字距（这套语言最容易被认出来的记号） */
-  --tx-eyebrow-spacing: 1.2px;
+  /* 眉标字距 */
+  --tx-eyebrow-spacing: 0.06em;
 
-  /* 控件尺寸 */
-  --tx-h-row: 26px;
-  --tx-h-ctl: 30px;
+  /* 控件尺寸：与画布按钮同一节奏（32px 控件 / 44px 顶栏） */
+  --tx-h-row: 30px;
+  --tx-h-ctl: 32px;
   --tx-h-bar: 44px;
 
-  /* 投影与焦点环 */
-  --tx-shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(148, 163, 184, 0.1) inset;
-  --tx-focus-ring: 0 0 0 2px var(--tx-green-wash);
+  /* 投影与焦点环：近零投影，靠描边分层 */
+  --tx-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --tx-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(250, 250, 250, 0.06) inset;
+  --tx-focus-ring: 0 0 0 2px rgba(250, 250, 250, 0.55);
 
   /* 自绘城镇平面（暗档）：三级台阶 —— 街面最暗（＝画布色）、用地中间、房子最亮。
      读法就是「街道是暗的缝，房子是亮的块」，和纸面上深色街道／浅色房子正好互为反相。
@@ -101,29 +155,34 @@
 
 /* 浅色世界：同一套语言的纸面取值 */
 :root[data-theme="light"] {
-  --tx-canvas: #f7f7f5;
-  --tx-canvas-soft: #ffffff;
+  --tx-canvas: #ffffff;
+  --tx-canvas-soft: #fafafa;
   --tx-canvas-raised: #ffffff;
-  --tx-canvas-sunken: #ececea;
+  --tx-canvas-sunken: #f5f5f5;
 
-  --tx-hairline: #e0dedb;
-  --tx-hairline-strong: #cbc8c3;
-  --tx-hairline-soft: #eae8e5;
+  --tx-hairline: #e4e4e7;
+  --tx-hairline-strong: #d4d4d8;
+  --tx-hairline-soft: #f4f4f5;
 
-  --tx-ink: #12110f;
-  --tx-body: #3a3833;
-  --tx-mute: #6f6b64;
-  --tx-dim: #9b968e;
-  --tx-ink-mono: #1a1917;
+  --tx-ink: #18181b;
+  --tx-body: #52525b;
+  --tx-mute: #71717a;
+  --tx-dim: #a1a1aa;
+  --tx-ink-mono: #18181b;
 
-  /* #3ddc97 压在白底上对比度只有 1.8:1，读不了；换同色相压深的绿 */
-  --tx-green: #0b8f5a;
-  --tx-green-hover: #0a7d4e;
-  --tx-green-press: #086743;
-  --tx-green-dim: #4bbd8c;
-  --tx-on-green: #ffffff;
-  --tx-green-wash: rgba(11, 143, 90, 0.1);
-  --tx-green-line: rgba(11, 143, 90, 0.3);
+  /* 浅色档的主色是深墨实心 + 浅色字 */
+  --tx-green: #18181b;
+  --tx-green-hover: #27272a;
+  --tx-green-press: #0a0a0a;
+  --tx-green-dim: #a1a1aa;
+  --tx-on-green: #fafafa;
+  --tx-green-wash: rgba(24, 24, 27, 0.07);
+  --tx-green-line: rgba(24, 24, 27, 0.22);
+
+  --tx-success: #16a34a;
+  --tx-warning: #ca8a04;
+  --tx-danger: #dc2626;
+  --tx-info: #2563eb;
 
   /* 自绘城镇平面的纸面取值：街面＝画布色（浅），用地更浅，房子压深一档。
      内院是最亮的一档 —— 图2 里那些白色的天井。 */
@@ -135,6 +194,10 @@
   --town-square: #efede9;
   --town-green: #d5e3cb;
   --town-water: #b9d2e0;
+
+  --tx-shadow-card: 0 1px 2px rgba(24, 24, 27, 0.06);
+  --tx-shadow-modal: 0 24px 64px rgba(24, 24, 27, 0.16), 0 0 0 1px rgba(24, 24, 27, 0.04) inset;
+  --tx-focus-ring: 0 0 0 2px rgba(24, 24, 27, 0.45);
 
   color-scheme: light;
 }

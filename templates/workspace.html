@@ -60,11 +60,10 @@
   <!-- 世界主题（字体 / 主色 / 颗粒）由 JS 从 /api/world/state 读出来写进 :root -->
   <div class="grain" id="grain" aria-hidden="true"></div>
 
-  <a class="skip-link" href="#panels">跳到正文</a>
   <div class="app" id="app">
     <!-- ---------------------------------------------------------------- 顶栏 -->
     <header class="topbar">
-      <div class="tb-side">
+      <div class="tb-side tb-left">
         {# 顶栏左侧：当前页面的图标 + 名字 #}
         <span class="tb-crumb" id="tbCrumb" hidden>
           <span class="crumb-icon" id="crumbIcon" aria-hidden="true"></span>
@@ -72,29 +71,35 @@
         </span>
       </div>
 
-      <div class="tb-side tb-right">
-        <button class="tb-btn is-icon" id="sidebarBtn" type="button" title="收起 / 展开侧栏（⌘B）">侧栏</button>
-        <button class="tb-btn is-icon" id="undoBtn" type="button" title="撤销（⌘Z）" disabled>撤销</button>
-        <button class="tb-btn is-icon" id="redoBtn" type="button" title="重做（⇧⌘Z）" disabled>重做</button>
-        <span class="tb-divider"></span>
-        <button class="tb-btn" id="paletteBtn" type="button" title="命令面板">⌘K</button>
-        {# AI 入口：只读成员也可见（聊天可用），应用变更集时才按写入权限拦截 #}
-        <button class="tb-btn" id="aiBtn" type="button" title="AI 助手" aria-haspopup="dialog">AI</button>
-        <span class="tb-divider"></span>
-        {# 显式的明暗切换：按钮上写的是"点下去会切到的那一档" #}
-        <button class="tb-btn" id="themeToggle" type="button" title="切换到浅色模式" aria-pressed="true">
-          <span class="icon" id="themeToggleGlyph" aria-hidden="true"></span>
-          <span id="themeToggleText">浅色</span>
-        </button>
-        <span class="tb-divider"></span>
-        <span class="save-state" id="saveState" role="status" aria-live="polite" data-kind="saved"
-              title="有改动会先落本地，再写回世界"><i></i><span id="saveStateText">已保存</span></span>
-        <span class="era-slot" id="eraChipSlot"></span>
-        <div class="presence" id="presence" aria-label="谁在这里"></div>
-        <button class="user-chip" id="userChip" type="button" aria-label="账号菜单">
-          <span class="uc-avatar" id="userAvatar">·</span>
-          <span class="uc-name" id="userName">…</span>
-        </button>
+      <div class="tb-right">
+        {# 第一组：编辑动作 #}
+        <div class="tb-group" role="group" aria-label="编辑">
+          <button class="tb-btn is-icon" id="sidebarBtn" type="button" title="收起 / 展开侧栏（⌘B）">侧栏</button>
+          <button class="tb-btn is-icon" id="undoBtn" type="button" title="撤销（⌘Z）" disabled>撤销</button>
+          <button class="tb-btn is-icon" id="redoBtn" type="button" title="重做（⇧⌘Z）" disabled>重做</button>
+        </div>
+
+        {# 第二组：工具 #}
+        <div class="tb-group" role="group" aria-label="工具">
+          <button class="tb-btn is-icon" id="paletteBtn" type="button" title="命令面板（⌘K）">⌘K</button>
+          {# 明暗切换：图标显示"点下去会切到的那一档"，语义由 title / aria-label 兜住 #}
+          <button class="tb-btn is-icon" id="themeToggle" type="button" title="切换到浅色模式"
+                  aria-label="切换到浅色模式" aria-pressed="true">
+            <span class="icon" id="themeToggleGlyph" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        {# 第三组：状态与账号 #}
+        <div class="tb-group tb-status" role="group" aria-label="状态">
+          <span class="save-state" id="saveState" role="status" aria-live="polite" data-kind="saved"
+                title="有改动会先落本地，再写回世界"><i></i><span id="saveStateText">已保存</span></span>
+          <span class="era-slot" id="eraChipSlot"></span>
+          <div class="presence" id="presence" aria-label="谁在这里"></div>
+          <button class="user-chip" id="userChip" type="button" aria-label="账号菜单">
+            <span class="uc-avatar" id="userAvatar">·</span>
+            <span class="uc-name" id="userName">…</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -224,6 +229,16 @@
     <button type="button" data-mobile="suggest">建议</button>
     <button type="button" data-mobile="user">我的</button>
   </nav>
+
+  {# AI 入口：右下角悬浮球。只读成员也可见（聊天可用），应用变更集时才按写入权限拦截 #}
+  <button class="ai-fab" id="aiBtn" type="button" title="AI 助手"
+          aria-label="打开 AI 助手" aria-haspopup="dialog" aria-controls="aiDrawer">
+    <svg class="ai-fab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 2.6l1.9 5.1 5.1 1.9-5.1 1.9L12 16.6l-1.9-5.1L5 9.6l5.1-1.9L12 2.6z" fill="currentColor"/>
+      <path d="M18.6 14.2l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1 1-2.6z" fill="currentColor" opacity=".68"/>
+      <path d="M5.4 15l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9L2.8 17.6l1.9-.7.7-1.9z" fill="currentColor" opacity=".5"/>
+    </svg>
+  </button>
 
   <!-- 正文编辑器孤岛：frontend/editor 的构建产物（React + BlockNote），已提交进仓库。
        P3 起正文只有这一条渲染路径，没有 ?editor= 开关：workspace.js 在第一次要画正文时
