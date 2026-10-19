@@ -27,7 +27,7 @@ from django.views.decorators.http import require_safe
 from . import permissions
 from . import views as world_views
 from .models import DOC_MAP
-from .normalize import as_int
+from .normalize import as_int, as_number, as_text
 from apps.documents.models import Document
 
 #: 两档（前端顶栏的切换器认这个顺序）
@@ -95,6 +95,9 @@ def map_page(request, view: str = DEFAULT_VIEW, world_slug=None):
     if not can_edit:
         readonly = True
 
+    # 自定义底图存在 Document.settings（与 map_state 同一口径），前端据此铺一层 image
+    settings_ = document.settings if document and isinstance(document.settings, dict) else {}
+
     ctx = {
         "view": view,
         "views": [{"key": key, "label": label, "hint": hint} for key, label, hint in MAP_VIEWS],
@@ -103,12 +106,18 @@ def map_page(request, view: str = DEFAULT_VIEW, world_slug=None):
         "docMissing": bool(doc_id) and document is None,
         "embed": embed,
         "readonly": readonly,
-        "canEdit": can_edit,
+        "canEdit": can_edit and not readonly,
         "theme": "light" if theme_mode == "light" else "dark",
         "apiBase": f"/w/{world.slug}/api/world/maps",
         "lang": "zh",
         "eraId": era_id,
         "focusCardId": focus_card_id,
+        "background": {
+            "url": as_text(settings_.get("background"), 4000),
+            "zoom": float(as_number(settings_.get("zoom", settings_.get("bg_zoom"))) or 1.0),
+            "offset_x": float(as_number(settings_.get("offset_x", settings_.get("bg_offset_x"))) or 0.0),
+            "offset_y": float(as_number(settings_.get("offset_y", settings_.get("bg_offset_y"))) or 0.0),
+        },
     }
     # 顶栏是服务端渲染的（脚本被禁用时至少还能看到文档名与只读状态），
     # 所以这些字段单独给模板一份，不塞进 JSON。
@@ -138,7 +147,8 @@ def map_page(request, view: str = DEFAULT_VIEW, world_slug=None):
         "doc_name": document.name if document else "",
         "doc_id": doc_id,
         "doc_missing": bool(doc_id) and document is None,
-        "can_edit": can_edit,
+        "can_edit": can_edit and not readonly,
+        "readonly": readonly,
         "home_url": f"/w/{world.slug}",
         "stats": " · ".join(stats),
         "maps": sibling_maps,

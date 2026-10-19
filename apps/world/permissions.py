@@ -368,11 +368,12 @@ def _embed_id(request) -> int:
 def allow_public_read(request) -> bool:
     """游客能不能读这条 GET/HEAD 请求——发布站点只读嵌入的唯一入口。
 
-    放行分四种：
+    放行分五种：
     1. 跟世界数据无关的接口（登录/注册、我的世界列表、模版目录）。
     2. ``/api/world/state?embed=<id>``：id 对应的文档已公开（视图再裁剪成"只有那一篇"）。
     3. 路径里带文档 id 的读接口：那篇文档已公开（挡住拿 id 穷举未公开草稿）。
     4. ``/api/world/graph``：当前世界本身已发布（视图内只吐已发布部分）。
+    5. ``/api/world/timeline/classic``：当前世界已发布，站点上的只读时间线画布读它。
 
     放行"某一篇文档"时顺手把当前世界切成它所属的世界——游客默认落在"全场第一个
     世界"，嵌入非首个世界的文档时若不纠正，视图会拿错世界查不到数据。
@@ -388,6 +389,18 @@ def allow_public_read(request) -> bool:
     elif path == "/api/world/graph":
         world = current_world_or_none()
         return bool(world is not None and world.is_published)
+    elif path.startswith("/api/world/timeline/classic"):
+        # 发布站点的只读时间线画布：世界已开站、未被封禁、密码档已解锁才放行。
+        # 写接口由 EditPermissionMiddleware 另行拦下，这里只影响 GET/HEAD。
+        world = current_world_or_none()
+        if world is None:
+            return False
+        from .services.publish import can_view
+        return bool(
+            world.is_published
+            and not world.is_banned
+            and can_view(world, request.session)
+        )
     else:
         match = _DOC_ID_PATTERN.match(path)
         document = published_document(int(match.group(1))) if match else None

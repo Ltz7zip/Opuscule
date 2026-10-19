@@ -196,6 +196,13 @@ body:has(> #tx-bar) #options #optionsHide {
   display: none !important;
 }
 
+/* 只读嵌入整块编辑面板都不出现（分页、图层、样式、工具全是写入口），
+   只留画布；浮层上的唤起按钮一并收掉，避免打开一个空面板。 */
+:root[data-map-readonly="1"] #options,
+:root[data-map-readonly="1"] #optionsTrigger {
+  display: none !important;
+}
+
 /* 画布底板：地图应用写死黑色，浅色主题下会露出黑边 */
 #map {
   background-color: var(--tx-canvas-sunken);

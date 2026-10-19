@@ -1,0 +1,1 @@
+import{t as e}from"./controllers-CTfyQhlk.js?v=2";var t=`standard`;function n(e){t=e}var r=()=>t!==`standard`,i=()=>t===`globe`;function a(t){let n=t.target;n.tagName===`BUTTON`&&(!n.classList.contains(`pressed`)&&n.id!==`viewStandard`?e.View3d.open(n.id):e.View3d.enterStandard())}export{n as i,r as n,i as r,a as t};

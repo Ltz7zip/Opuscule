@@ -178,6 +178,38 @@ def era_item(era: Era, span: tuple[float, float], origin: float = 0.0) -> dict:
     }
 
 
+def fit_view_to_items(items, fallback=(-100.0, 900.0)) -> dict:
+    """按事件范围算一个带余量的视野；没有事件时退回 ``fallback``。"""
+    spans: list[tuple[float, float]] = []
+    for item in items:
+        if item.get("kind") != "event":
+            continue
+        try:
+            start = float(item.get("start", item.get("year")))
+            end = float(item.get("end", start))
+        except (TypeError, ValueError):
+            continue
+        spans.append((start, max(start, end)))
+    if not spans:
+        return {"start": round(fallback[0], 6), "end": round(fallback[1], 6)}
+    lo = min(start for start, _ in spans)
+    hi = max(end for _, end in spans)
+    if hi <= lo:
+        lo, hi = lo - 50.0, hi + 50.0
+    pad = max(20.0, (hi - lo) * 0.1)
+    return {"start": round(lo - pad, 6), "end": round(hi + pad, 6)}
+
+
+def _view_covers_items(view: dict, items) -> bool:
+    """视野是否还能看见至少一个事件（完全没有事件时视为有效）。"""
+    spans = [(item["start"], item.get("end", item["start"]))
+             for item in items if item.get("kind") == "event"]
+    if not spans:
+        return True
+    start, end = view["start"], view["end"]
+    return any(start <= hi and lo <= end for lo, hi in spans)
+
+
 def classic_payload(document) -> dict:
     """整条时间线 -> ``{view, items}``（与 /api/timeline 的返回结构一致）。"""
     world = document.world
@@ -194,15 +226,33 @@ def classic_payload(document) -> dict:
 
     view = settings_.get("view")
     if not isinstance(view, dict):
-        view = {
-            "start": float(settings_.get("view_start", 1500.0) or 1500.0),
-            "end": float(settings_.get("view_end", 1900.0) or 1900.0),
-        }
-    view = {"start": float(view.get("start", 1500.0)), "end": float(view.get("end", 1900.0))}
-    if view["end"] <= view["start"]:
-        view = {"start": 1500.0, "end": 1900.0}
-    # 视野按世界坐标存，编辑器里看到的是显示坐标
-    view = {"start": round(view["start"] - origin, 6), "end": round(view["end"] - origin, 6)}
+        # 旧数据只在 settings 里存过 view_start / view_end
+        if settings_.get("view_start") is None and settings_.get("view_end") is None:
+            view = None
+        else:
+            view = {
+                "start": float(settings_.get("view_start", 1500.0) or 1500.0),
+                "end": float(settings_.get("view_end", 1900.0) or 1900.0),
+            }
+    if isinstance(view, dict):
+        try:
+            view = {"start": float(view.get("start", 1500.0)),
+                    "end": float(view.get("end", 1900.0))}
+        except (TypeError, ValueError):
+            view = None
+        else:
+            if view["end"] <= view["start"]:
+                view = None
+            else:
+                # 视野按世界坐标存，编辑器里看到的是显示坐标
+                view = {"start": round(view["start"] - origin, 6),
+                        "end": round(view["end"] - origin, 6)}
+                # 存下来的视野完全看不到任何事件时（换世界 / 换原点后常见），自动 fit
+                if not _view_covers_items(view, items):
+                    view = None
+    if view is None:
+        # 默认视野按事件范围铺开，而不是写死 1500–1900
+        view = fit_view_to_items(items, (1500.0 - origin, 1900.0 - origin))
     return {"view": view, "items": items}
 
 

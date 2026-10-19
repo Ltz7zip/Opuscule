@@ -3497,7 +3497,7 @@ function renderTimelineFrame(entry) {
     toast('已重新载入');
   }));
   bar.appendChild(button('↗', '在当前页全屏打开', () => {
-    goInApp(timelineStandaloneUrl(entry));
+    goInApp(timelineStandaloneUrl(entry) + readonlyQuery('?'));
   }));
   bar.appendChild(el('span', 'tl-frame-hint',
     '画布、拖拽、时间段用左侧的经典编辑器；日历与卡片在这里管。'));
@@ -3506,7 +3506,9 @@ function renderTimelineFrame(entry) {
   const frame = el('iframe', 'timeline-frame');
   // 画布跟着宿主走：?theme= 让服务端首屏就是对的颜色，避免先闪一块反色的画布；
   // 后续切主题由 syncEmbeddedTheme 直接改 iframe 文档，不重载编辑器。
-  frame.src = `${timelineStandaloneUrl(entry)}?theme=${themeMode()}`;
+  // 只读（wiki 页面 / 无编辑权限）时必须把 readonly=1 带到 iframe 里，
+  // 否则经典编辑器会按可编辑启动——拖拽、新建、删除全都还在。
+  frame.src = `${timelineStandaloneUrl(entry)}?theme=${themeMode()}${readonlyQuery('&')}`;
   frame.title = `${entry.document.name} · 时间线编辑器`;
   frame.addEventListener('load', syncEmbeddedTheme);
   body.appendChild(frame);
@@ -3528,6 +3530,11 @@ function timelineStandaloneUrl(entry) {
   return entry && entry.worldTimeline
     ? `${PAGE_BASE}/timeline`
     : `${PAGE_BASE}/timeline/${entry.document.id}`;
+}
+
+/** 只读时追加 readonly=1；prefix 是 "?" 或 "&"。 */
+function readonlyQuery(prefix) {
+  return editable() ? '' : prefix + 'readonly=1';
 }
 
 async function ensureTimelineState(entry) {
@@ -3671,10 +3678,24 @@ function eventMetaPanel(entry) {
 function renderTimeline(entry) {
   const wrap = el('div', 'tl-wrap');
   wrap.dataset.doc = String(entry.document.id);
-  const view = { ...(entry.timeline.view || { start: 1500, end: 1900 }) };
+  const events = entry.timeline.events.slice().sort((a, b) => a.year - b.year);
+  // 视野：优先用存过的；没存过、或存下的视野完全看不到事件时，按事件范围自动 fit
+  const drawn = events.flatMap((e) => [e.year, e.year + (Number(e.range_years) || 0)]);
+  const stored = entry.timeline.view;
+  let view;
+  if (stored && Number(stored.end) > Number(stored.start)
+      && (!drawn.length || drawn.some((y) => y >= stored.start && y <= stored.end))) {
+    view = { start: Number(stored.start), end: Number(stored.end) };
+  } else if (drawn.length) {
+    const lo = Math.min(...drawn);
+    const hi = Math.max(...drawn);
+    const pad = Math.max(20, (hi - lo) * 0.1);
+    view = { start: lo - pad, end: hi + pad };
+  } else {
+    view = { start: -100, end: 900 };
+  }
   const calendar = entry.timeline.calendar;
   const eras = entry.timeline.eras.slice().sort((a, b) => a.position - b.position);
-  const events = entry.timeline.events.slice().sort((a, b) => a.year - b.year);
   const ui = entry.tlUi || (entry.tlUi = { selected: null, panel: null, showSettings: false });
   // 深链参数：#doc=<id>&panel=calendar&event=<id>（截图与分享都用得上）
   const hashParams = new URLSearchParams((location.hash || '').replace(/^#/, ''));
@@ -4708,7 +4729,9 @@ function goInApp(url) {
  * 要完整外壳（顶栏 + 两条栏）就走这里。入口在标签页与侧栏那一行的右键菜单上。
  */
 function openStandaloneMap(id) {
-  goInApp(`${PAGE_BASE}/map/2d?doc=${id}${eraQuery()}`);
+  // 只读嵌入（wiki 页面）里不能靠"跳到独立页"绕开只读
+  const ro = editable() ? '' : '&readonly=1';
+  goInApp(`${PAGE_BASE}/map/2d?doc=${id}${eraQuery()}${ro}`);
 }
 
 /**
@@ -8558,15 +8581,24 @@ function announce(message) {
 
 /* ====================================================== 账号与只读模式 */
 /** 把"我是谁、能不能编辑"落到界面上：只读时收起编辑入口，顶栏显示身份。 */
+/** 是不是"只读嵌入"（发布站点的 wiki 页面）：服务端在 body 上写明，前端必须无条件服从。
+    这一层与账号权限无关——哪怕是登录的编辑者，在 wiki 页面里也不能改。 */
+function embedReadonly() {
+  return document.body.dataset.embedReadonly === '1';
+}
+
 /** 现在能不能编辑（只读模式下所有就地编辑都要关掉）。 */
 function editable() {
+  if (embedReadonly()) return false;
   return !S.viewer || S.viewer.can_edit !== false;
 }
 
 function applyViewer(viewer) {
   if (!viewer) return;
   S.viewer = viewer;
-  document.documentElement.dataset.canEdit = viewer.can_edit ? '1' : '0';
+  // wiki 页面里无论登录与否都必须只读
+  const canEdit = Boolean(viewer.can_edit) && !embedReadonly();
+  document.documentElement.dataset.canEdit = canEdit ? '1' : '0';
 
   const chip = $('#userChip');
   const avatar = $('#userAvatar');
@@ -8588,21 +8620,23 @@ function applyViewer(viewer) {
   const bar = $('#readonlyBar');
   const text = $('#readonlyText');
   if (bar && text) {
-    if (viewer.can_edit) {
+    if (canEdit) {
       bar.hidden = true;
     } else {
       bar.hidden = false;
-      text.textContent = viewer.needs_setup
-        ? '还没有账号：先创建所有者账号，之后所有编辑都需要登录。'
-        : (viewer.authenticated
-            ? '你在这个世界里是只读权限，看看就好。'
-            : '只读模式：登录后才能编辑（发布出来的站点一直是公开的）。');
+      text.textContent = embedReadonly()
+        ? '只读浏览：这是发布出来的 wiki 页面。'
+        : (viewer.needs_setup
+            ? '还没有账号：先创建所有者账号，之后所有编辑都需要登录。'
+            : (viewer.authenticated
+                ? '你在这个世界里是只读权限，看看就好。'
+                : '只读模式：登录后才能编辑（发布出来的站点一直是公开的）。'));
     }
   }
   // 只读时把正文的可编辑关掉（重画之后 renderPanels 会再兜一次），
   // 并把写操作入口整个藏起来——"点了才提示登录"对读者是骗点击
-  revealWriteControls(Boolean(viewer.can_edit));
-  if (!viewer.can_edit) disableEditing();
+  revealWriteControls(canEdit);
+  if (!canEdit) disableEditing();
 }
 
 function disableEditing() {
@@ -8715,6 +8749,7 @@ function postToHost(type, payload) {
 
 /** 写操作的统一闸门：没权限就别发请求，直接告诉用户为什么。 */
 function guardWrite() {
+  if (embedReadonly()) return false;
   if (S.viewer && S.viewer.can_edit) return true;
   toast(S.viewer && S.viewer.needs_setup ? '先创建所有者账号再编辑' : '登录后才能编辑', 2600);
   return false;

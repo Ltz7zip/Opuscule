@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
 <desc>Mosquito by sitti fara from the Noun Project, edited by by Azgaar. Source: https://thenounproject.com/term/mosquito/2616575/. License: https://creativecommons.org/licenses/by/3.0</desc>
 <path d="M13.12 60C6.88 35 75.62 7.5 88.12 47.5C94.38 72.5 19.38 78.75 13.12 60z" fill="#fff"/>
 <circle cx="40" cy="48" r="2"/>

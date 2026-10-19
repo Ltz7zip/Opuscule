@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" stroke="none" stroke-linejoin="round" viewBox="-32.143 -32.143 90 90">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" stroke="none" stroke-linejoin="round" viewBox="-32.143 -32.143 90 90">
 <ellipse stroke="none" fill="#999999" fill-opacity=".5" cx="15.28" cy="19.282" rx="12.65" ry="1.244" />
 <polygon
 fill="#7C5125"

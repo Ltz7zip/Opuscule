@@ -15,6 +15,10 @@
 (function () {
   'use strict';
 
+  /* 只读画布（发布站点的 wiki 页面）：由模板在脚本之前注入。
+     这里必须自己再守一遍——CSS 只能藏控件，藏不住已经绑上的事件。 */
+  var READONLY = !!window.CLASSIC_READONLY;
+
   /* ---------------------------------------------------------------- 日历 */
   var MONTHS = 12;
   var DAYS = 30;
@@ -545,6 +549,7 @@
         flag.textContent = item.flagged ? '⚑' : '⚐';
         flag.addEventListener('click', function (event) {
           event.stopPropagation();
+          if (READONLY) return;
           item.flagged = !item.flagged;
           api.update(item.id, payload(item)).then(renderList).catch(function () { toast('标记没保存上'); });
         });
@@ -831,6 +836,8 @@
   function onPointerMove(e) {
     var p = pointerPos(e);
     state.pointer = p;
+    // 只读：不显示「点一下新建」的 + / 时间段预览
+    if (READONLY) { hideMarkers(); return; }
     if (dragging || state.hoverId) return;
     if (state.tool === 'hand') { hideMarkers(); return; }
 
@@ -847,7 +854,7 @@
 
   function onPointerDown(e) {
     if (e.button === 2) {
-      if (state.tool === 'select' && !e.target.closest('.toolbar, .zoom-stack, .help-btn, .editor, .settings, .sel-bar, .help-panel, .empty')) {
+      if (!READONLY && state.tool === 'select' && !e.target.closest('.toolbar, .zoom-stack, .help-btn, .editor, .settings, .sel-bar, .help-panel, .empty')) {
         e.preventDefault();
         startMarquee(e, pointerPos(e));
       }
@@ -867,6 +874,13 @@
     dropCoach();
 
     if (state.tool === 'hand' || dy < -AXIS_ZONE) {
+      hideMarkers();
+      startPan(e, p);
+      return;
+    }
+
+    // 只读：轴线附近 / 下方也不落子，整块画布只用来平移
+    if (READONLY) {
       hideMarkers();
       startPan(e, p);
       return;
@@ -1107,6 +1121,7 @@
   var draftSeq = 1;
 
   function createEventAt(t) {
+    if (READONLY) return;
     var item = {
       id: draftId(), kind: 'event', title: '新事件', start: t, end: t, desc: '',
       row: 0, theme: '', cover: '', cards: [], __draft: true
@@ -1123,6 +1138,7 @@
   }
 
   function createEraAt(t) {
+    if (READONLY) return;
     var half = NEW_ERA_SPAN / 2;
     var item = {
       id: draftId(), kind: 'era', title: '新纪元',
@@ -1214,6 +1230,7 @@
   }
 
   function deleteSelection() {
+    if (READONLY) return;
     var ids = state.selection.slice();
     if (!ids.length) return;
     state.selection = [];
@@ -1239,6 +1256,7 @@
   }
 
   function duplicateSelection() {
+    if (READONLY) return;
     var ids = state.selection.slice();
     if (!ids.length) return;
     markSaving();
@@ -1260,6 +1278,7 @@
 
   /* ============================================================ 拖拽记录 */
   function onEraPointerDown(e) {
+    if (READONLY) return;
     var root = e.currentTarget;
     var item = byId(root.dataset.id);
     if (!item) return;
@@ -1283,6 +1302,7 @@
   }
 
   function onEventPointerDown(e) {
+    if (READONLY) return;
     var root = e.currentTarget.parentNode;
     var item = byId(root.dataset.id);
     if (!item) return;
@@ -1395,6 +1415,7 @@
 
   /* ============================================================== 编辑弹层 */
   function openEditor(item) {
+    if (READONLY) return;
     state.editing = item;
     var isEra = item.kind === 'era';
     var wasOpen = !dom.editor.hidden;
@@ -1546,11 +1567,13 @@
   }
 
   function scheduleCommit() {
+    if (READONLY) return;
     if (commitTimer) clearTimeout(commitTimer);
     commitTimer = setTimeout(function () { commitEditor(true); }, 500);
   }
 
   function commitEditor(silent) {
+    if (READONLY) return;
     var item = state.editing;
     if (commitTimer) { clearTimeout(commitTimer); commitTimer = null; }
     if (!item) return;
@@ -1599,6 +1622,7 @@
   }
 
   function deleteEditing() {
+    if (READONLY) return;
     var item = state.editing;
     if (!item) return;
     if (item.__draft) { closeEditor(); return; }
@@ -1616,6 +1640,7 @@
   }
 
   function duplicateSelected() {
+    if (READONLY) return;
     var item = state.selectedId ? byId(state.selectedId) : null;
     if (!item) { toast('先选中一条记录'); return; }
     var copy = payload(item);
@@ -1633,6 +1658,11 @@
 
   /* ================================================================ 接口 */
   function req(method, url, body) {
+    // 只读兜底：任何非 GET 请求都不发出去，直接给一个假成功，
+    // 免得某条漏网路径把编辑写进 wiki 背后的世界。
+    if (READONLY && method !== 'GET') {
+      return Promise.resolve({ ok: true, readonly: true });
+    }
     return fetch(url, {
       method: method,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -1652,6 +1682,7 @@
   };
 
   function persistView() {
+    if (READONLY) return;
     if (viewTimer) clearTimeout(viewTimer);
     viewTimer = setTimeout(function () {
       api.view({ start: state.view.start, end: state.view.end }).catch(function () {});
@@ -1699,6 +1730,7 @@
   }
 
   function undo() {
+    if (READONLY) return;
     var entry = undoStack.pop();
     if (!entry) { toast('没有可撤销的操作了'); return; }
 
@@ -2098,6 +2130,14 @@
     if (shellBound) return;
     shellBound = true;
 
+    // 只读整页（发布站点把这一页当画布打开）：顶栏的新建 / 保存 / 日历设置都收起来
+    if (READONLY) {
+      ['tlxNewEvent', 'tlxSave', 'tlxCalendarBtn', 'tlxPrecision'].forEach(function (id) {
+        var node = shellNode(id);
+        if (node) node.hidden = true;
+      });
+    }
+
     var newNode = shellNode('tlxNewEvent');
     if (newNode) newNode.addEventListener('click', function () { createEventAt(centerTime()); });
 
@@ -2175,9 +2215,11 @@
     var isEmpty = state.items.length === 0 && !state.loadFailed;
     if (isEmpty) {
       dom.emptyTitle.textContent = '这条时间轴还是空的';
-      dom.emptySub.innerHTML = '把指针移到中间的轴线上，会浮出圆形 <b>+</b>；点一下就在那一刻新建时间点。';
-      dom.emptyNewEvent.hidden = false;
-      dom.emptyNewEra.hidden = false;
+      dom.emptySub.innerHTML = READONLY
+        ? '这里还没有内容。'
+        : '把指针移到中间的轴线上，会浮出圆形 <b>+</b>；点一下就在那一刻新建时间点。';
+      dom.emptyNewEvent.hidden = READONLY;
+      dom.emptyNewEra.hidden = READONLY;
       showPanel(dom.emptyState);
     } else {
       hidePanel(dom.emptyState);
@@ -2445,6 +2487,8 @@
         };
       });
       var v = data.view || {};
+      // 数据到达时若有补间还在跑，它会继续把视野写回旧值，先停掉
+      cancelViewTween();
       if (isFinite(v.start) && isFinite(v.end) && Number(v.end) > Number(v.start)) {
         state.view = { start: Number(v.start), end: Number(v.end) };
         render();

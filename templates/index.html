@@ -491,10 +491,10 @@
       window.fetch = function (input, init) {
         // 只读模式（发布站点里嵌的时候）：写操作直接吞掉，返回一个假的成功响应，
         // 免得编辑器弹一堆"保存失败"。界面上编辑入口也会被 CSS 藏起来。
+        // 这里只看请求方法：不依赖请求是字符串还是 Request 对象、是相对还是绝对地址。
         if (window.CLASSIC_READONLY) {
           var method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
-          var url = typeof input === "string" ? input : (input && input.url) || "";
-          if (method !== "GET" && url.indexOf("/api/") === 0) {
+          if (method !== "GET" && method !== "HEAD") {
             return Promise.resolve(new Response(JSON.stringify({ ok: true, readonly: true }),
               { status: 200, headers: { "Content-Type": "application/json" } }));
           }
@@ -511,6 +511,9 @@
         document.addEventListener("DOMContentLoaded", function () {
           document.body.classList.add("is-readonly");
           if (window.CLASSIC_PAPER) document.body.classList.add("is-paper");
+          // 读者不需要编辑引导，别让它盖住画布
+          var coach = document.getElementById("coach");
+          if (coach) coach.hidden = true;
         });
         // 发布站点的底部工具条通过 postMessage 控制缩放（iframe 里点不到外面的按钮）
         window.addEventListener("message", function (event) {
@@ -561,15 +564,8 @@
           }
         });
 
-        // 载入后自动适应内容：读者一进来就该看到全貌，而不是缩在角落里
-        window.addEventListener("load", function () {
-          setTimeout(function () {
-            var fit = document.getElementById("zoomFit");
-            if (fit) fit.click();
-            var coach = document.getElementById("coach");
-            if (coach) coach.hidden = true;
-          }, 260);
-        });
+        // 视野交给服务端：/classic 返回的 view 已按事件范围铺开。
+        // 不要在这里提前点「适应」——接口还没回来时 items 为空，会先落到空轴的默认视野。
       }
     })();
   </script>

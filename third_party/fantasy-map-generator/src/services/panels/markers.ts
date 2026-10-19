@@ -4,6 +4,7 @@ import { zoomTo } from "@/components/zoom";
 import { hostContext } from "@/services/hosted";
 import { createDropdown, type Dropdown } from "@/services/panels/dropdown";
 import { openMarkerCard } from "@/services/panels/marker-card";
+import { setHostMarkers } from "@/services/panels/host-overlay";
 
 interface Marker {
   id: number;
@@ -14,6 +15,8 @@ interface Marker {
   scale: number;
   x: number;
   y: number;
+  points?: number[][];
+  rotation?: number;
   card: number | null;
   card_name: string | null;
 }
@@ -111,6 +114,8 @@ async function load(): Promise<void> {
   // 文档已不存在（被删掉 / 链接过期）：顶栏写着「地图不存在」，这里也不用去戳那个 id
   if (docMissing) {
     if (count) count.textContent = "—";
+    state = null;
+    setHostMarkers([], {});
     return;
   }
   try {
@@ -200,7 +205,10 @@ function rowFor(marker: Marker): HTMLLIElement {
 }
 
 function render(): void {
-  if (!list || !state) return;
+  if (!state) return;
+  // 左栏列表与地图上的标注是同一份数据，一起刷新
+  setHostMarkers(state.markers, state.color_hex, selected ?? 0);
+  if (!list) return;
   list.replaceChildren(...state.markers.map(rowFor));
   if (count) count.textContent = String(state.markers.length);
   syncBarStats();

@@ -36,6 +36,7 @@ import { drawZones } from "@/renderers/draw-zones";
 import { drawLabels, removeLabels } from "@/renderers/labels/labels-renderer";
 import { drawFogging } from "@/renderers/overlays/fogging";
 import { TradeAnimation } from "@/renderers/trade-animation";
+import { drawHostBackground, drawHostMarkers } from "@/services/panels/host-overlay";
 import { createEl, ensureEl, findEl } from "@/utils/nodeUtils";
 
 interface LayerParams<Id extends string = string> {
@@ -396,7 +397,24 @@ const mapLayers = [
     keepContent: true,
     draw: drawVignette
   }),
-  new Layer({ id: "legend", parent: "map", permanent: true, keepContent: true, draw: redrawLegend })
+  new Layer({ id: "legend", parent: "map", permanent: true, keepContent: true, draw: redrawLegend }),
+  // 宿主叠加层：自定义底图在最下、Opuscule 标注在其上（都在 FMG 各层之上）
+  new Layer({
+    id: "hostBackground",
+    element: "tx-host-background",
+    parent: "viewbox",
+    permanent: true,
+    keepContent: true,
+    draw: drawHostBackground
+  }),
+  new Layer({
+    id: "hostMarkers",
+    element: "tx-host-markers",
+    parent: "viewbox",
+    permanent: true,
+    keepContent: true,
+    draw: drawHostMarkers
+  })
 ];
 
 export type LayerId = (typeof mapLayers)[number]["id"];

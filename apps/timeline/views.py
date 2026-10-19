@@ -79,7 +79,17 @@ def index(request, world_slug=None):
     world = permissions.current_world_or_none()
     if world is None:
         return redirect("/w/")
-    if not world_page_allowed(request, world):
+    readonly = request.GET.get("readonly") in ("1", "true", "yes")
+    # 发布站点会把这一页嵌成只读画布（游客不带登录态）：世界已开站、未被封禁、
+    # 密码档也已解锁时放行；其余口径与站点页一致（见 site_views._get_world）。
+    from apps.world.services import publish as publish_service
+    public_read = (
+        readonly
+        and world.is_published
+        and not world.is_banned
+        and publish_service.can_view(world, request.session)
+    )
+    if not world_page_allowed(request, world) and not public_read:
         return world_page_denied(request, world)
     # 整页壳与工作区同色：?theme= 优先（工作区跳转时带着），否则读世界主题。
     theme_mode = request.GET.get("theme", "")
@@ -90,6 +100,8 @@ def index(request, world_slug=None):
         # 0.7.0：经典编辑器直接读写世界的总时间线（不再是一条时间线文档）
         "classic_api_base": f"/w/{world.slug}/api/world/timeline/classic",
         "classic_title": "世界时间线",
+        "classic_readonly": readonly,
+        "classic_paper": request.GET.get("paper") in ("1", "true", "yes"),
         "classic_theme": theme_mode,
         "world_base": f"/w/{world.slug}",
     })
