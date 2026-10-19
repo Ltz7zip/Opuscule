@@ -40,10 +40,12 @@
       <section class="timeline-embed" id="timelineEmbed">
         <div class="te-bar">
           <h2>时间线</h2>
-          <div class="te-actions">
-            <button type="button" class="te-btn" id="timelineListBtn">列表</button>
-            <button type="button" class="te-btn" id="timelineFullBtn">全屏</button>
-          </div>
+          {% if timeline_embed %}
+            <div class="te-actions">
+              <button type="button" class="te-btn" id="timelineListBtn">列表</button>
+              <button type="button" class="te-btn" id="timelineFullBtn">全屏</button>
+            </div>
+          {% endif %}
         </div>
         {% if timeline_embed %}
           <div class="te-frame-wrap">
@@ -61,26 +63,51 @@
           </div>
         {% endif %}
         {% if events %}
-          <details class="te-list">
-            <summary>用列表看这 {{ events|length }} 个事件</summary>
-            <ol>
-              {% for event in events %}
-                <li>
-                  <span class="ev-date">{{ event.date_label }}</span>
-                  <span class="ev-title">{{ event.title }}</span>
-                  {% if event.linked_cards.all %}
-                    <span class="ev-links">
-                      {% for linked in event.linked_cards.all %}
-                        <a href="{% url 'site:page' world.published_slug linked.slug %}">{{ linked.name }}</a>{% if not forloop.last %}、{% endif %}
-                      {% endfor %}
-                    </span>
-                  {% endif %}
-                </li>
-              {% endfor %}
-            </ol>
-          </details>
+          {% if timeline_embed %}
+            <details class="te-list">
+              <summary>用列表看这 {{ events|length }} 个事件</summary>
+              <ol>
+                {% for event in events %}
+                  <li>
+                    <span class="ev-date">{{ event.date_label }}</span>
+                    <span class="ev-title">{{ event.title }}</span>
+                    {% if event.linked_cards.all %}
+                      <span class="ev-links">
+                        {% for linked in event.linked_cards.all %}
+                          <a href="{% url 'site:page' world.published_slug linked.slug %}">{{ linked.name }}</a>{% if not forloop.last %}、{% endif %}
+                        {% endfor %}
+                      </span>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ol>
+            </details>
+          {% else %}
+            {# 世界总时间线：工作区接口要登录，公开站点直接读服务端排好的事件 #}
+            <div class="timeline-read">
+              <ol>
+                {% for event in events %}
+                  <li>
+                    <span class="ev-date">{{ event.date_label }}</span>
+                    <span class="ev-title">{{ event.title }}</span>
+                    {% if event.linked_cards.all %}
+                      <span class="ev-links">
+                        {% for linked in event.linked_cards.all %}
+                          <a href="{% url 'site:page' world.published_slug linked.slug %}">{{ linked.name }}</a>{% if not forloop.last %}、{% endif %}
+                        {% endfor %}
+                      </span>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ol>
+            </div>
+          {% endif %}
+        {% else %}
+          <p class="empty">这个世界还没有时间线事件。</p>
         {% endif %}
       </section>
+    {% elif canvas_embed %}
+      {# 地图 / 关系树 / 图谱：画布本身是正文，缺省文字不算空页面 #}
     {% else %}
       {% for block in card.blocks %}
         {% if not block.hidden %}

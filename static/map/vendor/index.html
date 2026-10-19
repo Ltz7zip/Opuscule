@@ -41,16 +41,16 @@
     <link rel="canonical" href="https://azgaar.github.io/Fantasy-Map-Generator/" />
     <link rel="manifest" href="manifest.webmanifest" />
     <!-- inline css for loading screen -->
-    <!-- 启动屏：终端设计语言（暖黑画布 + 等宽字 + 一道绿进度条）。
-         写成内联是因为它要在应用 CSS 到位之前就把画面立住，所以取值直接从
-         DESIGN-TERMINAL.md 抄一份，不走 --tx-* 变量。 -->
+    <!-- 启动屏：Minimalist 设计语言（单色画布 + Geist 叙述字 + DM Serif 标题 +
+         一道 1px 发丝进度轨）。写成内联是因为它要在应用 CSS 到位之前就把画面
+         立住，所以取值从 static/map/tokens.css 抄一份，并保留同值 fallback。 -->
     <style type="text/css">
       body {
         margin: 0;
         top: 0 !important;
         font-size: 10px;
         overflow: hidden;
-        background: #121110;
+        background: var(--tx-canvas, #18181b);
       }
       #map {
         position: absolute;
@@ -63,34 +63,39 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #121110;
+        background: var(--tx-canvas, #18181b);
         pointer-events: none;
       }
       #loading-typography {
         width: 78vw;
-        max-width: 440px;
+        max-width: 460px;
         text-align: left;
-        font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-        color: #c9c5be;
+        font-family: var(--tx-sans, "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif);
+        color: var(--tx-body, #a6a6ae);
       }
+      /* 眉标：等宽、字距拉开，和面板里的机器语言同一档 */
       #titleName {
-        font-size: 1.5em;
-        letter-spacing: 0.16em;
+        font-family: var(--tx-mono, "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace);
+        font-size: 11px;
+        letter-spacing: var(--tx-eyebrow-spacing, 0.06em);
         text-transform: uppercase;
-        color: #8f8b84;
+        color: var(--tx-mute, #71717a);
       }
       #title {
-        margin-top: 0.6em;
-        font-size: 3.4em;
-        line-height: 1.15;
-        color: #f4f2ee;
+        margin-top: 12px;
+        font-family: "DM Serif Display", "EB Garamond", Georgia, serif;
+        font-size: clamp(34px, 5vw, 52px);
+        font-weight: 400;
+        line-height: 1.1;
+        letter-spacing: -0.015em;
+        color: var(--tx-ink, #fafafa);
       }
-      /* 不定量进度条：一条发丝轨 + 一段滑动的绿 */
+      /* 不定量进度条：1px 发丝轨 + 一段滑动的主色 */
       #loading-bar {
         position: relative;
-        height: 2px;
-        margin: 1.8em 0 1.1em;
-        background: #2c2a27;
+        height: 1px;
+        margin: 24px 0 14px;
+        background: var(--tx-hairline, rgba(250, 250, 250, 0.1));
         overflow: hidden;
       }
       #loading-bar > span {
@@ -99,14 +104,15 @@
         left: 0;
         width: 34%;
         height: 100%;
-        background: #3ddc97;
+        background: var(--tx-ink, #fafafa);
         animation: 1.2s ease-in-out infinite sweep;
       }
       #loading-text {
         margin: 0;
-        font-size: 1.7em;
-        letter-spacing: 0.06em;
-        color: #8f8b84;
+        font-family: var(--tx-mono, "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        color: var(--tx-mute, #71717a);
       }
       #loading-text > span {
         animation: 1.2s infinite both blink;
@@ -118,19 +124,16 @@
         animation-delay: 0.4s;
       }
       #loading-hint {
-        margin: 1.4em 0 0;
-        font-size: 1.2em;
-        line-height: 1.6;
-        color: #67635d;
+        margin: 16px 0 0;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--tx-dim, #52525b);
       }
       /* 上游会把生成器版本号写进这里；我们的启动屏不该出现别人的版本号 */
       #versionText {
         display: none;
       }
       @media screen and (max-width: 600px) {
-        #title {
-          font-size: 2.4em;
-        }
         #loading-hint {
           display: none;
         }
@@ -182,7 +185,7 @@
         this.rel = 'stylesheet';
       "
     />
-    <script type="module" crossorigin src="/static/map/vendor/index-BdCdSELe.js"></script>
+    <script type="module" crossorigin src="/static/map/vendor/index-lTzorqRn.js"></script>
     <link rel="modulepreload" crossorigin href="/static/map/vendor/rolldown-runtime-QTnfLwEv.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/utils-Dk4MDzbZ.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/draw-landmass-B2Lw9Bcp.js">
@@ -197,43 +200,43 @@
     <link rel="modulepreload" crossorigin href="/static/map/vendor/natural-kerJ22Hb.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/state-B2hBYDzv.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/viewport-C0deAIKO.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/controllers-C2OtiXZ_.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/layers-BpUy7Q_B.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/controllers-CTfyQhlk.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/hosted-BMyQ7M35.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/layers-DCXJRYE9.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/mean-4Awewi9R.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/median-0Tc6lw5O.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/sum-BpJJqxFM.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/highlight-BA-X3wTZ.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/extent-V-JVJWfI.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/schemaUtils-B2thnuln.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/styles-B3Rx-wD0.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/relief-generator-CvNOB_mX.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/styles-BAziO62H.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/relief-generator-BI0DCFVU.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/dialog-helpers-MF-Ear8n.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/validationUtils-cfDkYsje.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/notes-Cl6G6xdC.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/notes-DG5Ag6TW.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/drag-Dc9_zdw7.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/zoom-CpKDTCs6.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/viewbox-events-bX9taDxt.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/zoom-CiYn6oZo.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/viewbox-events-BYU-vEWY.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/population-generator-BKslz7iX.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/cultures-generator-BZQiuzLd.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/options-schema-MDTOWXDp.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/layer-labels-C6lPCAWi.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/layers-tab-B-wY0FXQ.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/view-mode-BfF4zIUe.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/layers-tab-iNymJj5i.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/view-mode-BaECDGy8.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/pins-L9rE4G31.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/graph-override-DI_9iVOo.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/generation-pipeline-efzL-V7h.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/graph-override-C71UjRtI.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/generation-pipeline-BJtGx-BM.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/names-generator-BDhdgsxI.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/view-3d-options-BhMg3vBH.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/features-generator-BTJudBZO.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/features-generator-B11G9OYX.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/labels-generator-Dm649lCC.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/styles-legacy-mj6f1ITi.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/styles-legacy-aml3Mb2H.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/transports-generator-Dv1kk2bu.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/fonts-0hh8hzjh.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/hosted-Dfq82Jeo.js">
     <link rel="modulepreload" crossorigin href="/static/map/vendor/town-plans-CSwL3uPD.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/town-plan-51iGvsf4.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/versioning-QgyR9nm8.js">
-    <link rel="modulepreload" crossorigin href="/static/map/vendor/options-tab-CvGZP1eW.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/town-plan-C20fDUBr.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/versioning-D9YLfEif.js">
+    <link rel="modulepreload" crossorigin href="/static/map/vendor/options-tab-BP8xLyAH.js">
   </head>
   <body>
     <svg

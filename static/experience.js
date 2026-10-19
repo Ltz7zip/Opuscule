@@ -10,7 +10,7 @@
    也会活着，默默接管一批站内通用的细节。
 
    它管的事（按触发时机大致排列）：
-     · 导航进度线（跳转时顶部那条线）· 打字机标题与开场遮罩
+     · 导航进度线（跳转时顶部那条线）· 打字机标题/正文与开场遮罩
      · Ripple 点击波纹与焦点样式     · 滚动到视口时淡入 + 错峰
      · 分级 Toast 提示               · 离线徽标与待同步计数
      · 面板切换动效（扫描线 / 交叠）  · 离开页面时用 beacon 上报
@@ -276,6 +276,117 @@
       text.nodeValue = full.slice(0, ++index);
       setTimeout(tick, step);
     })();
+  })();
+
+  /* ======================================================================
+     Wiki 文档页打字机：标题先写，首段跟上
+     ----------------------------------------------------------------------
+     首页那次是"一次会话只演一次"；文档页不一样——它是每篇文章的开场，所以
+     每次打开都演。落笔前先把要写的字收起来（量好高度，页面不跳），等开场
+     遮罩 400ms / 跨文档共享元素 380ms 走完再开始，不然观众只看得到后半句。
+     写完把原始 HTML 放回去，所以 <br>、链接这些结构一点没动。
+     ====================================================================== */
+  (function docTypewriter() {
+    const article = $('.site article.page');
+    if (!article || reduced()) return;
+    const title = $('.doc-title', article);
+    if (!title) return;
+
+    // 第一段要挑「真正文」：小标题在这套数据里也会渲染成 <p>（"概览"之类），
+    // 太短的段落不碰，直接从第一个像句子的段落开始写
+    const lead = Array.prototype.find.call(article.children, (node) => {
+      if (node.tagName !== 'P' || node.classList.contains('empty')) return false;
+      const text = (('innerText' in node ? node.innerText : node.textContent) || '').trim();
+      return text.length >= 20;
+    });
+    let titlePart = null;
+    let leadPart = null;
+    let prepared = false;
+
+    // 预渲染文档先别量、别清空：清早了，跨文档过渡的新快照会拿到空标题。
+    // 等它真的被展示（prerenderingchange）再走和普通打开一样的节拍。
+    if (document.prerendering) {
+      document.addEventListener('prerenderingchange', () => {
+        setTimeout(prepare, 380);
+        setTimeout(start, 420);
+      }, { once: true });
+      return;
+    }
+    // 380ms：跨文档共享元素（380ms）已经拍完快照，标题以完整形态飞过去；
+    // 此时遮罩还盖着（400ms），清空换手观众看不见。等到 420ms 再落笔。
+    setTimeout(prepare, 380);
+    setTimeout(start, 420);
+
+    function prepare() {
+      if (prepared) return;
+      prepared = true;
+      titlePart = measure(title, 48);
+      leadPart = lead ? measure(lead, 260) : null;
+    }
+
+    function start() {
+      if (titlePart) {
+        typeInto(titlePart, pace(titlePart.text, 620, 14, 34), () => {
+          if (leadPart) typeInto(leadPart, pace(leadPart.text, 1100, 7, 30));
+        });
+      } else if (leadPart) {
+        typeInto(leadPart, pace(leadPart.text, 1100, 7, 30));
+      }
+    }
+
+    /* 量好高度、收起原文。太长的文案不逐字写——等太久就不酷了。 */
+    function measure(node, limit) {
+      const text = (('innerText' in node ? node.innerText : node.textContent) || '').trim();
+      if (!text || text.length > limit) return null;
+      const part = {
+        node,
+        text,
+        html: node.innerHTML,
+        whiteSpace: node.style.whiteSpace,
+        label: node.getAttribute('aria-label'),
+      };
+      const height = node.getBoundingClientRect().height;
+      if (height) node.style.minHeight = `${Math.ceil(height)}px`;
+      node.setAttribute('aria-label', text);   // 视觉上逐字出现，读屏仍一次读全
+      node.textContent = '';
+      return part;
+    }
+
+    function typeInto(part, step, done) {
+      const node = part.node;
+      node.classList.add('xp-type');
+      node.removeAttribute('data-done');
+      node.style.whiteSpace = 'pre-line';      // innerText 里的 \n 就是 linebreaksbr 的换行
+      const typed = document.createTextNode('');
+      const caret = el('span', 'xp-caret');
+      caret.setAttribute('aria-hidden', 'true');
+      node.appendChild(typed);
+      node.appendChild(caret);
+      let index = 0;
+      (function tick() {
+        if (index < part.text.length) {
+          typed.nodeValue = part.text.slice(0, ++index);
+          setTimeout(tick, step);
+          return;
+        }
+        node.dataset.done = '1';
+        // 收笔：还原原始结构（<br> 等），把高度和 aria 也还回去
+        setTimeout(() => {
+          node.innerHTML = part.html;
+          node.style.minHeight = '';
+          node.style.whiteSpace = part.whiteSpace;
+          node.classList.remove('xp-type');
+          delete node.dataset.done;
+          if (part.label === null) node.removeAttribute('aria-label');
+          else node.setAttribute('aria-label', part.label);
+          if (done) done();
+        }, 220);
+      })();
+    }
+
+    function pace(text, budget, floor, ceiling) {
+      return Math.max(floor, Math.min(ceiling, Math.round(budget / text.length)));
+    }
   })();
 
   /* ======================================================================

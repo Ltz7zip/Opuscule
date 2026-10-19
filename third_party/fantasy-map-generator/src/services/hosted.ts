@@ -20,6 +20,8 @@ export interface HostContext {
   //: 三维联动（PLAN §4.4 B）：当前纪元（0 = 全部）+ 要高亮的卡片（0 = 无）
   eraId: number;
   focusCardId: number;
+  //: 自定义底图（Document.settings）：url 为空表示不铺底图
+  background: { url: string; zoom: number; offset_x: number; offset_y: number };
 }
 
 const FALLBACK: HostContext = {
@@ -34,7 +36,8 @@ const FALLBACK: HostContext = {
   apiBase: "/api/world/maps",
   lang: "zh",
   eraId: 0,
-  focusCardId: 0
+  focusCardId: 0,
+  background: { url: "", zoom: 1, offset_x: 0, offset_y: 0 }
 };
 
 /** 是否跑在宿主的页面里（由构建期注入的 window.__OPUSCULE_HOSTED__ 标记） */

@@ -17,7 +17,7 @@ import mimetypes
 from urllib.parse import quote
 
 from .. import permissions
-from ..classic import axis_origin
+from ..classic import axis_origin, fit_view_to_items
 from ..models import (
     CAL_EARTH,
     DEFAULT_THEME,
@@ -283,20 +283,45 @@ def timeline_state(document) -> dict:
         .prefetch_related("linked_cards")
         .order_by("year", "month", "day", "hour", "id")
     )
+    event_rows = [event.to_payload(origin) for event in events]
     view = settings_.get("view")
-    if not isinstance(view, dict):
-        view = {
-            "start": float(settings_.get("view_start", -100.0) or -100.0),
-            "end": float(settings_.get("view_end", 900.0) or 900.0),
-        }
-    view = {key: round(float(value) - origin, 4) for key, value in view.items()}
+    if isinstance(view, dict):
+        try:
+            view = {key: round(float(value) - origin, 4) for key, value in view.items()}
+        except (TypeError, ValueError):
+            view = None
+        else:
+            # 视野完全看不到任何事件时自动 fit（换世界 / 改原点后常见）
+            spans = [(row["year"], row["year"] + (row.get("range_years") or 0.0))
+                     for row in event_rows]
+            visible = any(view.get("start", 0) <= hi and lo <= view.get("end", 0)
+                          for lo, hi in spans)
+            if view.get("end", 0) <= view.get("start", 0) or (spans and not visible):
+                view = None
+    else:
+        legacy_start = settings_.get("view_start")
+        legacy_end = settings_.get("view_end")
+        if legacy_start is None and legacy_end is None:
+            view = None
+        else:
+            try:
+                view = {"start": round(float(legacy_start if legacy_start is not None else -100.0) - origin, 4),
+                        "end": round(float(legacy_end if legacy_end is not None else 900.0) - origin, 4)}
+            except (TypeError, ValueError):
+                view = None
+    if view is None:
+        # 没有存过的视野时按事件范围铺开，而不是写死 -100~900
+        view = fit_view_to_items(
+            [{"kind": "event", "start": row["year"],
+              "end": row["year"] + (row.get("range_years") or 0.0)} for row in event_rows]
+        )
     return {
         "document": document.to_payload(),
         "origin_year": origin,
         "calendar": calendar.to_payload(),
         "calendars": [item.to_payload() for item in calendars],
         "eras": [era.to_payload(origin) for era in world.eras.order_by("position", "id")],
-        "events": [event.to_payload(origin) for event in events],
+        "events": event_rows,
         "view": view,
         "presets": PRESET_CALENDARS if "PRESET_CALENDARS" in globals() else [],
     }

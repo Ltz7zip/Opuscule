@@ -399,9 +399,14 @@ def site_sections(world: World, documents=None, include_timeline: bool = True) -
     for document in (documents if documents is not None else site_documents(world)):
         if document.document_type == DOC_TIMELINE:
             key, title = "timeline", "时间线"
-        else:
+        elif document.document_type == DOC_CARD:
+            # 卡片按「实体类型」分栏；没挂类型的才进"未分类"
             type_name = document.entity_type.name if document.entity_type else "未分类"
             key, title = f"type:{type_name}", type_name
+        else:
+            # 地图 / 图谱 / 关系树等工具型文档按文档类型分栏，不再混进"未分类"
+            key = f"doctype:{document.document_type}"
+            title = document.get_document_type_display()
         section = sections.setdefault(key, {"key": key, "title": title, "documents": []})
         section["documents"].append(document)
     order = {"timeline": 0}

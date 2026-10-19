@@ -334,7 +334,7 @@ def page(request, slug, doc_slug):
 
 
 def _timeline_page(request, world: World, timeline):
-    """站点上的世界总时间线：服务端把事件排好直接渲染（工作区接口要登录）。"""
+    """站点上的世界总时间线：默认嵌只读画布，事件列表作为可切换的备份视图。"""
     context = _site_base(world, request=request)
     context.update({
         "document": publish_service.SiteTimeline(),
@@ -342,7 +342,11 @@ def _timeline_page(request, world: World, timeline):
         "related": [],
         "is_timeline": True,
         "canvas_embed": False,
-        "timeline_embed": "",
+        # 只读画布读世界级 classic 接口；allow_public_read 已对游客放行这条读路径。
+        "timeline_embed": (
+            f"/w/{world.slug}/timeline?readonly=1&paper=1"
+            f"&theme={context['theme_mode']}"
+        ),
         "events": publish_service.timeline_events(world),
         "timeline": timeline,
         "eras": context["site_eras"],

@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" stroke-width="1.24" viewBox="0 0 90 90">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" stroke-width="1.24" viewBox="0 0 90 90">
 <g stroke-linecap="round" stroke-linejoin="round">
 <path d="M20.25 51.75Q22.5 45 20.25 38.25L13.5 31.5L15.75 31.5L24.75 38.25L31.5 31.5L33.75 31.5L25.875 40.5Q23.625 47.25 27 51.75Z" fill="#a18c69" />
 <path d="M6.75 31.5Q4.5 24.75 13.5 24.75Q15.75 19.125 22.5 22.5Q29.25 18 36 23.625Q45 22.5 40.5 31.5Q33.75 33.75 27 31.5Q20.25 33.75 13.5 32.175Z" fill="#838060" />

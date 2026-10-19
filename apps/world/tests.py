@@ -2588,6 +2588,20 @@ class AdminHardeningTests(BaseWorldCase):
         # admin.site 是 LazyObject；访问 __class__ 会触发它加载 default_site
         self.assertEqual(django_admin.site.__class__.__name__, "OpusculeAdminSite")
 
+    def test_world_models_are_registered_on_the_active_site(self):
+        """世界模型必须挂在真正生效的 admin.site 上。
+
+        ``default_site`` 曾指向 ``apps.world.admin``，该模块在导入时执行
+        ``@admin.register(World)``，触发 LazyObject 重入，世界模型被注册到废弃实例上，
+        后台访问 ``world/world/`` 直接 404。
+        """
+        from django.contrib import admin as django_admin
+
+        from apps.world.models import EntityType, World
+
+        self.assertIn(World, django_admin.site._registry)
+        self.assertIn(EntityType, django_admin.site._registry)
+
     def test_site_keeps_admin_namespace(self):
         """OTPAdminSite 默认 name='otpadmin' 会拆掉 admin: 命名空间，必须钉回 admin。"""
         from django.contrib import admin as django_admin
@@ -4184,14 +4198,93 @@ class SiteWorldTimelineTests(BaseWorldCase):
         home = self.client.get(f"/s/{self.slug}/").content.decode()
         self.assertIn("世界时间线", home)
 
-    def test_timeline_page_lists_events_without_embedding_the_workspace(self):
+    def test_timeline_page_embeds_a_readonly_canvas(self):
+        # 先建一个无关账号，让"游客"口径生效（库里没用户时世界页一律放行）
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_user("读站的人", password="very-secret-1")
         page = self.client.get(f"/s/{self.slug}/timeline/")
         self.assertEqual(page.status_code, 200)
         body = page.content.decode()
         self.assertIn("城门落成", body)
         self.assertIn("无关的事", body)
-        # 公开站点不能 iframe 工作区（接口要登录），只给服务端排好的事件列表
-        self.assertNotIn('id="timelineFrame"', body)
+        # 默认就是画布：iframe 指向世界总时间线的只读嵌入页
+        self.assertIn('id="timelineFrame"', body)
+        self.assertIn("readonly=1", body)
+
+        # 画布那一页游客也能打开，并注入只读模式
+        canvas = self.client.get(f"/w/{self.world.slug}/timeline?readonly=1&paper=1")
+        self.assertEqual(canvas.status_code, 200)
+        self.assertContains(canvas, "window.CLASSIC_READONLY = true")
+
+        # 画布的数据接口：已发布世界对游客放行，事件能读到
+        api = self.client.get(f"/w/{self.world.slug}/api/world/timeline/classic")
+        self.assertEqual(api.status_code, 200)
+        titles = [item["title"] for item in api.json()["items"] if item["kind"] == "event"]
+        self.assertIn("城门落成", titles)
+
+    def test_timeline_canvas_stays_private_before_publishing(self):
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_user("读站的人", password="very-secret-1")
+        publish.unpublish(self.world)
+        canvas = self.client.get(f"/w/{self.world.slug}/timeline?readonly=1&paper=1")
+        self.assertNotEqual(canvas.status_code, 200)
+        api = self.client.get(f"/w/{self.world.slug}/api/world/timeline/classic")
+        self.assertEqual(api.status_code, 401)
+
+    def test_logged_in_editor_still_gets_readonly_canvas_on_site(self):
+        """发布站点里即便是能编辑的人，画布也必须按只读渲染。"""
+        from django.contrib.auth import get_user_model
+
+        from .permissions import ensure_membership
+
+        editor = get_user_model().objects.create_user("站点编辑者", password="very-secret-1")
+        ensure_membership(editor, self.world, ROLE_EDITOR)
+        self.client.force_login(editor)
+
+        page = self.client.get(f"/s/{self.slug}/timeline/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("readonly=1", page.content.decode())
+
+        canvas = self.client.get(f"/w/{self.world.slug}/timeline?readonly=1&paper=1")
+        self.assertContains(canvas, "window.CLASSIC_READONLY = true")
+
+    def test_site_canvas_embed_page_is_readonly_for_editors_too(self):
+        """wiki 的地图 / 关系树 / 图谱 iframe 必须带 data-embed-readonly="1"。"""
+        from django.contrib.auth import get_user_model
+
+        from .permissions import ensure_membership
+
+        editor = get_user_model().objects.create_user("站点编辑者", password="very-secret-1")
+        ensure_membership(editor, self.world, ROLE_EDITOR)
+        self.client.force_login(editor)
+        document = Document.objects.create(world=self.world, document_type="map", name="大陆地图")
+
+        page = self.client.get(f"/s/{self.slug}/{document.slug}/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(f"/w/{self.world.slug}?embed={document.id}&readonly=1",
+                      page.content.decode())
+
+        embed = self.client.get(f"/w/{self.world.slug}?embed={document.id}&readonly=1")
+        self.assertEqual(embed.status_code, 200)
+        self.assertContains(embed, 'data-embed-readonly="1"')
+
+    def test_classic_canvas_write_is_rejected_for_guest_and_viewer(self):
+        """经典时间线画布的写接口：游客 401，只读成员 403（嵌入页不能成为后门）。"""
+        from django.contrib.auth import get_user_model
+
+        from .permissions import ensure_membership
+
+        # 先建成员，让"库里没有用户时放行"的首次安装例外不再生效
+        viewer = get_user_model().objects.create_user("只读成员", password="very-secret-2")
+        ensure_membership(viewer, self.world, "viewer")
+        endpoint = f"/w/{self.world.slug}/api/world/timeline/classic/items"
+        payload = {"kind": "event", "title": "偷偷加的", "year": 3}
+
+        self.client.force_login(viewer)
+        self.assertEqual(self.post_json(endpoint, payload).status_code, 403)
+
+        self.client.logout()
+        self.assertEqual(self.post_json(endpoint, payload).status_code, 401)
 
     def test_timeline_events_can_be_searched(self):
         found = self.client.get(f"/s/{self.slug}/search?q=城门").content.decode()

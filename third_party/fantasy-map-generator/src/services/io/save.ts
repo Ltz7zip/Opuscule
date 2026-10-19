@@ -98,6 +98,9 @@ function prepareMapData(): string {
   if (cloneTradeAnimation) cloneTradeAnimation.innerHTML = ""; // always remove transient trade animations
   cloneEl.querySelector("#journeyOverlay")?.remove(); // transient journey path-editing handles
   cloneEl.querySelector("#journeyTravel")?.remove(); // transient journey travel animation
+  // 宿主叠加层由 Django 的 ctx 重新画，不属于地图存档内容
+  cloneEl.querySelector("#tx-host-background")?.remove();
+  cloneEl.querySelector("#tx-host-markers")?.remove();
 
   const serializedSVG = new XMLSerializer().serializeToString(cloneEl);
 

@@ -12,7 +12,7 @@
 <script>
   document.documentElement.dataset.mapHost =
     "{% if shell.show_bar %}bar{% else %}embed{% endif %}";
-  {% if not shell.can_edit %}document.documentElement.dataset.mapReadonly = "1";{% endif %}
+  {% if shell.readonly %}document.documentElement.dataset.mapReadonly = "1";{% endif %}
 </script>
 {# 图标集：顶栏与面板的图标都从这里取；嵌入版没有顶栏，但面板一样要图标。 #}
 {# defer：同步脚本会挡住后面的 <header>，首次渲染时外壳还没有顶栏， #}

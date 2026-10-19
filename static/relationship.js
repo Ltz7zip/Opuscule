@@ -75,7 +75,12 @@
   /* ---------------------------------------------------------------- 请求 */
   function api(path, options) {
     options = options || {};
-    var init = { method: options.method || 'GET', headers: { 'Content-Type': 'application/json' } };
+    var method = (options.method || 'GET').toUpperCase();
+    // 只读兜底：wiki 页面里任何写请求都不该发出去（UI 已守卫，这里再守一层）
+    if (READONLY && method !== 'GET' && method !== 'HEAD') {
+      return Promise.resolve({ ok: true, readonly: true });
+    }
+    var init = { method: method, headers: { 'Content-Type': 'application/json' } };
     if (options.body !== undefined) init.body = JSON.stringify(options.body);
     return fetch(path, init).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (data) {
