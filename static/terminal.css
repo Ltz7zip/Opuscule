@@ -1984,7 +1984,7 @@ html.has-rail-sidebar .sidebar { height: auto; align-self: stretch; }
   font: inherit; font-size: 12.5px; cursor: pointer;
 }
 .page-action:hover { background: var(--tx-canvas-raised); color: var(--tx-ink); }
-.page-emoji { font-size: 30px; line-height: 1.2; }
+.page-emoji { display: inline-flex; align-items: center; font-size: 30px; line-height: 1.2; }
 
 /* 页面级评论（标题下方）：头像 + 作者 + 时间 + 正文，末尾一个撰写条 */
 .page-comments { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 16px; }
@@ -2077,7 +2077,7 @@ html.has-rail-sidebar .sidebar { height: auto; align-self: stretch; }
   text-align: left;
 }
 .cb-card:hover { background: var(--tx-canvas-raised); }
-.cb-cicon { flex: 0 0 auto; font-size: 13px; }
+.cb-cicon { flex: 0 0 auto; display: inline-flex; align-items: center; font-size: 13px; }
 .cb-cname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 看板 */
@@ -2149,9 +2149,11 @@ html.has-rail-sidebar .sidebar { height: auto; align-self: stretch; }
 .icon-picker .ip-head { padding: 2px 4px 8px; font-size: 12px; color: var(--tx-dim); }
 .icon-picker .ip-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
 .icon-picker .ip-cell {
+  display: inline-flex; align-items: center; justify-content: center;
   height: 30px; border: 0; border-radius: 4px; background: transparent;
   font-size: 18px; line-height: 1; cursor: pointer;
 }
+.icon-picker .ip-cell svg { width: 18px; height: 18px; }
 .icon-picker .ip-cell:hover { background: var(--tx-canvas-raised); }
 .icon-picker .ip-input {
   width: 100%; margin-top: 8px; padding: 7px 9px;

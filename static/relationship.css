@@ -522,12 +522,7 @@
   color: var(--mn-ink-dim);
 }
 
-.rt-node.is-empty .rt-card::after {
-  content: "＋";
-  font-size: 34px;
-  font-weight: 300;
-  line-height: 1;
-}
+.rt-node.is-empty .rt-card > svg.icon { display: block; opacity: .7; }
 
 .rt-portrait {
   position: absolute;
@@ -616,6 +611,8 @@
   z-index: 3;
   transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
+
+.rt-handle svg { display: block; }
 
 .rt-node:hover .rt-handle,
 .rt-node.is-selected .rt-handle { opacity: 1; }

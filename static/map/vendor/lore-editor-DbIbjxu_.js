@@ -1,4 +1,4 @@
-import{P as e}from"./utils-Dk4MDzbZ.js?v=2";import{t}from"./pins-L9rE4G31.js?v=2";import{t as n}from"./names-generator-BDhdgsxI.js?v=2";import{i as r,n as i}from"./dialog-helpers-MF-Ear8n.js?v=2";import{t as a}from"./lore-EzhLGfXg.js?v=2";var o=`loreEditor`,s=`
+import{P as e}from"./utils-Dk4MDzbZ.js";import{t}from"./pins-L9rE4G31.js";import{t as n}from"./names-generator-BDhdgsxI.js";import{i as r,n as i}from"./dialog-helpers-MF-Ear8n.js";import{t as a}from"./lore-EzhLGfXg.js";var o=`loreEditor`,s=`
   <style>
     #${o} .le { display: grid; grid-template-columns: 1em 5.6em minmax(0, 1fr) 1.2em; gap: .3em; align-items: center; width: 23em; }
     #${o} .le > label[for="loreDescription"] { align-self: start; padding-top: .35em; }

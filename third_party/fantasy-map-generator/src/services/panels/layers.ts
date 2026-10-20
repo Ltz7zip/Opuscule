@@ -326,7 +326,7 @@ function rowFor(id: LayerId): HTMLLIElement {
     move.type = "button";
     move.className = "tx-iconbtn";
     move.dataset.move = direction;
-    move.textContent = direction === "up" ? "↑" : "↓";
+    move.append(markFor(direction === "up" ? "arrow-up" : "arrow-down", 12, "tx-iconbtn__icon"));
     move.title = `把这一层${label}一层`;
     move.disabled = !reorderable(id);
     item.append(move);

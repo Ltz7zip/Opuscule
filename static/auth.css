@@ -1098,7 +1098,8 @@ html.js .auth-keys { display: flex; }
   transition: background-color var(--g-t-fast) var(--g-ease), opacity var(--g-t-fast) var(--g-ease);
 }
 .auth-submit-label, .auth-submit-arrow { position: relative; z-index: 2; }
-.auth-submit-arrow { font-style: normal; transition: transform var(--g-t) var(--g-ease); }
+.auth-submit-arrow { font-style: normal; transition: transform var(--g-t) var(--g-ease); display: inline-flex; align-items: center; }
+.auth-submit-arrow svg { display: block; }
 .auth-submit:hover:not(:disabled) { background: var(--g-accent-hover); }
 .auth-submit:hover:not(:disabled) .auth-submit-arrow { transform: translateX(3px); }
 .auth-submit:active:not(:disabled) { transform: scale(0.97); }

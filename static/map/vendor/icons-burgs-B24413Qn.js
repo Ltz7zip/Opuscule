@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -6 12 12">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -6 12 12">
 <circle r="3.5" />
 <circle r=".375" fill="none" />
 </svg>

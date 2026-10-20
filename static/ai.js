@@ -168,9 +168,9 @@
       '  <span class="ai-mark" aria-hidden="true">AI</span>',
       '  <div class="ai-title"><b>AI 助手</b><span class="ai-sub" id="aiSub"></span></div>',
       '  <div class="ai-acts">',
-      '    <button class="ai-icon" id="aiNew" type="button" title="新对话">＋</button>',
-      '    <button class="ai-icon" id="aiGear" type="button" title="供应商设置">⚙</button>',
-      '    <button class="ai-icon" id="aiClose" type="button" title="关闭（Esc）">✕</button>',
+      '    <button class="ai-icon" id="aiNew" type="button" title="新对话"><span data-icon="plus" data-icon-size="15" aria-hidden="true"></span></button>',
+      '    <button class="ai-icon" id="aiGear" type="button" title="供应商设置"><span data-icon="settings" data-icon-size="15" aria-hidden="true"></span></button>',
+      '    <button class="ai-icon" id="aiClose" type="button" title="关闭（Esc）"><span data-icon="x" data-icon-size="15" aria-hidden="true"></span></button>',
       '  </div>',
       '</header>',
       '<div class="ai-scroll" id="aiBody"></div>',
@@ -180,6 +180,7 @@
       '</footer>',
     ].join('');
     document.body.appendChild(drawer);
+    if (window.hydrateIcons) window.hydrateIcons(drawer);
 
     body = drawer.querySelector('#aiBody');
     sub = drawer.querySelector('#aiSub');
@@ -458,7 +459,8 @@
     const box = el('div', 'ai-code');
     const head = el('div', 'ai-code-head');
     head.appendChild(el('span', 'ai-code-lang', lang || 'text'));
-    const copy = el('button', 'ai-code-copy', '⧉');
+    const copy = el('button', 'ai-code-copy');
+    copy.innerHTML = window.iconHtml ? window.iconHtml('copy', 12) : '⧉';
     copy.type = 'button';
     copy.title = '复制代码';
     copy.dataset.act = 'copy-code';
@@ -692,10 +694,13 @@
   function thinkBlock(text) {
     const box = el('details', 'ai-think');
     const head = el('summary', 'ai-think-head');
-    head.appendChild(el('span', 'ai-think-caret'));
+    const caret = el('span', 'ai-think-caret');
+    if (window.iconHtml) caret.innerHTML = window.iconHtml('chevron-right', 10);
+    head.appendChild(caret);
     head.appendChild(el('span', 'ai-think-title', '推理'));
     head.appendChild(el('span', 'ai-think-meta', `${text.length} 字符`));
-    const copy = el('button', 'ai-think-copy', '⧉');
+    const copy = el('button', 'ai-think-copy');
+    copy.innerHTML = window.iconHtml ? window.iconHtml('copy', 12) : '⧉';
     copy.type = 'button';
     copy.title = '复制思考内容';
     copy.dataset.act = 'copy-think';

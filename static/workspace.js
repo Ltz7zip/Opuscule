@@ -101,7 +101,9 @@ function renderSetupCard() {
   if (setup) setup.hidden = done >= checks.length;
   list.innerHTML = '';
   checks.forEach(([label, ok, run]) => {
-    const item = el(ok ? 'span' : 'button', `su-item${ok ? ' is-done' : ''}`, label);
+    const item = el(ok ? 'span' : 'button', `su-item${ok ? ' is-done' : ''}`);
+    item.appendChild(icon(ok ? 'check' : 'circle', 11));
+    item.appendChild(el('span', null, label));
     if (!ok) {
       item.type = 'button';
       item.title = `${label} —— 点这里开始`;
@@ -126,8 +128,12 @@ const VT_HINT = {
 };
 const PRECISION_LABEL = { year: '年', month: '月', day: '日', time: '时间' };
 const PUBLISH_LABEL = {
-  live: '● 已发布', stale: '◐ 有改动未发布', pending: '○ 尚未上线',
-  unpublished: '— 未发布站点', excluded: '☾ 已排除',
+  live: '已发布', stale: '有改动未发布', pending: '尚未上线',
+  unpublished: '未发布站点', excluded: '已排除',
+};
+const PUBLISH_ICON = {
+  live: 'circle-check', stale: 'circle-dot', pending: 'circle',
+  unpublished: 'minus', excluded: 'moon',
 };
 const ERA_COLORS = {
   blue: [98, 105, 128], sky: [52, 117, 243], violet: [82, 81, 193],
@@ -181,10 +187,27 @@ const S = {
 /* ----------------------------------------------------------------- 小工具 */
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-const el = (tag, cls, text) => {
+const el = (tag, cls, content) => {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
-  if (text !== undefined && text !== null) node.textContent = text;
+  if (content instanceof Node) node.appendChild(content);
+  else if (content !== undefined && content !== null) node.textContent = content;
+  return node;
+};
+
+/** 「图标 + 文字」拼成的一段内容。全站的图标都走 icons.js 那套线性图标，
+ *  不要再往按钮文案里塞 ＋ / ✕ / ★ 这类字符。 */
+const iconLabel = (name, text, size = 14) => {
+  const wrap = el('span', 'ic-label');
+  wrap.appendChild(icon(name, size));
+  if (text) wrap.appendChild(el('span', null, text));
+  return wrap;
+};
+
+/** 收藏星标：未收藏是线框，已收藏填实。 */
+const starIcon = (active, size = 12) => {
+  const node = icon('star', size);
+  node.classList.toggle('is-filled', !!active);
   return node;
 };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
@@ -897,7 +920,7 @@ function renderTree() {
   }
   walk(S.tree, 0, false);
   if (capped) {
-    const more = el('button', 'sb-more', '⋯ 查看全部');
+    const more = el('button', 'sb-more', iconLabel('more-horizontal', '查看全部', 13));
     more.type = 'button';
     more.addEventListener('click', () => { S.treeExpanded = true; renderTree(); });
     host.appendChild(more);
@@ -986,7 +1009,7 @@ function treeRow(node, depth) {
   if (node.pinned) row.classList.add('is-pinned');
 
   const hasKids = (node.children || []).length > 0;
-  const caret = el('span', 'r-caret', hasKids ? (S.collapsed.has(node.id) ? '▸' : '▾') : '');
+  const caret = el('span', 'r-caret', hasKids ? icon(S.collapsed.has(node.id) ? 'chevron-right' : 'chevron-down', 12) : '');
   if (hasKids) {
     caret.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -1019,14 +1042,14 @@ function treeRow(node, depth) {
   // 绝对定位在行右侧，不参与 flex 排版，标题短也不会被挤。
   const acts = el('div', 'r-acts');
   if (isFolder) {
-    const addChild = el('button', 'r-act', '＋');
+    const addChild = el('button', 'r-act', icon('plus', 12));
     addChild.type = 'button';
     addChild.title = `在「${node.name}」里新建`;
     addChild.setAttribute('aria-label', `在「${node.name}」里新建`);
     addChild.addEventListener('click', (event) => { event.stopPropagation(); createDoc('card', node.id); });
     acts.appendChild(addChild);
   }
-  const more = el('button', 'r-act', '⋯');
+  const more = el('button', 'r-act', icon('more-horizontal', 12));
   more.type = 'button';
   more.title = '更多操作（重命名 / 复制 / 置顶 / 隐藏 / 删除…）';
   more.setAttribute('aria-label', '更多操作');
@@ -1276,7 +1299,7 @@ function renderPanels() {
       tabIconBox.appendChild(docIcon(entry ? entry.document.type : 'card', 14));
       tab.appendChild(tabIconBox);
       tab.appendChild(el('span', 't-name', name));
-      const close = el('span', 't-close', '✕');
+      const close = el('span', 't-close', icon('x', 12));
       close.addEventListener('click', (event) => { event.stopPropagation(); closeTab(index, id); });
       tab.appendChild(close);
       tab.addEventListener('click', () => {
@@ -1312,7 +1335,7 @@ function renderPanels() {
     });
     const addTab = el('div', 'tab');
     addTab.title = '新标签页';
-    addTab.appendChild(el('span', 't-name', '＋'));
+    addTab.appendChild(el('span', 't-name', icon('plus', 13)));
     addTab.addEventListener('click', () => openPalette(''));
     tabs.appendChild(addTab);
     pane.appendChild(tabs);
@@ -2162,7 +2185,7 @@ function renderFolder(entry) {
         else { sort.key = key; sort.dir = key === 'updated' ? 'desc' : 'asc'; }
         renderPanels();
       }, on);
-      if (on) btn.textContent = `${label} ${sort.dir === 'desc' ? '↓' : '↑'}`;
+      if (on) btn.replaceChildren(iconLabel(sort.dir === 'desc' ? 'arrow-down' : 'arrow-up', label, 12));
       sortBar.appendChild(btn);
     });
     tools.appendChild(sortBar);
@@ -2198,7 +2221,7 @@ function renderFolder(entry) {
   }
 
   const actions = el('div', 'insert-bar');
-  actions.appendChild(button('＋ 新建卡片', '在这个文件夹里建一张卡片', async () => {
+  actions.appendChild(button(iconLabel('plus', '新建卡片'), '在这个文件夹里建一张卡片', async () => {
     const name = await askText({ label: '卡片名称', value: '未命名' });
     if (name === null) return;
     const type = S.types.find((t) => !t.hidden) || S.types[0];
@@ -2213,7 +2236,7 @@ function renderFolder(entry) {
     renderPanels();
     toast(`已新建「${created.name}」`);
   }));
-  actions.appendChild(button('＋ 新建子文件夹', '', async () => {
+  actions.appendChild(button(iconLabel('folder-plus', '新建子文件夹'), '', async () => {
     const name = await askText({ label: '文件夹名称', value: '新文件夹' });
     if (name === null) return;
     await api('/api/world/documents', {
@@ -2312,7 +2335,7 @@ function pickImage({ docId, value = '' } = {}) {
 
     /* —— 上传页：点选或拖进来 —— */
     const drop = el('label', 'img-src-drop');
-    drop.appendChild(el('span', 'img-src-drop-icon', '＋'));
+    drop.appendChild(el('span', 'img-src-drop-icon', icon('upload', 22)));
     drop.appendChild(el('span', 'img-src-drop-text', '点击选择图片，或把图片拖到这里'));
     const file = el('input');
     file.type = 'file';
@@ -2438,12 +2461,37 @@ document.addEventListener('drop', (event) => {
   }
 });
 
-/** 页面图标备选：给一组世界观向的常用 emoji，外加任意粘贴。 */
-const PAGE_EMOJI = ['📄', '📝', '📌', '⭐', '🔥', '💡', '🧭', '🗺️', '🏔️', '🌊', '🌲', '🏛️',
-                    '⚔️', '🛡️', '👑', '🐉', '🦅', '🌙', '☀️', '⚗️', '🔮', '📜', '🗝️', '⚖️',
-                    '🧬', '🕯️', '🌋', '❄️', '🪐', '🧿'];
+/** 页面图标备选：统一用线性图标名，存的就是 icons.js 里的 key。 */
+const PAGE_ICONS = ['file-text', 'pen-line', 'map-pin', 'star', 'flame', 'lightbulb', 'compass', 'map',
+                    'mountain', 'waves', 'tree-pine', 'landmark', 'swords', 'shield', 'crown', 'sparkles',
+                    'moon', 'sun', 'droplet', 'scroll', 'key', 'scale', 'skull', 'heart', 'leaf', 'ship',
+                    'coins', 'church', 'route', 'footprints'];
 
-/** 页面图标选择器：常用 emoji + 任意输入 + 移除。 */
+/** 老数据里存的是 emoji，读的时候顺手换成图标名。 */
+const PAGE_ICON_LEGACY = {
+  '📄': 'file-text', '📝': 'pen-line', '📌': 'map-pin', '⭐': 'star', '🔥': 'flame',
+  '💡': 'lightbulb', '🧭': 'compass', '🗺️': 'map', '🗺': 'map', '🏔️': 'mountain', '🏔': 'mountain',
+  '🌊': 'waves', '🌲': 'tree-pine', '🏛️': 'landmark', '🏛': 'landmark', '⚔️': 'swords', '⚔': 'swords',
+  '🛡️': 'shield', '🛡': 'shield', '👑': 'crown', '🐉': 'flame', '🦅': 'compass', '🌙': 'moon',
+  '☀️': 'sun', '☀': 'sun', '⚗️': 'droplet', '⚗': 'droplet', '🔮': 'aperture', '📜': 'scroll',
+  '🗝️': 'key', '🗝': 'key', '⚖️': 'scale', '⚖': 'scale', '🧬': 'network', '🕯️': 'flame',
+  '🕯': 'flame', '🌋': 'mountain-snow', '❄️': 'snowflake', '❄': 'snowflake', '🪐': 'compass',
+  '🧿': 'eye',
+};
+
+const pageIconName = (value) => {
+  if (!value) return null;
+  if (PAGE_ICON_LEGACY[value]) return PAGE_ICON_LEGACY[value];
+  return ICONS[value] ? value : null;
+};
+
+/** 页面图标：新数据存图标名，老数据存 emoji，都没有就按文档类型回退。 */
+const pageIcon = (value, type, size = 15) => {
+  const name = pageIconName(value);
+  return name ? icon(name, size) : docIcon(type, size);
+};
+
+/** 页面图标选择器：常用图标 + 任意图标名 + 移除。 */
 function openIconPicker(entry, anchor) {
   const document_ = entry.document;
   const save = async (value) => {
@@ -2456,25 +2504,26 @@ function openIconPicker(entry, anchor) {
   const pop = el('div', 'fb-menu icon-picker');
   pop.appendChild(el('div', 'ip-head', '页面图标'));
   const grid = el('div', 'ip-grid');
-  PAGE_EMOJI.forEach((ch) => {
-    const cell = el('button', 'ip-cell', ch);
+  PAGE_ICONS.forEach((name) => {
+    const cell = el('button', 'ip-cell', icon(name, 18));
     cell.type = 'button';
-    cell.addEventListener('click', async () => { pop.remove(); await save(ch); });
+    cell.title = name;
+    cell.addEventListener('click', async () => { pop.remove(); await save(name); });
     grid.appendChild(cell);
   });
   pop.appendChild(grid);
 
   const input = el('input', 'ip-input');
   input.type = 'text';
-  input.placeholder = '或粘贴任意一个 emoji，回车确认';
-  input.maxLength = 8;
+  input.placeholder = '或输入图标名，回车确认';
+  input.maxLength = 32;
   input.addEventListener('keydown', async (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
     const value = input.value.trim();
     if (!value) return;
     pop.remove();
-    await save(value);
+    await save(pageIconName(value) || value);
   });
   pop.appendChild(input);
 
@@ -2577,10 +2626,10 @@ function renderCard(entry, panelIndex) {
     });
   });
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } });
-  // 标题左侧是页面图标 —— 用户挑的 emoji 优先，没挑才退回按文档类型的默认图标
+  // 标题左侧是页面图标 —— 用户挑的图标优先，没挑才退回按文档类型的默认图标
   const titleRow = el('div', 'card-title-row');
-  titleRow.appendChild(document_.icon
-    ? el('span', 'page-emoji', document_.icon)
+  titleRow.appendChild(pageIconName(document_.icon)
+    ? el('span', 'page-emoji', pageIcon(document_.icon, document_.type, 30))
     : docIcon(document_.type, 32));
   titleRow.appendChild(title);
   left.appendChild(titleRow);
@@ -2632,12 +2681,15 @@ function renderCard(entry, panelIndex) {
   // 这一篇在站点上的样子：同标签跳过去，标题会沿着共享元素"飞"进文档页
   // live = 与站点一致；stale = 之后又改过（站点上是上一次发布的版本，但页面确实存在）
   if (S.world && S.world.published && ['live', 'stale'].includes(document_.publish_state) && document_.slug) {
-    const onSite = el('a', 'badge site-link', '在维基里看 ↗');
+    const onSite = el('a', 'badge site-link');
+    onSite.appendChild(iconLabel('external-link', '在维基里看', 12));
     onSite.href = `/s/${(S.world.site_url || '').replace(/^\/s\/|\/$/g, '')}/${document_.slug}/`;
     onSite.title = '在只读站点里打开这一篇（会走页面过渡）';
     badges.appendChild(onSite);
   }
-  const stateChip = el('button', 'badge state-chip', PUBLISH_LABEL[document_.publish_state] || document_.publish_state);
+  const stateChip = el('button', 'badge state-chip',
+    iconLabel(PUBLISH_ICON[document_.publish_state] || 'circle',
+      PUBLISH_LABEL[document_.publish_state] || document_.publish_state, 12));
   stateChip.type = 'button';
   stateChip.dataset.state = document_.publish_state || 'unpublished';
   stateChip.title = '发布状态（点开分享面板）';
@@ -2649,7 +2701,7 @@ function renderCard(entry, panelIndex) {
   const aliasBadge = el('button', 'badge');
   aliasBadge.type = 'button';
   aliasBadge.appendChild(icon('tag', 13));
-  aliasBadge.appendChild(el('span', null, aliases.length ? `别名：${aliases.join('、')}` : '＋ 别名'));
+  aliasBadge.appendChild(el('span', null, aliases.length ? `别名：${aliases.join('、')}` : '添加别名'));
   aliasBadge.title = '给这张卡加别名（搜索和 @ 提及都会命中）';
   aliasBadge.addEventListener('click', async () => {
     const value = await askText({ label: '别名（用逗号分隔）', value: aliases.join(', ') });
@@ -2742,7 +2794,7 @@ function renderProperties(entry, type, panelIndex) {
     box.appendChild(row);
   });
 
-  const add = el('button', 'prop-add', '＋ 添加属性');
+  const add = el('button', 'prop-add', iconLabel('plus', '添加属性', 13));
   add.addEventListener('click', () => typeManager(type ? type.id : null));
   box.appendChild(add);
   return box;
@@ -2796,7 +2848,7 @@ function propertyEditor(entry, prop, panelIndex) {
     current.forEach((item) => {
       const chip = el('span', 'chip');
       chip.appendChild(el('span', null, item));
-      const remove = el('button', null, '✕');
+      const remove = el('button', null, icon('x', 11));
       remove.addEventListener('click', () => save(current.filter((x) => x !== item)));
       chip.appendChild(remove);
       wrap.appendChild(chip);
@@ -2821,7 +2873,7 @@ function propertyEditor(entry, prop, panelIndex) {
       const link = el('button', null, resolved.ref.name);
       link.addEventListener('click', () => openDoc(resolved.ref.id));
       chip.appendChild(link);
-      const clear = el('button', null, '✕');
+      const clear = el('button', null, icon('x', 11));
       clear.addEventListener('click', () => save(null));
       chip.appendChild(clear);
       wrap.appendChild(chip);
@@ -2918,7 +2970,7 @@ function collectionCard(entry, row) {
   const card = el('button', 'cb-card');
   card.type = 'button';
   card.addEventListener('click', () => openDoc(row.id));
-  card.appendChild(el('span', 'cb-cicon', row.icon || '📄'));
+  card.appendChild(el('span', 'cb-cicon', pageIcon(row.icon, row.type, 13)));
   card.appendChild(el('span', 'cb-cname', row.name || '未命名'));
   return card;
 }
@@ -3023,7 +3075,7 @@ function renderCollectionGallery(rows, columns, entry) {
       img.alt = '';
       art.appendChild(img);
     } else {
-      art.appendChild(el('span', 'cb-articon', row.icon || '📄'));
+      art.appendChild(el('span', 'cb-articon', pageIcon(row.icon, row.type, 28)));
     }
     cell.appendChild(art);
     cell.appendChild(el('span', 'cb-tname', row.name || '未命名'));
@@ -3491,12 +3543,12 @@ function renderTimelineFrame(entry) {
   };
   toggle('meta', '事件与卡片', '经典编辑器里看不到的：事件精度、纪元归属、关联卡片');
   toggle('calendar', '日历与纪元', '自定义日历（月 / 卫星 / 精度）与纪元');
-  bar.appendChild(button('⟳', '重新载入编辑器', () => {
+  bar.appendChild(button(iconLabel('refresh-cw', '', 13), '重新载入编辑器', () => {
     const frame = $('.timeline-frame', wrap);
     if (frame) frame.src = `${frame.src.split('#')[0]}#reload=${Date.now()}`;
     toast('已重新载入');
   }));
-  bar.appendChild(button('↗', '在当前页全屏打开', () => {
+  bar.appendChild(button(iconLabel('maximize', '', 13), '在当前页全屏打开', () => {
     goInApp(timelineStandaloneUrl(entry) + readonlyQuery('?'));
   }));
   bar.appendChild(el('span', 'tl-frame-hint',
@@ -3633,7 +3685,7 @@ function eventMetaPanel(entry) {
       const open = el('button', null, card.name);
       open.addEventListener('click', () => openDoc(card.id));
       chip.appendChild(open);
-      const star = el('button', null, event.featured_card === card.id ? '★' : '☆');
+      const star = el('button', null, starIcon(event.featured_card === card.id));
       star.title = '设为特色卡片';
       star.addEventListener('click', async () => {
         await api(`/api/world/events/${event.id}/cards`, {
@@ -3643,7 +3695,7 @@ function eventMetaPanel(entry) {
         renderPanels();
       });
       chip.appendChild(star);
-      const remove = el('button', null, '✕');
+      const remove = el('button', null, icon('x', 11));
       remove.addEventListener('click', async () => {
         await api(`/api/world/events/${event.id}/cards/${card.id}`, { method: 'DELETE' });
         await ensureTimelineState(entry);
@@ -3652,7 +3704,7 @@ function eventMetaPanel(entry) {
       chip.appendChild(remove);
       chips.appendChild(chip);
     });
-    const add = el('button', 'mini-btn', '＋ 关联卡片');
+    const add = el('button', 'mini-btn', iconLabel('card-plus', '关联卡片'));
     add.addEventListener('click', () => cardPicker(async (chosen) => {
       await api(`/api/world/events/${event.id}/cards`, { method: 'POST', body: { card_id: chosen.id } });
       await ensureTimelineState(entry);
@@ -3766,7 +3818,12 @@ function renderTimeline(entry) {
     pill.style.left = `${x}px`;
     pill.style.top = `calc(50.1% - ${lift + 24}px)`;
     pill.appendChild(el('span', null, event.title));
-    if (event.linked_cards.length) pill.appendChild(el('span', 'tp-card', `▤${event.linked_cards.length}`));
+    if (event.linked_cards.length) {
+      const linked = el('span', 'tp-card');
+      linked.appendChild(icon('link', 11));
+      linked.appendChild(el('span', null, String(event.linked_cards.length)));
+      pill.appendChild(linked);
+    }
     pill.addEventListener('click', (e) => { e.stopPropagation(); ui.selected = event.id; renderPanels(); });
     canvas.appendChild(pill);
 
@@ -3902,7 +3959,7 @@ function renderTimeline(entry) {
     tools.appendChild(button);
     return button;
   };
-  addTool('＋', '在视野中央新建事件', async () => {
+  addTool(icon('plus', 15), '在视野中央新建事件', async () => {
     const year = Math.round((view.start + view.end) / 2);
     const created = await api(timelineApiPath(entry, '/events'), {
       method: 'POST', body: { title: `Year ${year} 的事件`, year },
@@ -3912,14 +3969,14 @@ function renderTimeline(entry) {
     renderPanels();
   });
   tools.appendChild(el('div', 'tl-sep'));
-  addTool('🗓', '日历和范围', () => { ui.showSettings = !ui.showSettings; renderPanels(); }, ui.showSettings);
-  addTool('⏳', '纪元', () => erasDialog(entry));
-  addTool('▤', '关联卡片到所选事件', () => {
+  addTool(icon('calendar', 15), '日历和范围', () => { ui.showSettings = !ui.showSettings; renderPanels(); }, ui.showSettings);
+  addTool(icon('globe', 15), '纪元', () => erasDialog(entry));
+  addTool(icon('card-plus', 15), '关联卡片到所选事件', () => {
     const event = entry.timeline.events.find((e) => e.id === ui.selected);
     if (!event) { toast('先点一个事件'); return; }
     linkCardDialog(entry, event);
   });
-  addTool('⤢', '适应数据', () => {
+  addTool(icon('maximize', 15), '适应数据', () => {
     const years = entry.timeline.events.map((e) => e.year);
     if (!years.length) { toast('还没有事件'); return; }
     const lo = Math.min(...years) - 20;
@@ -3936,7 +3993,7 @@ function renderTimeline(entry) {
     view.start = mid - half; view.end = mid + half;
     saveView(entry, view); renderPanels();
   };
-  [['＋', () => zoomBy(0.85)], ['−', () => zoomBy(1.18)], ['⤢', () => {
+  [[icon('zoom-in', 15), () => zoomBy(0.85)], [icon('zoom-out', 15), () => zoomBy(1.18)], [icon('maximize', 15), () => {
     const years = entry.timeline.events.map((e) => e.year);
     if (!years.length) return;
     view.start = Math.min(...years) - 20; view.end = Math.max(...years) + 20;
@@ -4069,7 +4126,7 @@ function calendarPanel(entry) {
     days.value = month.days;
     days.style.maxWidth = '72px';
     days.dataset.days = String(index);
-    const remove = el('button', 'link-btn', '✕');
+    const remove = el('button', 'link-btn', icon('x', 12));
     remove.addEventListener('click', () => {
       calendar.months.splice(index, 1);
       updateCalendar(entry, { months: calendar.months });
@@ -4079,7 +4136,7 @@ function calendarPanel(entry) {
     row.appendChild(remove);
     monthsBox.appendChild(row);
   });
-  const addMonth = el('button', 'tl-mini', '＋ 月份');
+  const addMonth = el('button', 'tl-mini', iconLabel('plus', '月份', 13));
   addMonth.addEventListener('click', () => {
     const months = [...(calendar.months || []), { name: `Month ${(calendar.months || []).length + 1}`, days: 30 }];
     updateCalendar(entry, { months });
@@ -4105,7 +4162,7 @@ function calendarPanel(entry) {
       shown.appendChild(option);
     });
     shown.value = moon.shown || 'quarters';
-    const remove = el('button', 'link-btn', '✕');
+    const remove = el('button', 'link-btn', icon('x', 12));
     remove.addEventListener('click', () => {
       calendar.moons.splice(index, 1);
       updateCalendar(entry, { moons: calendar.moons });
@@ -4113,7 +4170,7 @@ function calendarPanel(entry) {
     [moonName, cycle, shown, remove].forEach((n) => row.appendChild(n));
     moonsBox.appendChild(row);
   });
-  const addMoon = el('button', 'tl-mini', '＋ 卫星');
+  const addMoon = el('button', 'tl-mini', iconLabel('plus', '卫星', 13));
   addMoon.addEventListener('click', () => {
     const moons = [...(calendar.moons || []), { name: '新卫星', color: 'sky', cycle_days: 28, full_on: 14, shown: 'quarters' }];
     updateCalendar(entry, { moons });
@@ -4282,14 +4339,14 @@ function eventCard(entry, event, view) {
     const open = el('button', null, card.name);
     open.addEventListener('click', () => openDoc(card.id));
     chip.appendChild(open);
-    const star = el('button', null, event.featured_card === card.id ? '★' : '☆');
+    const star = el('button', null, starIcon(event.featured_card === card.id));
     star.title = '设为特色卡片';
     star.addEventListener('click', async () => {
       await api(`/api/world/events/${event.id}/cards`, { method: 'POST', body: { card_id: card.id, featured: true } });
       await refreshTimeline(entry);
     });
     chip.appendChild(star);
-    const remove = el('button', null, '✕');
+    const remove = el('button', null, icon('x', 11));
     remove.addEventListener('click', async () => {
       await api(`/api/world/events/${event.id}/cards/${card.id}`, { method: 'DELETE' });
       await refreshTimeline(entry);
@@ -4297,7 +4354,7 @@ function eventCard(entry, event, view) {
     chip.appendChild(remove);
     linked.appendChild(chip);
   });
-  const link = el('button', 'mini-btn', '＋ 关联卡片');
+  const link = el('button', 'mini-btn', iconLabel('card-plus', '关联卡片'));
   link.addEventListener('click', () => linkCardDialog(entry, event));
   linked.appendChild(link);
   wrap.appendChild(linked);
@@ -4314,9 +4371,9 @@ function eventCard(entry, event, view) {
   actions.appendChild(remove);
 
   const rows = el('div', 'tl-row-actions');
-  const up = el('button', 'tl-mini', '行 ↑');
+  const up = el('button', 'tl-mini', iconLabel('arrow-up', '上移', 12));
   up.addEventListener('click', () => patchEvent(entry, event, { row: Math.max(0, (event.row || 0) - 1) }));
-  const down = el('button', 'tl-mini', '行 ↓');
+  const down = el('button', 'tl-mini', iconLabel('arrow-down', '下移', 12));
   down.addEventListener('click', () => patchEvent(entry, event, { row: (event.row || 0) + 1 }));
   const close = el('button', 'tl-mini', '关闭');
   close.addEventListener('click', () => { entry.tlUi.selected = null; renderPanels(); });
@@ -4429,7 +4486,7 @@ async function erasDialog(entry) {
     });
     body.appendChild(list);
 
-    const add = el('button', 'mini-btn is-primary', '＋ 添加纪元');
+    const add = el('button', 'mini-btn is-primary', iconLabel('plus', '添加纪元'));
     add.addEventListener('click', async () => {
       const name = await askText({ label: '纪元名称', value: '新纪元' });
       if (!name) return;
@@ -4458,7 +4515,7 @@ async function typeManager(focusTypeId = null) {
     const flatten = (nodes, depth = 0) => {
       nodes.forEach((node) => {
         const row = el('div', `type-item depth-${depth}${node.id === current.id ? ' is-active' : ''}`);
-        row.appendChild(el('span', null, node.icon || '▤'));
+        row.appendChild(el('span', null, pageIcon(node.icon, 'folder', 14)));
         row.appendChild(el('span', null, node.name));
         row.appendChild(el('span', 'ti-count', `${node.field_count}`));
         row.addEventListener('click', () => { current.id = node.id; closeModal(); typeManager(node.id); });
@@ -4470,7 +4527,7 @@ async function typeManager(focusTypeId = null) {
     flatten(types.filter((t) => !t.parent));
     left.appendChild(list);
 
-    const addType = el('button', 'mini-btn is-primary', '＋ 新类型');
+    const addType = el('button', 'mini-btn is-primary', iconLabel('plus', '新类型'));
     addType.addEventListener('click', async () => {
       const name = await askText({ label: '类型名称', value: '新类型' });
       if (!name) return;
@@ -4480,7 +4537,7 @@ async function typeManager(focusTypeId = null) {
     });
     left.appendChild(addType);
 
-    const addSub = el('button', 'mini-btn', '＋ 子类型');
+    const addSub = el('button', 'mini-btn', iconLabel('plus', '子类型'));
     addSub.addEventListener('click', async () => {
       if (!current.id) return;
       const name = await askText({ label: '子类型名称', value: '新子类型' });
@@ -4652,7 +4709,7 @@ async function typeManager(focusTypeId = null) {
         newKind.appendChild(option);
       });
       newKind.style.maxWidth = '130px';
-      const add = el('button', 'mini-btn is-primary', '＋ 添加属性');
+      const add = el('button', 'mini-btn is-primary', iconLabel('plus', '添加属性'));
       add.addEventListener('click', async () => {
         const name = newName.value.trim();
         if (!name) { toast('先填属性名'); return; }
@@ -5755,7 +5812,9 @@ async function publishDialog() {
       if (!entry) return;
       const line = el('div', 'publish-row');
       line.appendChild(el('span', null, entry.document.name));
-      const chip = el('span', 'badge state-chip', PUBLISH_LABEL[entry.document.publish_state] || entry.document.publish_state);
+      const chip = el('span', 'badge state-chip',
+        iconLabel(PUBLISH_ICON[entry.document.publish_state] || 'circle',
+          PUBLISH_LABEL[entry.document.publish_state] || entry.document.publish_state, 12));
       chip.dataset.state = entry.document.publish_state;
       line.appendChild(chip);
       list.appendChild(line);
@@ -5953,7 +6012,7 @@ async function syncPalettePreview() {
   }
   const body = el('div', 'pv-body');
   const head = el('div', 'pv-head');
-  head.appendChild(doc.icon ? el('span', 'pv-icon', doc.icon) : docIcon(doc.type, 22));
+  head.appendChild(pageIcon(doc.icon, doc.type, 22));
   head.appendChild(el('b', null, doc.name || '无标题'));
   body.appendChild(head);
   const snippet = active.querySelector('.pi-snippet');
@@ -6480,6 +6539,8 @@ function decorateChrome() {
   }
   [['#sidebarBtn', 'grip', '收起或展开侧栏'], ['#undoBtn', 'arrow-left', '撤销'],
    ['#redoBtn', 'arrow-right', '重做'], ['#paletteBtn', 'search', '命令面板（⌘K）'],
+   ['#sbMenu', 'chevrons-up-down', '展开 / 折叠全部'],
+   ['#mdClose', 'x', '关闭'],
    ['#sbComposeBtn', 'pen-line', '更多']].forEach(([selector, name, label]) => {
     const node = $(selector);
     if (!node) return;
@@ -6492,16 +6553,16 @@ function decorateChrome() {
   // 否则那格会空着（applyTheme 只在拿到主题后才调用 syncThemeToggle）。
   syncThemeToggle();
   const buttons = [
-    ['#suggestBtn', 'star', '建议'],
-    ['#exchangeBtn', 'box', '导入导出'],
+    ['#suggestBtn', 'sparkles', '建议'],
+    ['#exchangeBtn', 'arrow-right-left', '导入导出'],
     ['#typesBtn', 'tag', '类型'],
     ['#erasBtn', 'globe', '纪元'],
     ['#themeBtn', 'droplet', '主题'],
-    ['#archivesBtn', 'box', '存档'],
+    ['#archivesBtn', 'archive', '存档'],
     ['#trashBtn', 'trash-2', '回收站'],
-    ['#newDocBtn', 'circle-plus', '新建文档'],
-    ['#newFolderBtn', 'folder', '文件夹'],
-    ['#templateBtn', 'star', '用模板新建'],
+    ['#newDocBtn', 'plus', '新建文档'],
+    ['#newFolderBtn', 'folder-plus', '文件夹'],
+    ['#templateBtn', 'layout-template', '用模板新建'],
   ];
   buttons.forEach(([selector, name, label]) => {
     const node = $(selector);
@@ -6726,11 +6787,10 @@ function bindEvents() {
   const composeBtn = $('#sbComposeBtn');
   const composeMenu = $('#sbMenuPop');
   if (composeBtn && composeMenu) {
-    // 开着的时候按钮变成 ✕——否则图标一直是 ✎，看不出"再点一下能收起"
+    // 开着的时候按钮变成 x——否则图标一直是笔，看不出"再点一下能收起"
     const setComposeState = (open) => {
       composeBtn.innerHTML = '';
-      if (open) composeBtn.appendChild(el('span', 'sb-compose-x', '✕'));
-      else composeBtn.appendChild(icon('pen-line', 15));
+      composeBtn.appendChild(icon(open ? 'x' : 'pen-line', 15));
       composeBtn.setAttribute('aria-expanded', String(open));
       composeBtn.setAttribute('aria-label', open ? '收起' : '更多');
       composeBtn.title = open ? '收起' : '更多';
@@ -7068,13 +7128,14 @@ function renderTableTool(entry) {
 
     menu.appendChild(el('div', 'bm-group', '排序'));
     const sortSel = propSelect('不排序', columns, view.sort && view.sort.id);
-    const dirBtn = el('button', 'cb-tab', view.sort && view.sort.dir === 'desc' ? '降序 ↓' : '升序 ↑');
+    const sortDesc = !!(view.sort && view.sort.dir === 'desc');
+    const dirBtn = el('button', 'cb-tab', iconLabel(sortDesc ? 'arrow-down' : 'arrow-up', sortDesc ? '降序' : '升序', 13));
     dirBtn.type = 'button';
     dirBtn.addEventListener('click', () => {
       const current = state.data.view.sort;
       if (!current) { toast('先选一个排序字段'); return; }
       const next = current.dir === 'desc' ? 'asc' : 'desc';
-      dirBtn.textContent = next === 'desc' ? '降序 ↓' : '升序 ↑';
+      dirBtn.replaceChildren(iconLabel(next === 'desc' ? 'arrow-down' : 'arrow-up', next === 'desc' ? '降序' : '升序', 13));
       saveView({ sort: { id: current.id, dir: next } });
     });
     sortSel.addEventListener('change', () => {
@@ -7307,7 +7368,7 @@ function renderTableTool(entry) {
     const toolbar = el('div', 'table-toolbar');
     toolbar.appendChild(el('span', 'hint', '卡片类型'));
     toolbar.appendChild(typeSelect);
-    const addRow = button('＋ 加一行', '新建一张卡片并放进来', async () => {
+    const addRow = button(iconLabel('plus', '加一行'), '新建一张卡片并放进来', async () => {
       await api(`/api/world/tables/${entry.document.id}/rows`, { method: 'POST', body: { name: '新行' } });
       await reloadTree();
       renderPanels();
@@ -7391,7 +7452,7 @@ function renderTableTool(entry) {
     scroller.appendChild(table);
     body.appendChild(scroller);
     if (!data.rows.length) {
-      body.appendChild(el('p', 'hint', '还没有行。点「＋ 加一行」开始，或者导入一份 CSV。'));
+      body.appendChild(el('p', 'hint', '还没有行。点「加一行」开始，或者导入一份 CSV。'));
     }
   };
 
@@ -7409,7 +7470,7 @@ function renderBoardTool(entry) {
   const wrap = toolShell(entry, { iconName: 'grip', title: '看板', hint: '列 + 卡片，拖到别的列就算改状态。' });
   const board = el('div', 'board');
   wrap.appendChild(board);
-  wrap.querySelector('.tool-actions').appendChild(button('＋ 加一列', '', async () => {
+  wrap.querySelector('.tool-actions').appendChild(button(iconLabel('plus', '加一列'), '', async () => {
     const name = await askText({ label: '这一列叫什么？', value: '新列' });
     if (!name) return;
     const data = entry.toolData || { columns: [] };
@@ -7455,7 +7516,7 @@ function renderBoardTool(entry) {
           title.title = '打开这张卡片';
         }
         card.appendChild(title);
-        const del2 = el('button', 'bc-del', '✕');
+        const del2 = el('button', 'bc-del', icon('x', 12));
         del2.title = '从这一列移走';
         del2.addEventListener('click', async () => {
           column.items.splice(itemIndex, 1);
@@ -7482,7 +7543,7 @@ function renderBoardTool(entry) {
       });
       box.appendChild(list);
 
-      const add = el('button', 'board-add', '＋ 加一张');
+      const add = el('button', 'board-add', iconLabel('plus', '加一张', 13));
       add.addEventListener('click', async () => {
         const title = await askText({ label: '卡片内容？（会同时建一张真卡片）', value: '' });
         if (title === null) return;
@@ -7506,7 +7567,7 @@ function renderBoardTool(entry) {
       board.appendChild(emptyBlock({
         iconName: 'grip', title: '还没有列',
         text: '看板适合推进度：待办 / 进行中 / 完成，或者按人物、按地点分组。',
-        actionLabel: '＋ 加一列', onAction: async () => {
+        actionLabel: iconLabel('plus', '加一列', 13), onAction: async () => {
           const data2 = entry.toolData || {};
           data2.columns = [{ id: toolId('col'), name: '待办', items: [] }];
           await saveToolData(entry, data2);
@@ -7525,7 +7586,7 @@ function renderCanvasTool(entry) {
   const wrap = toolShell(entry, { iconName: 'pen-line', title: '画布', hint: '自由摆放的便签与文字：拖动移动，双击改字。' });
   const stage = el('div', 'canvas-stage');
   wrap.appendChild(stage);
-  wrap.querySelector('.tool-actions').appendChild(button('＋ 便签', '', async () => {
+  wrap.querySelector('.tool-actions').appendChild(button(iconLabel('plus', '便签'), '', async () => {
     const data = entry.toolData || { items: [] };
     data.items = data.items || [];
     data.items.push({ id: toolId('n'), type: 'note', x: 40 + data.items.length * 24, y: 40 + data.items.length * 18, w: 180, h: 120, text: '新便签', color: 'gold' });
@@ -7551,7 +7612,7 @@ function renderCanvasTool(entry) {
         });
       }
       node.appendChild(text);
-      const del = el('button', 'ci-del', '✕');
+      const del = el('button', 'ci-del', icon('x', 12));
       del.title = '删掉这个便签';
       del.addEventListener('click', async () => {
         data.items.splice(index, 1);
@@ -7585,7 +7646,7 @@ function renderCanvasTool(entry) {
       stage.appendChild(emptyBlock({
         iconName: 'pen-line', title: '空画布',
         text: '放几个便签，把线索、关系、待定的事摊开来看。',
-        actionLabel: '＋ 便签', onAction: async () => {
+        actionLabel: '加便签', onAction: async () => {
           const data2 = entry.toolData || {};
           data2.items = [{ id: toolId('n'), type: 'note', x: 60, y: 60, w: 180, h: 120, text: '新便签', color: 'sky' }];
           await saveToolData(entry, data2);
@@ -7603,7 +7664,7 @@ function renderListTool(entry, spec) {
   const wrap = toolShell(entry, { iconName: spec.icon, title: spec.title, hint: spec.hint });
   const list = el('div', 'list-tool');
   wrap.appendChild(list);
-  const addButton = button(`＋ 新建${spec.itemName}`, '', async () => {
+  const addButton = button(iconLabel('plus', `新建${spec.itemName}`), '', async () => {
     const data = entry.toolData || {};
     data.items = data.items || [];
     data.items.unshift(spec.blank());
@@ -7627,7 +7688,7 @@ function renderListTool(entry, spec) {
         iconName: spec.icon,
         title: keyword ? `没有匹配「${search.value}」的${spec.itemName}` : `还没有${spec.itemName}`,
         text: spec.emptyText,
-        actionLabel: `＋ 新建${spec.itemName}`, onAction: () => addButton.click(),
+        actionLabel: `新建${spec.itemName}`, onAction: () => addButton.click(),
       }));
       return;
     }
@@ -7757,7 +7818,7 @@ function renderDiceTool(entry) {
   const wrap = toolShell(entry, { iconName: 'box', title: '骰子', hint: '骰组存下来，随手掷一把；结果留在下面的记录里。' });
   const board = el('div', 'dice-board');
   wrap.appendChild(board);
-  wrap.querySelector('.tool-actions').appendChild(button('＋ 新骰组', '', async () => {
+  wrap.querySelector('.tool-actions').appendChild(button(iconLabel('plus', '新骰组'), '', async () => {
     const data = entry.toolData || {};
     data.sets = data.sets || [];
     data.sets.push({ id: toolId('d'), name: '新骰组', dice: [{ count: 1, sides: 20 }], modifier: 0 });
@@ -7987,7 +8048,7 @@ function renderRadarTool(entry) {
       dot.style.background = colors[index % colors.length];
       item.appendChild(dot);
       item.appendChild(el('span', null, serie.name));
-      const del = el('button', 'bc-del', '✕');
+      const del = el('button', 'bc-del', icon('x', 12));
       del.addEventListener('click', async () => {
         data.cards = (data.cards || []).filter((id) => id !== chosen[index]);
         await saveToolData(entry, data, { silent: true });
@@ -8109,7 +8170,7 @@ function renderSoundscapeTool(entry) {
       row.appendChild(del);
       board.appendChild(row);
     });
-    board.appendChild(button('＋ 加一层', '再叠一层声音', async () => {
+    board.appendChild(button(iconLabel('plus', '加一层'), '再叠一层声音', async () => {
       data.layers.push({ id: toolId('s'), kind: 'wind', volume: 40, playing: false });
       await saveToolData(entry, data, { silent: true });
       paint();
@@ -8145,11 +8206,11 @@ function renderMediaTool(entry) {
     toast(`已上传 ${files.length} 个文件`);
     renderPanels();
   });
-  wrap.querySelector('.tool-actions').appendChild(button('＋ 上传文件', '', () => fileInput.click()));
+  wrap.querySelector('.tool-actions').appendChild(button(iconLabel('upload', '上传文件'), '', () => fileInput.click()));
 
   let recorder = null;
   let chunks = [];
-  const recordButton = button('● 录音', '用麦克风录一段', async () => {
+  const recordButton = button(iconLabel('mic', '录音'), '用麦克风录一段', async () => {
     if (recorder && recorder.state === 'recording') {
       recorder.stop();
       return;
@@ -8177,7 +8238,7 @@ function renderMediaTool(entry) {
         renderPanels();
       });
       recorder.start();
-      recordButton.textContent = '■ 停止';
+      recordButton.replaceChildren(iconLabel('square', '停止'));
       recordButton.classList.add('is-danger');
     } catch (error) {
       toast('拿不到麦克风权限');
@@ -8191,8 +8252,8 @@ function renderMediaTool(entry) {
     if (!media.length) {
       holder.appendChild(emptyBlock({
         iconName: 'message-circle-more', title: '还没有录音或文件',
-        text: '按住「● 录音」说一段想法，或者上传参考图、PDF。',
-        actionLabel: '● 录音', onAction: () => recordButton.click(),
+        text: '按住「录音」说一段想法，或者上传参考图、PDF。',
+        actionLabel: '录音', onAction: () => recordButton.click(),
       }));
       return;
     }
@@ -9853,7 +9914,9 @@ function worldMenu() {
         : (published ? '已发布站点' : '未发布')));
       item.appendChild(meta);
       if (world.is_current) {
-        item.appendChild(el('span', 'wi-check', '✓'));
+        const mark = el('span', 'wi-check');
+        mark.appendChild(icon('check', 13));
+        item.appendChild(mark);
       } else {
         item.addEventListener('click', () => switchWorld(world.id));
       }
@@ -9862,7 +9925,7 @@ function worldMenu() {
     body.appendChild(list);
 
     const actions = el('div', 'form-row');
-    actions.appendChild(button('＋ 新建世界', '', () => createWorldFlow()));
+    actions.appendChild(button(iconLabel('plus', '新建世界'), '', () => createWorldFlow()));
     actions.appendChild(button('世界设置…', '', () => { closeModal(); worldDialog(); }));
     body.appendChild(actions);
     body.appendChild(el('p', 'hint', '每个世界各有自己的文档、类型、纪元与发布时间线，互不打扰。'));

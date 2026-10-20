@@ -1402,11 +1402,24 @@ body.is-embed .topbar {
   height: 100%;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 @media (max-width: 980px) {
   .theme-toggle { padding: 0 8px; }
   .theme-toggle__text { display: none; }
+}
+
+/* --------------------------------------------------------- 统一图标规格 */
+/* 全站图标都来自 static/icons.js：24×24 viewBox、stroke=currentColor、
+   stroke-width=2、圆头圆角。这一层只补两类玩法：
+   1) 实心态（收藏星标）；2) 「图标 + 文字」的横向对齐。 */
+.icon.is-filled {
+  fill: currentColor;
+}
+.ic-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }

@@ -8,6 +8,8 @@ import {
 } from "@/components/performance";
 import { ensureEl } from "@/utils/nodeUtils";
 
+declare const iconHtml: (name: string, size?: number) => string;
+
 const DIALOG_ID = "performanceSettings";
 const DEFAULTS = PERFORMANCE_PRESETS.balance;
 
@@ -120,7 +122,7 @@ function buildDialogHTML(): string {
         <td><select id="${DIALOG_ID}_${key}" style="width: 100%">${optionsHtml}</select></td>
         <td>
           <button id="${DIALOG_ID}_${key}Reset" data-tip="Reset to the Balance preset value"
-            style="font-size: .85em; padding: 1px 5px; margin-left: .3em">↺</button>
+            style="display: inline-flex; align-items: center; font-size: .85em; padding: 1px 5px; margin-left: .3em">${iconHtml("refresh-cw", 12)}</button>
         </td>
       </tr>`;
   }).join("");

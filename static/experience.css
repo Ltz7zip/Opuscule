@@ -540,11 +540,13 @@ html { scroll-behavior: smooth; }
   color: var(--xp-mute, #8f8b84);
 }
 .to-top {
+  display: inline-flex; align-items: center; gap: 5px;
   font-family: var(--xp-mono, monospace);
   font-size: 11.5px;
   color: var(--xp-mute, #8f8b84);
   text-decoration: none;
 }
+.to-top svg { display: block; }
 .to-top:hover { color: var(--tx-green, #3ddc97); }
 
 /* 交叠滑动：只让编辑区内容位移 20px，外壳（文档树 / 顶栏）不动。

@@ -209,8 +209,8 @@ const STYLE = /* css */ `
   .schema-form details[data-section] details[data-section] { margin: .3em 0; }
   .schema-form details[data-section] > summary { display: flex; align-items: center; gap: .4em; cursor: pointer; font-weight: 700; padding: .3em .5em; list-style: none; background: var(--style-card-head, rgba(255, 255, 255, .2)); }
   .schema-form details[data-section] > summary::-webkit-details-marker { display: none; }
-  .schema-form details[data-section] > summary::before { content: "▸"; flex: none; width: 1em; opacity: .6; }
-  .schema-form details[data-section][open] > summary::before { content: "▾"; }
+  .schema-form details[data-section] > summary::before { content: ""; flex: none; width: 1em; height: 1em; opacity: .6; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
+  .schema-form details[data-section][open] > summary::before { transform: rotate(90deg); }
   .schema-form details[data-section] > summary > .title { flex: none; white-space: nowrap; }
   .schema-form details[data-section] > summary > .gate { flex: 1 1 auto; display: flex; align-items: center; gap: .3em; font-weight: 400; }
   .schema-form details[data-section] > summary > .gate > select { flex: 1 1 auto; min-width: 0; }

@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" fill="#d7374a" stroke="#000" viewBox="50 50 200 200">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" fill="#d7374a" stroke="#000" viewBox="50 50 200 200">
   <metadata source="http://wappenwiki.org/images/a/ad/Rossiter.svg" license="https://creativecommons.org/licenses/by-nc-sa/3.0"/>
   <g id="crocodile" stroke-width=".35">
     <g>

@@ -13,6 +13,8 @@ import type { StyleElement, StyleSelection } from "@/types/styles";
 import { ensureEl, escapeHtml, findEl, htmlEl, toHEX } from "@/utils";
 import { groupEntriesFor, hasGroups, listElements } from "./elements";
 
+declare const icon: (name: string, size?: number) => SVGElement;
+
 const controlDialogs = new Set<string>(); // opened by a form control: they go with the form
 
 /** Remember a dialog a control opened, so the form's teardown closes it */
@@ -35,7 +37,8 @@ const ELEMENTS_STYLE = /* css */ `
   #${ELEMENTS_ID} .li:hover { background: rgba(255, 255, 255, .25); }
   #${ELEMENTS_ID} .li.on { background: rgba(255, 255, 255, .45); font-weight: 700; }
   #${ELEMENTS_ID} .li .cnt { opacity: .6; font-size: .9em; font-weight: 400; }
-  #${ELEMENTS_ID} .li .caret { opacity: .6; text-align: center; }
+  #${ELEMENTS_ID} .li .caret { opacity: .6; display: flex; align-items: center; justify-content: center; }
+  #${ELEMENTS_ID} .li .caret svg { display: block; }
   #${ELEMENTS_ID} .dot { width: .7em; height: .7em; border-radius: 50%; border: 1px solid #333; justify-self: center; box-sizing: border-box; }
   #${ELEMENTS_ID} .dot.vis { background: #2f9e44; }
   #${ELEMENTS_ID} .dot.perm { background: #999; border-color: #999; cursor: default; }
@@ -108,7 +111,7 @@ export class ElementsDialog {
       if (Layers.has(element) && !Layers.get(element).params.permanent) Layers.toggle(element);
       return;
     }
-    if (target.classList.contains("caret")) {
+    if (target.closest(".caret")) {
       if (this.expanded.has(element)) this.expanded.delete(element);
       else this.expanded.add(element);
       this.render();
@@ -143,8 +146,10 @@ export class ElementsDialog {
       row.className = "li";
       row.dataset.element = id;
       if (current.element === id && !grouped) row.classList.add("on");
+      const caret = this.span("caret");
+      if (grouped && typeof icon === "function") caret.append(icon(isOpen ? "chevron-down" : "chevron-right", 12));
       row.append(
-        this.span("caret", grouped ? (isOpen ? "▾" : "▸") : ""),
+        caret,
         this.dot(id),
         this.span("name", label),
         this.span("cnt", grouped ? String(entries.length) : "")

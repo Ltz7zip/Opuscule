@@ -6,6 +6,8 @@ import { drawFeaturePath } from "@/renderers/draw-landmass";
 import type { Point } from "@/types/global";
 import { ensureEl, escapeHtml, findEl } from "@/utils";
 
+declare const iconHtml: (name: string, size?: number) => string;
+
 interface InputParams {
   id: string;
   label: string;
@@ -287,7 +289,7 @@ function buildDialogHTML(): string {
           <slider-input id="${id}" min="${min}" max="${max}" step="${step}" value="${settings[key]}"></slider-input>
         </td>
         <td style="padding:0.2em">
-          <button id="${id}Reset" title="${selectedFeature ? "Reset to the map globals" : "Reset to default"}" style="font-size:.8em; padding:1px 5px; cursor:pointer">↺</button>
+          <button id="${id}Reset" title="${selectedFeature ? "Reset to the map globals" : "Reset to default"}" style="display:inline-flex; align-items:center; font-size:.8em; padding:1px 5px; cursor:pointer">${iconHtml("refresh-cw", 12)}</button>
         </td>
       </tr>`;
   }).join("");

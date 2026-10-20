@@ -9,10 +9,21 @@ media/
 .cache/
 .opuscule_research/
 .DS_Store
-# tools/shots.py 与 tools/shots_ui.py 的截图产物（视觉验收用，不入库）
+# tools/shots.py 与 tools/shots_ui.py 的截图产物（视觉验收用，不入库）；
+# 只有 shots/town-plan/ 是入库的地图素材，单独放行。
 .shots/
+shots/*
+!shots/town-plan/
 # 上游地图库的依赖与中间产物（构建结果已落到 static/map/vendor，入库的是那个）
 third_party/fantasy-map-generator/node_modules/
 third_party/fantasy-map-generator/dist/
 # 正文编辑器孤岛的依赖（构建结果已落到 static/editor/dist，入库的是那个）
 frontend/editor/node_modules/
+# 本地校验页（手工调试产物，无任何代码引用，不入库）
+static/_verify-*.html
+# 工具/生成产物：设计库、HTML 分享包、token 清单，均无代码引用，不入库
+.design_library/
+.trae-html-share-packages/
+TOKEN-INVENTORY.md
+# 通用备份后缀
+*.bak

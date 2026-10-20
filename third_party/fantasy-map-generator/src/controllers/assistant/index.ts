@@ -40,6 +40,8 @@ import { ProposalCard } from "./proposal-card";
 import { Proposals } from "./proposals";
 import { AssistantWidgets, type WidgetContext } from "./widgets";
 
+declare const iconHtml: (name: string, size?: number) => string;
+
 type View = "chat" | "chats" | "key";
 type Notice = { text: string; item?: TranscriptItem; retry?: () => void };
 
@@ -911,7 +913,7 @@ function renderAttachments(): void {
   list.innerHTML = attached
     .map(
       (src, index) =>
-        `<span class="assistantAttachment"><img src="${escapeHtml(src)}" alt="Attached image ${index + 1}" /><button type="button" data-action="detach" data-index="${index}" aria-label="Remove image ${index + 1}">✕</button></span>`
+        `<span class="assistantAttachment"><img src="${escapeHtml(src)}" alt="Attached image ${index + 1}" /><button type="button" data-action="detach" data-index="${index}" aria-label="Remove image ${index + 1}">${iconHtml("x", 10)}</button></span>`
     )
     .join("");
 }

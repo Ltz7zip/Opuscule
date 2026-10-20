@@ -6,6 +6,8 @@ import { createDropdown, type Dropdown } from "@/services/panels/dropdown";
 import { openMarkerCard } from "@/services/panels/marker-card";
 import { setHostMarkers } from "@/services/panels/host-overlay";
 
+declare const icon: (name: string, size?: number) => SVGElement;
+
 interface Marker {
   id: number;
   kind: string;
@@ -198,7 +200,8 @@ function rowFor(marker: Marker): HTMLLIElement {
     remove.className = "tx-iconbtn";
     remove.dataset.delete = "1";
     remove.title = "删掉这个标注";
-    remove.textContent = "✕";
+    remove.setAttribute("aria-label", "删掉这个标注");
+    if (typeof icon === "function") remove.append(icon("x", 12));
     item.append(remove);
   }
   return item;

@@ -1,4 +1,4 @@
-import{Jn as e,Kn as t,P as n,at as r,it as i,ot as a}from"./utils-Dk4MDzbZ.js?v=2";import{a as o,i as s,n as c}from"./emblems-generator-CFXxHBH0.js?v=2";import{i as l}from"./tooltips-3xx1wzLl.js?v=2";import{n as u}from"./icons-list-BiXau1Li.js?v=2";import{i as d,r as f}from"./dialog-helpers-MF-Ear8n.js?v=2";import{t as p}from"./icons-archive-CciXz59B.js?v=2";import{t as m}from"./pictures-CmpWd_MP.js?v=2";var h=`iconPositioner`,g=.25,[_,v]=[25,400],y=`
+import{Jn as e,Kn as t,P as n,at as r,it as i,ot as a}from"./utils-Dk4MDzbZ.js";import{a as o,i as s,n as c}from"./emblems-generator-CFXxHBH0.js";import{i as l}from"./tooltips-3xx1wzLl.js";import{n as u}from"./icons-list-BiXau1Li.js";import{i as d,r as f}from"./dialog-helpers-MF-Ear8n.js";import{t as p}from"./icons-archive-CciXz59B.js";import{t as m}from"./pictures-CmpWd_MP.js";var h=`iconPositioner`,g=.25,[_,v]=[25,400],y=`
   #${h} > div { width: auto; }
   #${h} .stage { width: 16em; height: 16em; margin: 0 auto; background: repeating-conic-gradient(#e8e8e8 0 25%, #fff 0 50%) 0 0 / 1em 1em; cursor: grab; touch-action: none; }
   #${h} .stage:active { cursor: grabbing; }

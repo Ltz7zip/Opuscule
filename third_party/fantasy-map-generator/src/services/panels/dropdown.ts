@@ -5,6 +5,8 @@
 // 所以换成 <details> + 列表，和顶栏 ☰ 菜单同一套写法：能上我们的色，脚本禁用也能开。
 import { hostText } from "@/services/i18n";
 
+declare const icon: (name: string, size?: number) => SVGElement;
+
 export interface DropdownItem {
   value: string;
   /** 英文原样传进来也行，会走宿主的词典翻成中文 */
@@ -39,7 +41,7 @@ export function createDropdown({ items, value, title, swatches, onChange }: Drop
   const chev = document.createElement("span");
   chev.className = "tx-chev";
   chev.setAttribute("aria-hidden", "true");
-  chev.textContent = "▾";
+  if (typeof icon === "function") chev.append(icon("chevron-down", 12));
   button.append(label, chev);
 
   const list = document.createElement("div");

@@ -142,7 +142,8 @@
 }
 
 .tx-chev {
-  font-size: 0.75em;
+  display: inline-flex;
+  align-items: center;
   opacity: 0.7;
 }
 

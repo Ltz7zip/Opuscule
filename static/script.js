@@ -1425,9 +1425,7 @@
     dom.edDesc.textContent = item.desc || '';
     dom.edEnd.hidden = !isEra;
     dom.edCardsText.textContent = isEra ? '链接卡片' : '添加卡片';
-    dom.edCardsIcon.innerHTML = isEra
-      ? '<path d="M9.6 14.4a3.6 3.6 0 0 0 5.1 0l3-3a3.6 3.6 0 0 0-5.1-5.1l-1 1M14.4 9.6a3.6 3.6 0 0 0-5.1 0l-3 3a3.6 3.6 0 0 0 5.1 5.1l1-1"/>'
-      : '<path d="M12 5.2v13.6M5.2 12h13.6"/>';
+    dom.edCardsIcon.innerHTML = (window.ICONS || {})[isEra ? 'link' : 'plus'] || '';
     applyCover(item);
     hidePanel(dom.palette);
     // 先让卡片可见再 syncEditor：syncEditor 开头有「卡片没开就直接返回」的护栏，
