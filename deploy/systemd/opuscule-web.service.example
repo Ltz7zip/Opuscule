@@ -1,0 +1,18 @@
+[Unit]
+Description=Opuscule SSR web
+After=network.target
+
+[Service]
+Type=simple
+User=opuscule
+WorkingDirectory=/srv/opuscule/frontend
+Environment=NODE_ENV=production
+Environment=SSR_PORT=5175
+Environment=API_BASE=http://127.0.0.1:8000/api
+ExecStart=/usr/bin/node server.prod.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

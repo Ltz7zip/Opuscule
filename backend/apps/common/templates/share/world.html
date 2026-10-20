@@ -1,0 +1,18 @@
+{% extends "share/base.html" %}
+{% block feed %}<link rel="alternate" type="application/rss+xml" title="{{ world.name }} · Opuscule" href="/w/{{ world.slug }}/feed.xml">{% endblock %}
+{% block content %}
+  <span class="eyebrow">公开世界</span>
+  <h1>{{ world.name }}</h1>
+  <p class="lead">{{ world.description|default:"一个公开的 Opuscule 世界。" }}</p>
+  <a class="cta" href="{{ canonical_url }}">进入 Wiki →</a>
+  <div class="list">
+    {% for card in cards %}
+      <a href="/share/w/{{ world.slug }}/{{ card.slug }}/">
+        <h2>{{ card.title }}</h2>
+        <p>{{ card.body_text|truncatechars:100 }}</p>
+      </a>
+    {% empty %}
+      <p>这个世界还没有公开卡片。</p>
+    {% endfor %}
+  </div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "share/base.html" %}
+{% block og_type %}article{% endblock %}
+{% block content %}
+  <span class="eyebrow">{{ world.name }} · Wiki</span>
+  <h1>{{ card.title }}</h1>
+  <p class="lead">{{ world.description|default:"公开 Wiki 卡片" }}</p>
+  <article class="card">
+    <div class="body-text">{{ card.body_text|default:"（这张卡片还没有正文。）"|truncatechars:2400|linebreaks }}</div>
+  </article>
+  <a class="cta" href="{{ canonical_url }}">在 Opuscule 打开 →</a>
+  <div class="meta">/w/{{ world.slug }}/wiki/{{ card.slug }}</div>
+{% endblock %}

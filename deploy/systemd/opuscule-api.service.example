@@ -1,0 +1,16 @@
+[Unit]
+Description=Opuscule Django API
+After=network.target
+
+[Service]
+Type=simple
+User=opuscule
+WorkingDirectory=/srv/opuscule/backend
+EnvironmentFile=/srv/opuscule/deploy/.env
+ExecStart=/srv/opuscule/backend/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

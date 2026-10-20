@@ -1,0 +1,22 @@
+.venv/
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.design/history/
+.playwright-mcp/
+.DS_Store
+backend/db.sqlite3
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.log
+
+# User-uploaded media (local development)
+media/
+
+# Playwright transient output (screenshots under frontend/tests/ui/__screenshots__ are kept)
+frontend/test-results/
+frontend/playwright-report/
+frontend/.playwright/

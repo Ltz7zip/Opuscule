@@ -1,0 +1,47 @@
+/* Layer 4: reading typography shared by the editor and published pages. */
+
+.tiptap,
+.rich-text {
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.85;
+  max-width: 76ch;
+}
+
+.tiptap { min-height: 360px; outline: none; }
+
+.tiptap > * + *,
+.rich-text > * + * { margin-top: 0.85em; }
+.tiptap h1, .tiptap h2, .tiptap h3,
+.rich-text h1, .rich-text h2, .rich-text h3 { letter-spacing: -0.02em; line-height: 1.25; margin: 1.1em 0 0.35em; }
+.tiptap h1, .rich-text h1 { font-size: 1.85em; }
+.tiptap h2, .rich-text h2 { font-size: 1.35em; }
+.tiptap h3, .rich-text h3 { font-size: 1.12em; }
+.tiptap p, .rich-text p { margin: 0; }
+.tiptap ul, .tiptap ol,
+.rich-text ul, .rich-text ol { padding-left: 1.35em; margin: 0.55em 0; }
+.tiptap li, .rich-text li { margin: 0.18em 0; }
+.tiptap blockquote,
+.rich-text blockquote { margin: 1em 0; padding: 2px 0 2px 14px; border-left: 2px solid var(--border-strong); color: var(--muted-foreground); }
+.tiptap code,
+.rich-text code { font-family: var(--font-mono); font-size: 0.9em; background: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
+.tiptap pre,
+.rich-text pre { margin: 1em 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); overflow: auto; }
+.tiptap pre code,
+.rich-text pre code { border: 0; background: transparent; padding: 0; }
+.tiptap hr,
+.rich-text hr { border: 0; border-top: 1px solid var(--border); margin: 1.4em 0; }
+.tiptap a,
+.rich-text a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.tiptap img,
+.rich-text img { max-width: 100%; height: auto; border-radius: var(--radius-sm); }
+.tiptap p:only-child:empty::before {
+  content: "从这里开始写。输入 / 打开插入菜单。";
+  color: var(--muted-foreground);
+  opacity: .65;
+  pointer-events: none;
+}
+
+.rich-text { margin-top: 24px; }
+
+.rich-text :is(h1, h2, h3) { scroll-margin-top: 96px; }

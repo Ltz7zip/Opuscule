@@ -1,0 +1,2384 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opuscule 重构方案 · 设计评审稿</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='16' fill='%23211f1b'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Georgia' font-size='18' fill='%23f7f4ec'%3EO%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #f7f4ec;
+    --paper-2: #efe9db;
+    --paper-3: #e9e2d1;
+    --ink: #211f1b;
+    --muted: #6d6558;
+    --faint: #968c7c;
+    --line: rgba(33, 31, 27, 0.14);
+    --line-strong: rgba(33, 31, 27, 0.28);
+    --accent: #3c4c9e;
+    --accent-soft: #e2e3f4;
+    --ochre: #a95a2a;
+    --ochre-soft: #f2e2d4;
+    --green: #2f6b4f;
+    --green-soft: #dfeadf;
+    --red: #9e3b32;
+    --red-soft: #f2dedb;
+    --code: #efeadd;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Songti SC", serif;
+    --sans: "Avenir Next", Avenir, "Segoe UI", system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: light; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 700px at 88% -8%, #fffdf7 0%, transparent 55%),
+      linear-gradient(180deg, var(--paper) 0%, #f3eee2 100%);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(60, 76, 158, 0.25); }
+  a:hover { border-bottom-color: var(--accent); }
+  .skip { position: absolute; left: -9999px; top: 0; padding: 10px 14px; background: var(--ink); color: var(--paper); z-index: 10; }
+  .skip:focus { left: 12px; top: 12px; }
+
+  .layout { display: grid; grid-template-columns: 252px minmax(0, 1fr); max-width: 1440px; margin: 0 auto; }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 36px 22px 26px 34px;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    overflow: auto;
+    background: rgba(247, 244, 236, 0.55);
+    backdrop-filter: blur(10px);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--ink); color: var(--paper);
+    display: grid; place-items: center;
+    font-family: var(--serif); font-size: 20px; line-height: 1;
+  }
+  .brand .name { font-weight: 700; letter-spacing: 0.02em; line-height: 1.2; }
+  .brand .sub { color: var(--faint); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 2px; }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc .label {
+    color: var(--faint); font-size: 9.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .toc a {
+    display: grid; grid-template-columns: 24px 1fr; gap: 8px;
+    padding: 6px 8px; border-radius: 7px;
+    color: var(--muted); font-size: 12.5px; line-height: 1.45;
+    border: 0;
+  }
+  .toc a span {
+    color: var(--faint); font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.04em; padding-top: 2px;
+  }
+  .toc a:hover { background: rgba(255, 255, 255, 0.45); color: var(--ink); }
+  .toc a.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+  .toc a.active span { color: var(--accent); }
+  .sidebar-foot {
+    margin-top: auto; border-top: 1px solid var(--line); padding-top: 16px;
+    color: var(--faint); font-size: 10.5px; line-height: 1.7;
+  }
+
+  main { padding: 44px clamp(24px, 5vw, 76px) 90px; min-width: 0; }
+
+  .hero { max-width: 920px; padding-bottom: 44px; border-bottom: 1px solid var(--line-strong); }
+  .kicker { color: var(--accent); font-size: 10.5px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; }
+  h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(44px, 6.2vw, 76px);
+    line-height: 1.02; letter-spacing: -0.035em;
+    margin: 18px 0 0;
+  }
+  h1 em { color: var(--accent); font-style: italic; }
+  .lede { max-width: 62ch; margin: 22px 0 0; color: var(--muted); font-size: 17px; line-height: 1.8; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--muted); font-size: 10.5px; letter-spacing: 0.02em;
+    background: rgba(255, 255, 255, 0.35);
+  }
+  .hero-note {
+    margin-top: 26px; padding: 14px 16px;
+    border-left: 2px solid var(--accent);
+    background: var(--accent-soft); color: #2c3566;
+    font-size: 12.5px; border-radius: 0 10px 10px 0;
+  }
+
+  section { padding-top: 52px; margin-top: 52px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+  #summary { border-top: 0; margin-top: 0; padding-top: 44px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-no { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.12em; }
+  h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(28px, 3.2vw, 38px);
+    line-height: 1.15; letter-spacing: -0.02em; margin: 0;
+  }
+  h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; margin: 30px 0 10px; }
+  h4 { font-size: 13px; font-weight: 700; margin: 18px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .small { color: var(--muted); font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 0.92em; overflow-wrap: anywhere; }
+
+  .table-wrap {
+    overflow-x: auto; margin: 16px 0 8px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: rgba(255, 255, 255, 0.34);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 12.5px; line-height: 1.55; }
+  th {
+    text-align: left; font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted); font-weight: 700;
+    padding: 11px 12px; background: rgba(239, 233, 219, 0.55);
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+  tbody tr:hover { background: rgba(255, 255, 255, 0.42); }
+  td code, p code, li code {
+    background: var(--code); padding: 1px 5px; border-radius: 4px;
+    font-family: var(--mono); font-size: 0.88em;
+  }
+  pre {
+    margin: 14px 0; padding: 16px 18px;
+    background: #25231e; color: #ece7da;
+    border-radius: 12px; overflow-x: auto;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.65;
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .c { color: #a8a08d; }
+
+  .callout {
+    margin: 18px 0; padding: 15px 17px;
+    border-left: 3px solid var(--accent);
+    background: rgba(226, 227, 244, 0.55);
+    border-radius: 0 12px 12px 0; font-size: 13px;
+  }
+  .callout .tag {
+    display: block; font-size: 9.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; font-weight: 700; color: var(--accent); margin-bottom: 5px;
+  }
+  .callout.decision { border-left-color: var(--ochre); background: rgba(242, 226, 212, 0.65); }
+  .callout.decision .tag { color: var(--ochre); }
+  .callout.risk { border-left-color: var(--red); background: rgba(242, 222, 219, 0.6); }
+  .callout.risk .tag { color: var(--red); }
+  .callout.rec { border-left-color: var(--green); background: rgba(223, 234, 223, 0.7); }
+  .callout.rec .tag { color: var(--green); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card { padding: 16px 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, 0.34); }
+  .card h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .card p, .card ul { margin: 0; font-size: 12.5px; }
+  .card li { margin: 3px 0; }
+  .card.accent { background: var(--accent-soft); border-color: rgba(60, 76, 158, 0.2); }
+  .card.warm { background: var(--ochre-soft); border-color: rgba(169, 90, 42, 0.18); }
+  .card.green { background: var(--green-soft); border-color: rgba(47, 107, 79, 0.18); }
+
+  .kpi { display: flex; flex-wrap: wrap; gap: 20px 32px; margin: 18px 0; }
+  .kpi div { min-width: 110px; }
+  .kpi b { display: block; font-family: var(--serif); font-size: 30px; font-weight: 400; line-height: 1; }
+  .kpi span { display: block; color: var(--muted); font-size: 10.5px; letter-spacing: 0.06em; margin-top: 6px; }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 14px 0; }
+  .flow .step { flex: 1 1 150px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.4); font-size: 11.5px; line-height: 1.5; }
+  .flow .step b { display: block; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  .flow .arrow { align-self: center; color: var(--faint); font-size: 16px; }
+
+  .phase { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .phase:first-of-type { border-top: 0; }
+  .phase > div { min-width: 0; }
+  .phase .pno { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.08em; padding-top: 3px; }
+  .phase h3 { margin: 0 0 4px; font-size: 16px; overflow-wrap: anywhere; }
+  .phase p { margin: 0; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+  .status { display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: 2px; }
+  .status.now { background: var(--green-soft); color: var(--green); }
+  .status.next { background: var(--accent-soft); color: var(--accent); }
+  .status.later { background: var(--paper-3); color: var(--muted); }
+
+  figure.diagram { margin: 18px 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, 0.32); overflow-x: auto; }
+  figure.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; }
+  figcaption { margin-top: 8px; color: var(--faint); font-size: 10.5px; text-align: center; }
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+
+  .mobile-toc { display: none; margin: 20px 0; }
+  .mobile-toc summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.35); }
+  .mobile-toc nav { padding: 8px 0 0; }
+  .mobile-toc a { display: block; padding: 5px 8px; font-size: 12.5px; border: 0; color: var(--muted); }
+
+  footer.doc-foot {
+    margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line-strong);
+    color: var(--faint); font-size: 11px;
+    display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between;
+  }
+
+  @media (max-width: 980px) {
+    .layout { display: block; }
+    .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 22px 24px; }
+    .sidebar .toc, .sidebar-foot { display: none; }
+    .mobile-toc { display: block; }
+    main { padding: 28px 22px 60px; }
+    h1 { font-size: clamp(40px, 12vw, 56px); }
+    .lede { font-size: 15.5px; }
+    section { padding-top: 40px; margin-top: 40px; }
+    .phase { grid-template-columns: 54px minmax(0, 1fr); }
+  }
+
+  @media print {
+    body { background: #fff; }
+    .sidebar, .mobile-toc, .skip { display: none !important; }
+    .layout { display: block; }
+    main { padding: 0; max-width: none; }
+    section { break-inside: avoid; border-top: 1px solid #ddd; }
+    .card, .callout, table, figure { break-inside: avoid; }
+    a { color: inherit; border-bottom: 0; }
+    pre { white-space: pre-wrap; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">O</div>
+      <div>
+        <div class="name">Opuscule</div>
+        <div class="sub">Refactor blueprint</div>
+      </div>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+      <div class="label">Contents</div>
+      <a href="#delta"><span>00</span>决策落定</a>
+      <a href="#summary"><span>01</span>执行摘要</a>
+      <a href="#audit"><span>02</span>现状审计</a>
+      <a href="#strategy"><span>03</span>重构策略</a>
+      <a href="#architecture"><span>04</span>目标架构</a>
+      <a href="#modules"><span>05</span>仓库与模块</a>
+      <a href="#domain"><span>06</span>领域模型</a>
+      <a href="#mechanisms"><span>07</span>关键机制</a>
+      <a href="#migration"><span>08</span>数据迁移</a>
+      <a href="#roadmap"><span>09</span>路线图</a>
+      <a href="#quality"><span>10</span>质量与运维</a>
+      <a href="#risks"><span>11</span>风险与决策</a>
+      <a href="#appendix"><span>12</span>附录</a>
+    </nav>
+
+    <div class="sidebar-foot">
+      设计评审稿 v0.2<br>
+      2026-10-20 · 决策已定<br>
+      依据：opuscule-architecture-proposal.md
+    </div>
+  </aside>
+
+  <main id="main">
+    <header class="hero">
+      <div class="kicker">Opuscule · Refactor Blueprint · 2026-10</div>
+      <h1>把作品从<br><em>容器</em>里拿出来</h1>
+      <p class="lede">
+        基于《Opuscule 技术方案书》的绿地重构方案。这不是一次换框架，而是重浇四块地基：
+        文档格式、引用图、实体模型、冲突模型。旧站可以继续跑，但不要在原结构上补丁。
+      </p>
+      <div class="meta-row">
+        <span class="chip">设计评审稿 v0.2</span>
+        <span class="chip">2026-10-20 · 决策已定</span>
+        <span class="chip">旧站 Ltz7zip/Opuscule 0.8.1</span>
+        <span class="chip">新仓 /Users/ltz2024/Opuscule</span>
+        <span class="chip">目标：P3 功能对等切换</span>
+      </div>
+      <div class="hero-note">
+        阅读顺序建议：先看第 0 章的五项决策与影响，再看第 1 章结论；
+        第 3 章解释“为什么不是原地改”，第 8 章看迁移怎么不丢数据，第 11 章看新的开放决策。
+        第 6 章是后续所有实现的地基，改动成本最高。窄屏下表格与代码块可横向滚动。
+      </div>
+    </header>
+
+    <details class="mobile-toc">
+      <summary>目录 · 13 节</summary>
+      <nav>
+        <a href="#delta">00 决策落定</a>
+        <a href="#summary">01 执行摘要</a>
+        <a href="#audit">02 现状审计</a>
+        <a href="#strategy">03 重构策略</a>
+        <a href="#architecture">04 目标架构</a>
+        <a href="#modules">05 仓库与模块</a>
+        <a href="#domain">06 领域模型</a>
+        <a href="#mechanisms">07 关键机制</a>
+        <a href="#migration">08 数据迁移</a>
+        <a href="#roadmap">09 路线图</a>
+        <a href="#quality">10 质量与运维</a>
+        <a href="#risks">11 风险与决策</a>
+        <a href="#appendix">12 附录</a>
+      </nav>
+    </details>
+
+    <section id="delta">
+      <div class="sec-head"><span class="sec-no">00</span><h2>决策落定与 v0.2 修订</h2></div>
+
+      <p>
+        2026-10-20 你拍板了五项决策。它们不是五个独立选项，而是一组会互相放大的范围变更：
+        P3 对等切换锁定了发布门，重建 11 种工具把原方案明确排除的产品面重新纳入 v1，
+        Collection 与区间 Hist 又要求模型在 P0/P2 就定死。下面先给结论，再给修订后的架构、
+        工期与已拍板项。v0.1 已快照到 <span class="mono">.design/history/</span>，本文以 v0.2 为准。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>决策</th><th>v0.2 落地方式</th><th>主要影响</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><strong>P3 功能对等切换</strong></td><td>不再保留 P2 先切的退路；先做 parity matrix，再谈日期；增加 P3.5 对等实验室 / 两次演练 / 30 天 hypercare。</td><td>发布门变窄；地图、AI、11 工具任一延期都直接推迟切换。</td></tr>
+            <tr><td>2</td><td><strong>重建 11 种工具</strong></td><td>不做 11 个独立文档模型；按“视图 / 卡片 / 工具页 / 块 / 资产”五类宿主重建，逐工具写对等口径。</td><td>相对 v0.1 约 +18–24 人周；P3 从 12–16 周升到 21–27 周（单人）。</td></tr>
+            <tr><td>3</td><td><strong>新增 Collection 树</strong></td><td>Card 单一 home collection；CollectionView 承载 table/board/radar 等视图；全局 slug registry；公开站 IA 待定。</td><td>P0 必须进 schema；否则 P3 每条 Collection 都要迁移。</td></tr>
+            <tr><td>4</td><td><strong>Era → 区间 Hist</strong></td><td>Hist 增加 <span class="mono">kind=interval|curated</span>、区间、theme/icon/cover；草稿允许空/全量，发布时才要求真子集；旧 Era 逐条 diff。</td><td>样本 19 事件：11 个自动归入、3 个显式冲突、2 个无区间；必须有人工 override 清单。</td></tr>
+            <tr><td>5</td><td><strong>React + Tiptap + Django 6.1</strong></td><td>Django 6.1.x + DRF 3.18.x + drf-spectacular 验证；Tiptap core 只做 MIT 部分；排期含 6.2 LTS 升级。</td><td>DRF 3.16 不支持 6.1；6.1 主流支持到 2027-04，P3 上线窗口紧。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout risk">
+        <span class="tag">工期必须先说清楚</span>
+        v0.1 的 32–42 周（单人）/ 19–24 周（双人）建立在“11 工具退役”上，已经失效。
+        按五项决策重估：<strong>单人约 50–68 周，双人约 30–38 周</strong>，另加 P3.5 的 3–4 周切换与 hypercare；
+        若设计/产品与工程由同一人兼任，P0–P2 的设计量约 19–22 周会与工程叠加，P0–P2 约 36–46 周，
+        P3 工具设计另计。这个区间不是承诺，P0 结束必须重估。
+      </div>
+
+      <h3>0.1 工具重建：不是 11 个 ToolDoc，而是五类宿主</h3>
+      <p>
+        旧站的 11 种工具并不共享同一种数据形态：table 的每一行本来就是 Card，board/radar 是属性视图，
+        canvas/soundscape 是场景 payload，media 是资产，embed/dice 是正文微件。把它们统一建成 11 个
+        独立文档表，会把旧站 <span class="mono">Document</span> 万能容器原样请回来，并让 LinkIndex、
+        Revision、SearchDoc、Publish 四个横切面全部开分支。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>工具</th><th>v0.2 宿主</th><th>数据落点</th><th>阶段</th></tr></thead>
+          <tbody>
+            <tr><td>table / board / radar / todo / dictionary</td><td><strong>视图宿主</strong>：保存的 <span class="mono">CollectionView</span></td><td>Card + PropertyValue；视图只存筛选/排序/分组/列配置</td><td>P2 起，P3 对等</td></tr>
+            <tr><td>chapter</td><td><strong>卡片宿主</strong>：长文 Card</td><td>Tiptap body + Collection 顺序；不另造章节表</td><td>P2</td></tr>
+            <tr><td>canvas / soundscape</td><td><strong>工具页宿主</strong>：<span class="mono">Card.kind=tool</span> + <span class="mono">CardTool</span></td><td>state JSONB；canvas 大 payload 单独限流/快照</td><td>P3</td></tr>
+            <tr><td>media</td><td><strong>资产宿主</strong>：<span class="mono">Asset</span> + 媒体库页</td><td>对象存储 + 元数据；不塞进 Card.body</td><td>P1 上传，P3 页面</td></tr>
+            <tr><td>embed / dice</td><td><strong>块宿主</strong>：Tiptap 节点</td><td>bookmark / dice 节点 attrs；不建独立文档</td><td>P1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        计数：视图 5 + 卡片 1 + 工具页 2 + 资产 1 + 块 2 = 11。旧站还有 <span class="mono">voice</span> /
+        <span class="mono">note</span> 两个边缘类型，不在你的 11 项清单内；ADR-0007 记为默认归档，线上占比高再评估。
+      </p>
+      <div class="callout rec">
+        <span class="tag">ADR-0007 已定</span>
+        视图行默认 <span class="mono">Card + is_auxiliary</span>：保留链接/属性/修订，但默认不进 Collection 树、搜索与公开站。
+        只有 table 10k 行 / board 500 卡的基准失败时，才为该工具单开 ADR 切 <span class="mono">ToolItem</span>；禁止同一工具混用两种行模型。
+      </div>
+
+      <h3>0.2 四个必须先改的架构点</h3>
+      <div class="grid">
+        <div class="card accent">
+          <h4>Card + Collection 单一真值</h4>
+          <p>Card 只存一个 <span class="mono">home_collection</span>；<span class="mono">CollectionItem</span> 的跨集合露出 v1 不做。Collection 拥有结构，Card 拥有内容；删除集合不得 CASCADE 删卡。视图配置放 <span class="mono">CollectionView</span>，不放 Card.body。</p>
+        </div>
+        <div class="card green">
+          <h4>Hist 是区间 + 展示</h4>
+          <p>区间 Hist 必须有 <span class="mono">start/end</span>、<span class="mono">theme/icon/cover</span>、<span class="mono">calendar_version</span>；成员可派生，草稿允许空/全量，发布时校验真子集。旧 Era 的迁移差异（11 个自动归入、3 个显式冲突、2 个无区间）必须逐条解释。</p>
+        </div>
+        <div class="card warm">
+          <h4>工具的五类宿主</h4>
+          <p>视图工具不建 11 张表；页面工具用 <span class="mono">CardTool</span> 侧表；媒体进 <span class="mono">Asset</span>；embed/dice 进块。新增 <span class="mono">assets</span> 与 <span class="mono">tools</span> 两个 app，禁止把工具状态塞进 <span class="mono">Card.body</span>。</p>
+        </div>
+        <div class="card">
+          <h4>运行时与许可证</h4>
+          <p>Django 6.1.x + DRF 3.18.x；Tiptap core 只白名单 MIT 包，不依赖 Pro UI；Redis 锁 7.2 或 Valkey，MinIO 仅 dev；BlockNote 旧内容迁移保留 MPL notice。</p>
+        </div>
+      </div>
+
+      <h3>0.3 新增 ADR 与已拍板</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ADR</th><th>内容</th><th>时点</th></tr></thead>
+          <tbody>
+            <tr><td>ADR-0007</td><td>工具宿主与 11/11 对等矩阵：五类宿主、视图行默认 Card + is_auxiliary、ToolKind、CardTool、ToolRevision、逐工具验收</td><td>已写 · P0 前</td></tr>
+            <tr><td>ADR-0008</td><td>Collection 与公共 IA：单一 home、CollectionPage、CollectionView、公开站是否 Collection 化、全局 slug registry</td><td>已写 · P0 前</td></tr>
+            <tr><td>ADR-0009</td><td>Era → 区间 Hist：区间/展示元数据、成员派生、Card presence、旧 URL 301、空/全量处理</td><td>已写 · P2 前</td></tr>
+            <tr><td>ADR-0010</td><td>运行时：Django 6.1.x + DRF 3.18、6.2 LTS 升级、django.tasks vs Celery</td><td>已写 · P0 第 1 周</td></tr>
+            <tr><td>ADR-0011</td><td>许可证与依赖：Tiptap Pro、BlockNote MPL、Redis 7.2/Valkey、MinIO AGPL、SBOM</td><td>已写 · P0 前</td></tr>
+            <tr><td>ADR-0012</td><td>P3 parity、迁移验收与回滚：11 工具矩阵、Era diff、单实体重导</td><td>待写 · P3 承诺前</td></tr>
+            <tr><td>ADR-0013</td><td>块 schema v2：toolEmbed、bookmark、dice、未知节点隔离</td><td>待写 · 编辑器 P0 前</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        ADR 正文在 <span class="mono">docs/adr/</span>，索引见 <span class="mono">docs/adr/INDEX.md</span>；
+        数据审计见 <span class="mono">docs/spikes/20261020-pre-p0-data-dry-run.md</span>。本页只保留摘要，避免双份真值。
+      </p>
+      <div class="callout decision">
+        <span class="tag">已拍板 · 2026-10-20</span>
+        ① 11 工具默认 <strong>11/11 L3</strong>；任何降级必须后续书面签署；
+        ② 公开站以 <strong>Collection 树为导航权威</strong>，类型分区降为浏览维度；
+        ③ 保留 <span class="mono">Hist(kind=interval)</span> 展示字段与
+        <span class="mono">Card.presence_json</span>；
+        ④ 设计产能：独立设计师约 19–22 周（P0–P2）；同一人约 36–46 周，P3 工具设计另计。
+      </div>
+    </section>
+
+    <section id="summary">
+      <div class="sec-head"><span class="sec-no">01</span><h2>执行摘要</h2></div>
+
+      <p>
+        旧站已经证明了这个产品是成立的：它能建世界、写卡片、排时间线、画关系树、发布只读 Wiki，
+        并且有 519 条测试。问题不在“功能不够”，而在四个地基已经和下一阶段的产品目标错位：
+        文档是一个万能容器、引用是请求时算出来的、数据库是单文件 SQLite、协作模型没有定义。
+        这四件事都不是加一个页面能解决的。
+      </p>
+
+      <div class="callout decision">
+        <span class="tag">结论</span>
+        走 <strong>A 路线：新仓绿地重建 + 一次性单向迁移 + 旧站只读并行</strong>。
+        不做旧仓原地改造，也不做长期双写。旧站冻结在 <span class="mono">legacy-0.8.1</span>，
+        新站按 P0–P3 建到功能对等后切换；切换前旧站继续对外服务，切换后保留 30 天只读回滚窗口。
+      </div>
+
+      <div class="grid">
+        <div class="card green">
+          <h4>保留</h4>
+          <ul>
+            <li>领域语义与算法：自动识别、公式求值、发布状态、AI 变更集、存档、导入导出。</li>
+            <li>视觉语言、品牌、公开站 URL 形态、中文交互文案。</li>
+            <li>旧站代码作为“行为说明书”，不直接复用模型层。</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h4>重建</h4>
+          <ul>
+            <li>Card / EntityType / PropertyValue 一等公民。</li>
+            <li>LinkIndex、CardRevision、Timeline/Hist、WorldMap/MapLink、Graph。</li>
+            <li>11 种工具文档按五类宿主重建（视图 / 卡片 / 工具页 / 块 / 资产）。</li>
+            <li>SSR 公开面 + React 工作区 + DRF API + Postgres。</li>
+          </ul>
+        </div>
+        <div class="card warm">
+          <h4>退役</h4>
+          <ul>
+            <li>Document 万能容器、<span class="mono">blocks</span> 与 <span class="mono">blocks_doc</span> 双模型。</li>
+            <li>请求时实时算图谱、SQLite、单进程扛全部。</li>
+            <li>FMG 整包（待地图 spike 决定）；旧 AI 凭据与会话。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>一年后的验收画面</h3>
+      <ul>
+        <li>新增一种实体类型不需要迁移数据库；改卡片标题，所有反链与嵌入引用同步更新。</li>
+        <li>每次保存都有不可变修订；同一作者 5 分钟内的自动保存合并；恢复历史 = 新建一条修订。</li>
+        <li>公开 Wiki 首屏走 SSR + 边缘缓存，游客不下载工作区大包；工作区只在登录后加载。</li>
+        <li>时间线支持时间点 / 时间段与 Hist 视角；关系图、流程图共用一套图数据层。</li>
+        <li>11 种工具在公开站有只读页、在工作区有对应宿主；parity matrix 无空项。</li>
+        <li>AI 只产出建议集，用户确认后才写库；流式请求不在页面渲染进程里跑。</li>
+      </ul>
+
+      <h3>投入与前提</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>范围</th><th>内容</th><th>单人估算</th><th>双人估算</th></tr></thead>
+          <tbody>
+            <tr><td>P0 地基</td><td>世界/权限、Card/Collection/类型、编辑器、LinkIndex、修订、ToolKind 骨架、公开页最小闭环</td><td>9–12 周</td><td>6–7 周</td></tr>
+            <tr><td>P1 可信可用</td><td>搜索、导出、治理、备份演练、Asset 上传、embed、公开站完善、内测</td><td>7–10 周</td><td>4–6 周</td></tr>
+            <tr><td>P2 时间与图</td><td>Timeline/区间 Hist、关系图/流程图、CollectionView 首批视图、虚拟化、旧数据迁移</td><td>10–15 周</td><td>6–8 周</td></tr>
+            <tr><td>P3 地图、AI 与工具</td><td>2D 地图、子地图、AI 网关/建议层、剩余工具、公开站工具只读</td><td>21–27 周</td><td>11–14 周</td></tr>
+            <tr><td>P3.5 对等与切换</td><td>parity matrix、两次迁移演练、回滚演练、切换、30 天 hypercare</td><td>3–4 周</td><td>2–3 周</td></tr>
+            <tr><td>P4 后置</td><td>兵棋、3D、块级 CRDT</td><td>不排入 v1</td><td>不排入 v1</td></tr>
+            <tr><td><strong>总计</strong></td><td>P0–P3.5，含 20% 缓冲</td><td><strong>50–68 周</strong></td><td><strong>30–38 周</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        与 v0.1 的 32–42 / 19–24 周相比，增量主要来自 11 工具重建与 P3 对等切换；
+        设计侧独立配置约需 19–22 周（P0–P2）；若与工程同一人，P0–P2 约 36–46 周，P3 工具设计另计。
+        P0 结束后必须用实际速度再校准一次，不能把区间当承诺。
+      </p>
+
+      <div class="callout rec">
+        <span class="tag">已拍板</span>
+        ① P3 功能对等切换；② 重建 11 种工具文档（按五类宿主，不是 11 个独立模型）；
+        ③ 新增 Collection 树；④ 旧 Era 映射为区间 Hist；⑤ React + Tiptap + Django 6.1。
+        这四项已在 2026-10-20 拍板，见 §0.3。
+      </div>
+    </section>
+
+    <section id="audit">
+      <div class="sec-head"><span class="sec-no">02</span><h2>现状审计</h2></div>
+
+      <p>
+        先把旧站当成一份“已运行的行为说明书”来读，而不是当成要修补的代码。它有很多做对的地方，
+        也有几处结构性的天花板。分清这两类，才知道哪些该带走、哪些该留下。
+      </p>
+
+      <h3>2.1 它现在是什么</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>维度</th><th>现状</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td>框架</td><td>Django 6.1.1 + SQLite + Gunicorn</td><td>一个依赖顶一套；单文件数据库，备份就是拷文件。</td></tr>
+            <tr><td>应用</td><td>7 个 app：world / documents / graph / maps / publishing / timeline / ai</td><td>按主题拆开，但视图与模型仍集中在 world 的 16 个 view 文件。</td></tr>
+            <tr><td>两张脸</td><td><span class="mono">/w/&lt;slug&gt;</span> 工作区；<span class="mono">/s/&lt;slug&gt;/</span> 只读站点</td><td>同一个进程、同一套模板与 JSON 接口。</td></tr>
+            <tr><td>前端</td><td>无构建原生 JS，工作区 <span class="mono">workspace.js</span> 约 10,364 行；正文是 React + BlockNote 孤岛</td><td>唯一带构建的例外；面板每帧重建 DOM。</td></tr>
+            <tr><td>接口</td><td><span class="mono">/api/world/*</span> 约 118 条路由，函数视图直接返回 JSON</td><td>没有 DRF / OpenAPI / 统一序列化层。</td></tr>
+            <tr><td>测试</td><td>519 条 Django TestCase</td><td>这是旧站最值钱的资产之一，迁移时可作为行为对照。</td></tr>
+            <tr><td>体量</td><td>仓库 89 MB；关键源码约 28.5k 行；地图 vendor 23 MB；编辑器产物 2.3 MB</td><td>体积主要来自 FMG 地图整包与前端资源。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>2.2 做对了什么</h3>
+      <ul>
+        <li><strong>世界作用域是认真的。</strong> 中间件先解析当前世界，再判读/写权限；平台身份与世界角色正交。这套语义可以直接带进新站。</li>
+        <li><strong>自动识别有真功夫。</strong> 中文最长匹配、不重叠、跳过已有链接、英文复数吞并、长度 ≥5 的拉丁词才做编辑距离容错；这不是随便一个 <span class="mono">icontains</span>。</li>
+        <li><strong>AI 变更集的方向是对的。</strong> AI 只生成 <span class="mono">AiChangeSet / AiChange</span>，用户确认后才写库；流式、BYOK、工具循环都已跑通。</li>
+        <li><strong>发布状态机与公开站是完整产品。</strong> 搜索、RSS、OG 图、密码、举报、纪元页都有；公开 URL 可以直接沿用。</li>
+        <li><strong>测试覆盖了真实行为。</strong> 519 条测试里包含权限、AI、时间线、地图桥、导入导出；新站可以用它们做回归对照。</li>
+      </ul>
+
+      <h3>2.3 哪里卡住</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>结构</th><th>现在怎么做的</th><th>为什么到顶</th></tr></thead>
+          <tbody>
+            <tr><td>Document 万能容器</td><td>文件夹、卡片、时间线、地图、看板、表格都是 <span class="mono">Document</span>，靠 <span class="mono">document_type</span> 变身；附带 <span class="mono">settings</span> JSON 与 <span class="mono">map_data</span> 大字段。</td><td>16 种文档类型让模型越来越像“什么都装一点”；Card 不是一等公民；每加一种类型就多一套分支与迁移。新提案的 D3 要求单表 Card + 类型注册表，旧结构无法平滑演进。</td></tr>
+            <tr><td>引用图是算出来的</td><td>世界图谱每次请求即时算：引用属性、事件关联、正文提及三路合并；没有 <span class="mono">LinkIndex</span> 表。</td><td>反链只能靠重算；重命名传播只能改显示文本；块级锚点不存在；大世界必然 N+1。提案 D2 要求引用行是数据，不是文本。</td></tr>
+            <tr><td>SQLite + 单进程</td><td>单文件数据库，Gunicorn 2 worker；缓存用文件缓存；搜索靠内存过滤。</td><td>开放编辑 + 并发写 + 实时中继同时出现时 WAL 不够；没有 JSONB / tsvector / 部分索引；无法水平扩展。</td></tr>
+            <tr><td>时间线模型</td><td>事件是单点（年/月/日/时）；Era 曾是独立坐标系，0.7.0 后改成命名区间；没有 Hist 视角分支。</td><td>提案要求 Timeline + Hist，Hist 是 Timeline 的非空真子集；旧模型的 Era 语义与 Hist 不同，迁移需要重新解释。</td></tr>
+            <tr><td>地图</td><td>一张地图 = 一份 <span class="mono">Document</span> + 一段 FMG <span class="mono">map_data</span> 文本 + 图层/标注表；子地图只靠文档树 parent。</td><td>没有“多张独立大地图”“子地图对应父图视口”的显式模型；FMG 整包 23 MB，升级与部署都重；提案要求 WorldMap / MapLink / 瓦片。</td></tr>
+            <tr><td>世界与权限</td><td>World 没有 kind；只有发布读密码；共建世界、编辑密码、匿名作用域都不存在。</td><td>提案的 D5 与权限矩阵要求 shared/private、Argon2 能力令牌、每次写校验；这是安全边界，不能靠前端补。</td></tr>
+            <tr><td>前端形态</td><td>10k 行原生 JS 持有全部状态，<span class="mono">renderPanels()</span> 每帧重建面板；编辑器靠 <span class="mono">is-live-embed</span> 搬迁 React 节点。</td><td>编辑器、画布、图谱都是重交互；继续在每帧重建模型上加功能，复杂度和回归成本会指数上升。提案 D4 要求公开面与工作区分家。</td></tr>
+            <tr><td>接口契约</td><td>函数视图 + 手写 JSON；前端按字段猜；没有 OpenAPI，没有生成客户端。</td><td>新站有 SSR、SPA、AI 服务、移动端多个消费者；没有契约就会在联调期互相猜字段。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>2.4 数据体检：迁移是“有界工程”，不是“数据考古”</h3>
+      <p>
+        下面的数字来自本机 <span class="mono">db.sqlite3</span> 样本，不是线上全量；迁移前必须以线上库重新盘点。
+        但它足以说明量级：旧库有大量软删除与工具文档，真正需要搬的活内容很少。
+      </p>
+      <div class="kpi">
+        <div><b>3</b><span>用户</span></div>
+        <div><b>1</b><span>世界</span></div>
+        <div><b>1,035</b><span>文档总数</span></div>
+        <div><b>1,013</b><span>软删除文档</span></div>
+        <div><b>22</b><span>未删除文档</span></div>
+        <div><b>10</b><span>内容卡（14 行）</span></div>
+        <div><b>5</b><span>活工具空壳</span></div>
+        <div><b>19</b><span>时间事件</span></div>
+        <div><b>1,256</b><span>历史快照</span></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>对象</th><th>数量</th><th>迁移判断</th></tr></thead>
+          <tbody>
+            <tr><td>世界 / 成员 / 邀请</td><td>1 / 2 / 43</td><td>全量迁移；邀请码可保留或重发。</td></tr>
+            <tr><td>类型 / 属性定义</td><td>12 / 43</td><td>全量迁移；属性值类型 7 种，新模型映射到 6 种值列 + config。</td></tr>
+            <tr><td>未删除文档</td><td>22</td><td>10 card、3 folder、2 familyTree、1 map、1 graph、5 篇工具空壳（table/board/radar/todo/dictionary）。</td></tr>
+            <tr><td>卡片</td><td>10 张内容卡；另有 4 条 live Card 行属于 folder/map/graph/familyTree</td><td>只迁 10 张内容卡；4 条非 card 容器行丢弃；4 张有非空 <span class="mono">blocks_doc</span>，6 张为空、需从旧 <span class="mono">blocks</span> 转换；29 条 Card 行随软删文档丢弃。</td></tr>
+            <tr><td>时间事件 / 时代</td><td>19 / 4</td><td>事件 → TimeNode；时代 → 区间 Hist；迁移差异 11 自动 + 3 冲突 + 2 无区间，逐条解释（见 §8）。</td></tr>
+            <tr><td>关系树</td><td>2 棵</td><td>TreeVariant/Node/Edge → Graph/Node/Edge。</td></tr>
+            <tr><td>地图 / 标注</td><td>1 / 8</td><td>地图整包归档；标注 → MapFeature；FMG 数据不进入新编辑器。</td></tr>
+            <tr><td>历史快照</td><td>1,256</td><td>不逐条迁移；每张卡建 1 条基线 + 最近 10 条可解析快照。</td></tr>
+            <tr><td>AI 凭据 / 会话</td><td>1 / 4</td><td>凭据不迁移（要求重填）；会话归档为 JSON，不进新库。</td></tr>
+            <tr><td>媒体</td><td>466 个文件 / 1.8 MB</td><td>全量复制到对象存储，按哈希重命名并改写引用。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <span class="tag">判断</span>
+        旧站真正贵的是<strong>行为与语义</strong>，不是数据量。1,013 条软删除文档和 1,256 条版本快照不应该进入新库；
+        需要搬的是 22 个活文档、14 张卡、19 个事件、2 棵树、1 张地图和 466 个媒体文件。迁移可以做成一次可重复演练的 ETL，
+        不需要“边跑边迁”的长期双写。
+      </div>
+    </section>
+
+    <section id="strategy">
+      <div class="sec-head"><span class="sec-no">03</span><h2>重构策略</h2></div>
+
+      <h3>3.1 三条路线，先排除两条</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>路线</th><th>做法</th><th>架构纯度</th><th>迁移风险</th><th>工期</th><th>长期成本</th></tr></thead>
+          <tbody>
+            <tr><td><strong>A. 绿地重建</strong></td><td>新仓按提案重写；旧站冻结；一次性 ETL；对等后切换。</td><td>高</td><td>中（集中在切换窗口）</td><td>中</td><td>低：一套模型、一套前端</td></tr>
+            <tr><td>B. 绞杀者</td><td>新站先接新世界；旧世界继续旧站；逐步迁移。</td><td>中</td><td>低（分批）</td><td>长</td><td>高：两套模型、双写、双权限、双搜索长期并存</td></tr>
+            <tr><td>C. 旧仓原地演进</td><td>在 Document 模型上逐步加 Card / LinkIndex / 修订。</td><td>低</td><td>低（增量）</td><td>最长</td><td>最高：每次都要兼容旧结构，最后仍要重写</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        B 看起来最稳，但它要求新旧两套模型共享同一份内容：Card ID、LinkIndex、修订、权限、搜索索引都要双写。
+        对一个单人/小团队来说，这等于把“重写成本”换成“长期双维护成本”，而且两套模型的语义会越走越远。
+        C 的问题更直接：D2（引用图）、D3（单表 Card）、D5（冲突模型）都是横切所有模型与视图的，
+        在旧结构上做等于一边飞行一边换发动机。旧站已经证明这套结构能到 0.8，但它到不了提案里的 1.0。
+      </p>
+
+      <div class="callout rec">
+        <span class="tag">推荐</span>
+        <strong>A 路线 + 安全网</strong>：旧站打 tag <span class="mono">legacy-0.8.1</span> 并保持只读可回滚；
+        新站建到功能对等后，用一次维护窗口完成最终导出、导入、校验、DNS 切换；旧站保留 30 天只读。
+        这样既拿到干净地基，又不在切换前承担双写复杂度。
+      </div>
+
+      <h3>3.2 五条地基与验收信号</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>决策</th><th>架构含义</th><th>验收信号</th></tr></thead>
+          <tbody>
+            <tr><td><strong>D1 结构化块 JSON</strong></td><td>正文是可寻址节点树；每个块有稳定 ID；嵌入控件只存实体 ID。</td><td>AI 能定点改某块；diff 按块展示；嵌入节点重渲染不复制内容。</td></tr>
+            <tr><td><strong>D2 引用图一等公民</strong></td><td><span class="mono">LinkIndex</span> 显式行；反链是索引查询；重命名传播有修订记录。</td><td>改标题后反链面板在 1 次查询内更新；链接完整性巡检可修复不一致。</td></tr>
+            <tr><td><strong>D3 单表 Card + 类型注册表</strong></td><td>Card 是唯一内容基元；EntityType/PropertyDef/PropertyValue 扩展；热类型可加真列。</td><td>新增自定义类型不需要迁移；按属性筛选走索引。</td></tr>
+            <tr><td><strong>D4 两个面</strong></td><td>公开 Wiki SSR + 极轻 JS；工作区 SPA 只在登录后加载。</td><td>游客不下载工作区包；公开首屏可缓存；SEO 正常。</td></tr>
+            <tr><td><strong>D5 冲突模型</strong></td><td>卡片级乐观锁 + 只追加修订 + 冲突提示；画布悲观锁；CRDT 后置。</td><td>两人先后保存不丢内容；冲突返回 409 + 当前修订；画布有锁与超时。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>3.3 复用 / 重写 / 退役清单</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>资产</th><th>决定</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">autolink.py</span></td><td><strong>移植</strong></td><td>中文最长匹配、模糊容错、候选补全直接可用；输出改为写 LinkIndex，而不是返回渲染结果。</td></tr>
+            <tr><td><span class="mono">normalize.py</span> 公式求值</td><td><strong>移植</strong></td><td>AST 白名单遍历，禁止 eval；改成 PropertyDef.config 里的纯函数。</td></tr>
+            <tr><td><span class="mono">publish.py</span> 状态机</td><td><strong>移植</strong></td><td>保留“发布预览 / 版本推进 / 下线不删数据”的语义；新站简化为世界级发布 + 卡片 is_public。</td></tr>
+            <tr><td><span class="mono">permissions.py</span> 世界作用域</td><td><strong>移植</strong></td><td>世界角色与平台身份正交、staff 不穿透、首次安装例外；改成 DRF 权限类 + 服务层。</td></tr>
+            <tr><td><span class="mono">archive.py</span> / <span class="mono">exchange.py</span></td><td><strong>移植</strong></td><td>世界快照/恢复、Markdown/JSON 导入导出；换成新模型字段映射。</td></tr>
+            <tr><td><span class="mono">ai/providers.py</span> + 变更集</td><td><strong>移植</strong></td><td>四家供应商适配、SSE、工具循环、BYOK 加密；去掉模型层耦合，接入新建议层。</td></tr>
+            <tr><td>公开站模板与视觉</td><td><strong>移植</strong></td><td>base / home / page / search / era / password / 404 的布局与文案可直接演进；新增工具只读页与 Collection 导航。</td></tr>
+            <tr><td>Document / Card / 版本模型</td><td><strong>重写</strong></td><td>旧 Document 树 → Collection + Card；旧 JSON values → PropertyValue 行；旧 DocumentVersion → CardRevision。</td></tr>
+            <tr><td>世界图谱 / 关系树</td><td><strong>重写</strong></td><td>连线改由 LinkIndex 查询；画布改成 React Flow；布局算法可参考旧 <span class="mono">relationship.js</span>。</td></tr>
+            <tr><td>地图 / FMG</td><td><strong>重写（待 spike）</strong></td><td>新模型是 WorldMap / MapFeature / MapLink；FMG 整包不进入新仓，旧地图整包归档只读。</td></tr>
+            <tr><td>工作区 <span class="mono">workspace.js</span></td><td><strong>退役</strong></td><td>10k 行原生 DOM 不作为新前端基础；交互与文案作为 UX 参考。</td></tr>
+            <tr><td>11 种工具文档</td><td><strong>重建</strong></td><td>视图 5（table/board/radar/todo/dictionary）+ 卡片 1（chapter）+ 工具页 2（canvas/soundscape）+ 资产 1（media）+ 块 2（embed/dice）；逐工具 L1/L2/L3 对等见 §0.1。</td></tr>
+            <tr><td>1,013 条软删除文档 / 1,256 条快照</td><td><strong>归档</strong></td><td>不进入新库；保留旧库与导出文件，必要时可查。</td></tr>
+            <tr><td>旧 AI 凭据</td><td><strong>退役</strong></td><td>加密密钥不迁移；要求用户重新填写，避免把旧密钥材料带进新系统。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>3.4 明确不做（v1）</h3>
+      <div class="grid">
+        <div class="card">
+          <h4>交互</h4>
+          <ul>
+            <li>字符级实时协同（CRDT 后置 P4）。</li>
+            <li>3D 地图编辑（只读展示也后置）。</li>
+            <li>兵棋 AI 自动对弈（只做确定性推演）。</li>
+            <li>原生 App（PWA 覆盖）。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>数据</h4>
+          <ul>
+            <li>PostGIS / GeoDjango；虚构坐标不需要。</li>
+            <li>跨世界时间线共享。</li>
+            <li>11 个独立 ToolDoc 的 1:1 建模；按 §0.1 五类宿主重建。</li>
+            <li><span class="mono">voice</span> / <span class="mono">note</span> 等 11 项之外的边缘类型。</li>
+            <li>旧 AI 会话/凭据迁移。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>范围</h4>
+          <ul>
+            <li>公开站自定义域名 / 主题市场。</li>
+            <li>移动端完整地图编辑（降级只读）。</li>
+            <li>第三方插件生态。</li>
+            <li>多语言 UI（中文优先）。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>3.5 成功的定义</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>指标</th><th>目标</th><th>测量方式</th></tr></thead>
+          <tbody>
+            <tr><td>卡片保存 P95</td><td>&lt; 300 ms</td><td>后端直方图 + 客户端 Performance</td></tr>
+            <tr><td>反链查询 P95</td><td>&lt; 200 ms</td><td>LinkIndex(target) 查询 + 序列化</td></tr>
+            <tr><td>公开 Wiki 首屏（缓存命中）</td><td>&lt; 1.5 s（内地）</td><td>真实用户监控 / 多运营商探针</td></tr>
+            <tr><td>迁移校验</td><td>0 条未解释差异</td><td>计数、文本哈希、链接差集、抽样截图</td></tr>
+            <tr><td>权限回归</td><td>矩阵 100% 覆盖</td><td>自动化测试 + 手工 IDOR 检查</td></tr>
+            <tr><td>修订可恢复</td><td>任意保留期内 100% 可重放</td><td>随机抽样恢复 + 内容哈希比对</td></tr>
+            <tr><td>工具 parity</td><td>11/11 × L1/L2/L3 无空项</td><td>矩阵签字 + 只读/编辑/权限/搜索/修订逐项验收</td></tr>
+            <tr><td>Era diff</td><td>迁移差异 11 自动 + 3 冲突 + 2 无区间，0 条未解释</td><td>逐条 diff 报告 + override 表 + 人工签字</td></tr>
+            <tr><td>Collection 迁移</td><td>唯一 home、无同名双项、无 CASCADE、无 slug 冲突</td><td>树对比 + 连跑两次 + 301 测试</td></tr>
+            <tr><td>运行时兼容</td><td>Django 6.1.x + DRF 3.18 CI 绿</td><td>第 1 周 spike + 每次 CI smoke</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="sec-head"><span class="sec-no">04</span><h2>目标架构</h2></div>
+
+      <p>
+        一句话：<strong>一套领域核心，两个交付面，四类进程，三种存储。</strong>
+        领域核心是模块化单体，不是微服务；进程隔离只用于长连接，不用于拆业务。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 1040 560" role="img" aria-label="目标架构：公开 Wiki、工作区 SPA 与 API 客户端经网关进入 Django 领域核心；Web、Realtime、AI Stream、Worker 四类进程共享领域核心；数据层为 Postgres、Redis、对象存储与 CDN。">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b8272"/>
+            </marker>
+          </defs>
+          <g font-family="Avenir Next, Segoe UI, sans-serif">
+            <!-- row 1 -->
+            <rect x="30" y="20" width="300" height="58" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="180" y="44" text-anchor="middle" font-size="14" font-weight="700" fill="#211f1b">公开 Wiki  /s/</text>
+            <text x="180" y="62" text-anchor="middle" font-size="10.5" fill="#6d6558">Django 模板 · SSR · 极轻 JS</text>
+
+            <rect x="360" y="20" width="320" height="58" rx="10" fill="#e9eaf7" stroke="#b9bdd9"/>
+            <text x="520" y="44" text-anchor="middle" font-size="14" font-weight="700" fill="#211f1b">工作区 SPA  /w/</text>
+            <text x="520" y="62" text-anchor="middle" font-size="10.5" fill="#4b527e">React · TypeScript · Tiptap · React Flow</text>
+
+            <rect x="710" y="20" width="300" height="58" rx="10" fill="#f3e4d6" stroke="#d8bbaa"/>
+            <text x="860" y="44" text-anchor="middle" font-size="14" font-weight="700" fill="#211f1b">API 客户端 / 移动端</text>
+            <text x="860" y="62" text-anchor="middle" font-size="10.5" fill="#7a5137">REST · OpenAPI · PWA</text>
+
+            <!-- gateway -->
+            <rect x="30" y="112" width="980" height="44" rx="9" fill="#efe9db" stroke="#cfc7b6"/>
+            <text x="520" y="139" text-anchor="middle" font-size="13" font-weight="700" fill="#211f1b">Nginx · CDN 边缘 · TLS · 缓存 · 限流</text>
+
+            <!-- services -->
+            <rect x="30" y="190" width="220" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="140" y="216" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">Web（WSGI）</text>
+            <text x="140" y="234" text-anchor="middle" font-size="10" fill="#6d6558">SSR + JSON API</text>
+
+            <rect x="280" y="190" width="220" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="390" y="216" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">Realtime（ASGI）</text>
+            <text x="390" y="234" text-anchor="middle" font-size="10" fill="#6d6558">SSE · 通知 · 在场</text>
+
+            <rect x="530" y="190" width="220" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="640" y="216" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">AI Stream（ASGI）</text>
+            <text x="640" y="234" text-anchor="middle" font-size="10" fill="#6d6558">SSE · 上游流式</text>
+
+            <rect x="780" y="190" width="230" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="895" y="216" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">Worker（Celery）</text>
+            <text x="895" y="234" text-anchor="middle" font-size="10" fill="#6d6558">索引 · 导出 · 备份</text>
+
+            <!-- domain core -->
+            <rect x="30" y="288" width="980" height="92" rx="12" fill="#e9eaf7" stroke="#b9bdd9"/>
+            <text x="520" y="320" text-anchor="middle" font-size="14" font-weight="700" fill="#211f1b">Django 领域核心（shared code）</text>
+            <text x="520" y="343" text-anchor="middle" font-size="10.5" fill="#4b527e">worlds · cards · links · revisions · timelines · maps · graphs · publishing · search · suggestions</text>
+            <text x="520" y="362" text-anchor="middle" font-size="10" fill="#6d6558">同一套模型与服务；每个进程按自己的入口加载，连接池与超时独立配置</text>
+
+            <!-- data -->
+            <rect x="30" y="414" width="220" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="140" y="440" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">PostgreSQL 17</text>
+            <text x="140" y="458" text-anchor="middle" font-size="10" fill="#6d6558">关系 + JSONB + tsvector</text>
+
+            <rect x="280" y="414" width="220" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="390" y="440" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">Redis 7</text>
+            <text x="390" y="458" text-anchor="middle" font-size="10" fill="#6d6558">缓存 · 限流 · SSE pub/sub</text>
+
+            <rect x="530" y="414" width="220" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="640" y="440" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">对象存储</text>
+            <text x="640" y="458" text-anchor="middle" font-size="10" fill="#6d6558">上传 · 地图底图 · 导出</text>
+
+            <rect x="780" y="414" width="230" height="64" rx="10" fill="#fffaf0" stroke="#cfc7b6"/>
+            <text x="895" y="440" text-anchor="middle" font-size="12.5" font-weight="700" fill="#211f1b">CDN 边缘</text>
+            <text x="895" y="458" text-anchor="middle" font-size="10" fill="#6d6558">静态资源 · 瓦片 · 公开页缓存</text>
+
+            <!-- arrows top to gateway -->
+            <line x1="180" y1="78" x2="180" y2="112" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="520" y1="78" x2="520" y2="112" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="860" y1="78" x2="860" y2="112" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+            <!-- gateway to services -->
+            <line x1="140" y1="156" x2="140" y2="190" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="390" y1="156" x2="390" y2="190" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="640" y1="156" x2="640" y2="190" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+            <!-- services to domain -->
+            <line x1="140" y1="254" x2="140" y2="288" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="390" y1="254" x2="390" y2="288" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="640" y1="254" x2="640" y2="288" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="895" y1="254" x2="895" y2="288" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="940" y1="288" x2="940" y2="254" stroke="#8b8272" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+            <text x="950" y="276" font-size="9" fill="#6d6558">outbox</text>
+
+            <!-- domain to data -->
+            <line x1="140" y1="380" x2="140" y2="414" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="390" y1="380" x2="390" y2="414" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="640" y1="380" x2="640" y2="414" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <line x1="895" y1="380" x2="895" y2="414" stroke="#8b8272" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+            <text x="520" y="520" text-anchor="middle" font-size="10.5" fill="#968c7c">进程隔离：Web / Realtime / AI Stream / Worker 各自独立进程池；代码是同一套领域核心，不是四个服务。</text>
+          </g>
+        </svg>
+        <figcaption>目标架构：两个交付面、四类进程、一套领域核心、三种存储。</figcaption>
+      </figure>
+
+      <h3>4.1 两个面，不是两个产品</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>维度</th><th>公开 Wiki 面</th><th>工作区面</th></tr></thead>
+          <tbody>
+            <tr><td>入口</td><td><span class="mono">/s/&lt;world_slug&gt;/…</span></td><td><span class="mono">/w/&lt;world_slug&gt;/…</span> + <span class="mono">/api/v1/…</span></td></tr>
+            <tr><td>技术</td><td>Django 模板 + 少量原生 JS；无 SPA 运行时</td><td>React + TypeScript + Vite；按路由分包</td></tr>
+            <tr><td>缓存</td><td>CDN 边缘 + 服务端整页/片段缓存；ETag</td><td>不缓存 HTML；API 只缓存世界元数据与类型定义</td></tr>
+            <tr><td>鉴权</td><td>游客可读公开世界；密码世界用短时 read token</td><td>登录 + CSRF；世界 ACL；编辑密码 token</td></tr>
+            <tr><td>性能重点</td><td>首屏 HTML、SEO、LCP；游客不下载工作区包</td><td>编辑器输入延迟、保存 P95、图谱/时间线渲染</td></tr>
+            <tr><td>失败模式</td><td>缓存未命中 → 回源；源站挂了 → 边缘旧页兜底</td><td>API 失败 → 本地草稿 + 重试；冲突 → 409 + 对照</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.2 四类进程，各自独立的超时与连接池</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>进程</th><th>入口</th><th>协议</th><th>扩缩容</th><th>关键约束</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">web</span></td><td><span class="mono">gunicorn config.wsgi</span></td><td>HTTP/1.1、HTTP/2（经 Nginx）</td><td>2–4 worker，按 CPU</td><td>同步请求；绝不承载长连接；保存链路只做最小写。</td></tr>
+            <tr><td><span class="mono">realtime</span></td><td><span class="mono">uvicorn config.asgi --env REALTIME_ONLY=1</span></td><td>SSE</td><td>1–2 worker，按连接数</td><td>只做广播与在场；不查重表；Redis pub/sub。</td></tr>
+            <tr><td><span class="mono">ai-stream</span></td><td><span class="mono">uvicorn config.asgi --env AI_STREAM_ONLY=1</span></td><td>SSE</td><td>1–2 worker，按并发流</td><td>上游超时独立；不阻塞 Web；工具循环最多 6 轮。</td></tr>
+            <tr><td><span class="mono">worker</span></td><td><span class="mono">celery -A config worker</span> + beat</td><td>队列</td><td>2–4 并发</td><td>索引、导出、缩略图、备份；不跑 AI 流式。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <span class="tag">架构选择</span>
+        <strong>模块化单体 + 进程隔离</strong>，不是微服务。理由：领域高度关系型，世界/卡片/链接/修订需要事务一致性；
+        小团队没有精力维护服务边界、分布式追踪、跨服务重试。把长连接拆出去是因为它们会占满 Web worker，
+        而不是因为业务需要拆。等某个模块真的需要独立扩缩容，再从单体里切出去。
+      </div>
+
+      <h3>4.3 数据层</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>用途</th><th>选型</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>主库</td><td>PostgreSQL 17</td><td>关系 + JSONB + 部分索引 + tsvector；开发用 Docker，生产用独立实例或托管。</td></tr>
+            <tr><td>缓存 / 限流 / SSE</td><td>Redis 7</td><td>整页缓存、会话可选、限流计数、pub/sub、在场 TTL。</td></tr>
+            <tr><td>上传 / 媒体</td><td>S3 兼容对象存储</td><td>预签名上传；私有 bucket + 签名 URL；公开世界走 CDN。</td></tr>
+            <tr><td>公开页 / 静态</td><td>CDN</td><td>静态资源、公开页、地图瓦片；不回源到 Django 吐大文件。</td></tr>
+            <tr><td>搜索</td><td>Postgres <span class="mono">pg_trgm</span> + bigram tsvector</td><td>v1 不引入独立搜索引擎；中文用 bigram + 三元组相似度，规模上来再换 Meilisearch。</td></tr>
+            <tr><td>异步</td><td>Celery + Redis broker</td><td>索引、导出、缩略图、备份、批量 AI 抽取；AI 流式不走 Celery。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.4 技术栈与提案的偏差</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>层</th><th>选择</th><th>理由 / 偏差</th></tr></thead>
+          <tbody>
+            <tr><td>Python</td><td>3.14.6（最低 3.12）</td><td>当前宿主 3.14.6；依赖已在该版本验证；3.13 可用时优先。</td></tr>
+            <tr><td>Web</td><td>Django 6.1.x + DRF 3.18.x</td><td>已定 Django 6.1；DRF 3.16 不支持 6.1，必须用 3.18.x。6.1 非 LTS（主流支持到 2027-04），P0 就排 6.2 LTS 升级；drf-spectacular 兼容性第 1 周 spike。</td></tr>
+            <tr><td>前端</td><td>React 19 + TypeScript + Vite</td><td>提案允许 React / Svelte 5；选 React 是因为旧编辑器孤岛已是 React，Tiptap / React Flow / Konva 生态最顺。</td></tr>
+            <tr><td>编辑器</td><td>Tiptap 3（ProseMirror）</td><td>提案 D1 指定 Tiptap / Lexical；旧站 BlockNote 也是 ProseMirror，迁移 JSON 有路径。</td></tr>
+            <tr><td>图谱</td><td>React Flow + elkjs（Web Worker）</td><td>提案指定 @xyflow/react；布局放 Worker，避免阻塞输入。</td></tr>
+            <tr><td>地图</td><td>Konva / react-konva（P3 spike）</td><td>提案的选择标准：瓦片底图 + 矢量标注 → Konva。旧 FMG 只作为对照，不默认继承。</td></tr>
+            <tr><td>测试</td><td>pytest + Playwright + Vitest</td><td>旧站 519 条 Django TestCase 可作为行为对照；新站用 pytest 更灵活。</td></tr>
+            <tr><td>契约</td><td>drf-spectacular + openapi-typescript</td><td>提案没提，但多消费者必须有契约；CI 做 schema diff。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.5 三条关键请求流</h3>
+      <h4>公开页（缓存命中）</h4>
+      <div class="flow">
+        <div class="step"><b>1</b>浏览器 GET <span class="mono">/s/world/card</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><b>2</b>CDN 命中整页缓存，直接返回 HTML</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>3</b>极轻 JS 只做主题/搜索框，不请求 API</div>
+      </div>
+
+      <h4>卡片保存（工作区）</h4>
+      <div class="flow">
+        <div class="step"><b>1</b><span class="mono">PUT /api/v1/worlds/{slug}/cards/{id}</span><br>If-Match: revision</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>2</b>权限 + 编辑 token + 乐观锁</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>3</b>校验块/工具 schema；写 Card/Tool + Revision + Outbox</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>4</b>返回新 revision；worker 异步更新 LinkIndex / SearchDoc</div>
+      </div>
+
+      <h4>AI 流式</h4>
+      <div class="flow">
+        <div class="step"><b>1</b>SPA 建会话，POST 到 <span class="mono">/api/v1/worlds/{slug}/ai/chat</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><b>2</b>Nginx 路由到 ai-stream 进程，关闭缓冲</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>3</b>服务端拼上下文、调上游、转发 SSE</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>4</b>工具调用只读；写操作进建议集，等用户确认</div>
+      </div>
+
+      <h3>4.6 站点地图、页面模块与性能预算</h3>
+      <p>
+        网站不是只有工作区。稳定的一级面至少包括：<strong>工作/编辑区、Wiki 浏览、个人主页、
+        登录/注册、探索公开世界</strong>。后续地图、时间线、AI 与更多工具是新增页面/面板，不是把
+        Tiptap 工作区复制一份。每个面必须有独立入口、独立权限边界和独立加载边界。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>路径</th><th>面</th><th>模块 / 行为</th><th>加载边界</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">/</span></td><td>站点首页</td><td>品牌、世界入口、最近公开世界；不加载编辑器</td><td>公开壳 + lazy 首页</td></tr>
+            <tr><td><span class="mono">/explore</span></td><td>探索</td><td>公开世界列表、搜索/filter；只显示 public-read 世界；P1.6 SSR</td><td>公开壳 + lazy Explore；SSR 首屏</td></tr>
+            <tr><td><span class="mono">/search</span></td><td>公开搜索</td><td>标题/正文片段；只索引公开、未删、非辅助卡片；私有世界不出现</td><td>公开壳 + lazy Search</td></tr>
+            <tr><td><span class="mono">/u/&lt;username&gt;</span></td><td>个人主页</td><td>资料、精选世界、最近公开卡片、本人编辑；见 §6.1.1；P1.7 SSR</td><td>公开壳 + lazy Profile；SSR 首屏</td></tr>
+            <tr><td><span class="mono">/login</span>、<span class="mono">/register</span></td><td>登录 / 注册</td><td>session + CSRF；注册后建 User/Profile，再跳转创建世界</td><td>公开壳 + lazy auth</td></tr>
+            <tr><td><span class="mono">/worlds/new</span></td><td>新建世界</td><td>登录后创建 World + owner membership + 3 个 Collection + 概览卡；可选立即公开</td><td>公开壳 + lazy CreateWorld</td></tr>
+            <tr><td><span class="mono">/invite/&lt;token&gt;</span></td><td>邀请接受</td><td>公开显示世界/角色；登录/注册后回跳接受；一次性、7 天</td><td>公开壳 + lazy Invite</td></tr>
+            <tr><td><span class="mono">/trash</span></td><td>回收站</td><td>owner 的软删除世界；可恢复；不物理删除内容</td><td>公开壳 + lazy Trash</td></tr>
+            <tr><td><span class="mono">/share/w/&lt;world&gt;/... </span></td><td>服务端分享页</td><td>Django 只读 HTML + OG；noindex/canonical 回 SPA；无 JS/无编辑器</td><td>Django 模板（非 React SSR）</td></tr>
+            <tr><td><span class="mono">/w/&lt;world&gt;/wiki</span>、<span class="mono">/w/&lt;world&gt;/wiki/&lt;slug&gt;</span></td><td>Wiki 浏览</td><td>公开只读；Collection/卡片导航；用轻量 RichText，不加载 Tiptap；P1.4 有 dev SSR/hydration 试点</td><td>公开壳 + lazy Wiki；5174 SSR pilot</td></tr>
+            <tr><td><span class="mono">/w/&lt;world&gt;</span></td><td>工作/编辑区</td><td>登录/只读工作区；Collection 树、编辑器、保存；owner 世界设置/成员管理/切换器</td><td>唯一加载 Tiptap 的 lazy chunk</td></tr>
+            <tr><td><span class="mono">/w/&lt;world&gt;/map</span></td><td>世界地图</td><td>公开只读；editor/owner 放标记/拖动/删除；独立 maps app</td><td>独立 lazy Map，不加载 Tiptap</td></tr>
+            <tr><td><span class="mono">/w/&lt;world&gt;/timeline</span></td><td>世界时间线</td><td>公开只读；editor/owner 增删；按年份排序；独立 timelines app</td><td>独立 lazy Timeline，不加载 Tiptap</td></tr>
+            <tr><td><span class="mono">/w/&lt;world&gt;/map</span>、<span class="mono">/timeline</span>、<span class="mono">/ai</span></td><td>未来功能面</td><td>地图/时间线/AI 各自 lazy 页面或面板；权限与 API 独立</td><td>独立 feature chunk</td></tr>
+            <tr><td><span class="mono">/settings</span>、<span class="mono">/invite</span></td><td>未来账户面</td><td>账户、成员、邀请；不塞进世界 Wiki</td><td>独立 lazy 页面</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout rec">
+        <span class="tag">已落地 · 性能</span>
+        前端按路由 lazy：<span class="mono">app/routes.ts</span> 解析路径，<span class="mono">app/RouteView.tsx</span>
+        是唯一页面边界；<span class="mono">Workspace</span> 是唯一静态引用 Tiptap 的 chunk。
+        当前 production build：入口 JS 73.37 kB gzip，公开页无 editor；工作区 editor chunk 134.52 kB gzip
+        且只在 <span class="mono">/w/...</span> 加载。公开 Wiki 用轻量 <span class="mono">RichText</span> 渲染
+        Tiptap JSON，不启动 ProseMirror。顶栏已去掉 <span class="mono">backdrop-filter</span> 模糊。
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>指标</th><th>预算</th><th>当前 / 规则</th></tr></thead>
+          <tbody>
+            <tr><td>公开首屏 JS</td><td>≤ 120 kB gzip</td><td>入口 73.37 kB + 页面/共享 chunk；不含 Tiptap</td></tr>
+            <tr><td>工作区 editor chunk</td><td>≤ 160 kB gzip</td><td>134.52 kB；只允许 <span class="mono">/w/&lt;world&gt;</span> 加载</td></tr>
+            <tr><td>公开首屏 CSS</td><td>≤ 40 kB gzip</td><td>当前 8.53 kB</td></tr>
+            <tr><td>连续动画 / GPU 合成</td><td>公开页 0 个常驻动画</td><td>加载 spinner 可结束；不使用 topbar 毛玻璃</td></tr>
+            <tr><td>LCP / CPU</td><td>本地 LCP ≤ 2.5 s；空闲 CPU 接近 0</td><td>P1 加 Lighthouse/CI budget；真实设备复测</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>公开页不能 import <span class="mono">CardEditor</span>/Tiptap/ProseMirror；用 <span class="mono">RichText</span> 只读渲染。</li>
+        <li>新增地图/AI/工具时，先加 <span class="mono">features/&lt;name&gt;</span> 的 lazy 页面与 route，再复用共享壳；不要把所有页面塞进 App。</li>
+        <li>后端保持 app 边界：<span class="mono">worlds</span>、<span class="mono">collections</span>、<span class="mono">cards</span>、<span class="mono">identity</span>；未来 <span class="mono">maps</span>、<span class="mono">ai</span> 各自 app/服务，不互相 import 模型实现。</li>
+        <li>P1.1 已落地公开搜索、`Cache-Control` 浏览器/代理缓存和 <span class="mono">check:budget</span> 门禁。</li>
+        <li>P1.2 已落地动态 title/description/canonical/OG、私有页 noindex、`/robots.txt`、`/sitemap.xml` 和 GitHub Actions；<strong>SSR/SSG 仍未做</strong>，不能把“SPA 元信息 + sitemap”冒充服务端 HTML 首屏。</li>
+        <li>预算门禁：`make budget` 执行 <span class="mono">npm run build && npm run check:budget</span>；entry/Workspace/CSS 超预算即失败。</li>
+        <li>SEO：公开 Wiki/profile 输出 canonical + OG；工作区/回收站/邀请/登录/搜索 noindex；sitemap 只列公开、未软删内容。</li>
+        <li>P1.3 的分享页是 Django 服务端只读 HTML（无 React/hydration），用于社交/无 JS 预览。</li>
+        <li>P1.4 的 SSR 是 <strong>Wiki 单路由 dev pilot</strong>：5174 的 Node/Vite server 预取数据、renderToString + hydrateRoot，其他路由 SPA fallback。</li>
+        <li>P1.5 把 SSR 做成可构建的独立 server：`build:all`、`preview:ssr`（5175）、manifest/SSR bundle/静态资产/API 反代；仍是单进程本机 preview。</li>
+        <li>P1.6/1.7/1.8 把 SSR 依次扩到 Explore、Profile、Home：公开内容路由（Home + Wiki + Explore + Profile）均 SSR；Workspace/登录/注册/搜索/回收站/邀请仍 CSR，不是全站 SSR。</li>
+        <li>P3.1 的 `make ci` 已本地通过；GitHub Actions 已配置但未实际运行。`deploy/` 只是 Nginx/systemd 拓扑草图，未执行、未完成生产部署。</li>
+        <li>P3.2：owner 可导出世界 ZIP（world.json/README/wiki/*.md），同步生成、owner-only。</li>
+        <li>P3.3：owner 可从 ZIP 导入新世界，默认私有，保留集合/卡片/地图标记。</li>
+        <li>P3.4：导入成功写 `world.imported` 审计（含源文件名）；有效 ZIP 浏览器 E2E 已验证并清理测试世界。</li>
+        <li>P3.5：活动记录支持 action API 过滤 + dialog 分组（全部/导入/成员/设置），显示导入文件名。</li>
+        <li>P3.6：活动记录支持 owner CSV 导出（BOM/CRLF，最多 5000 条）。</li>
+        <li>P3.7：审计 CSV 对危险公式前缀加单引号，防止 Excel 公式注入。</li>
+        <li>P3.8：导入历史（最近 100）与撤销导入；撤销是软删除 + DELETED 审计。</li>
+        <li>P3.9：API `/api/health/`（DB 检查）与 SSR `/healthz`；无深度 readiness/监控。</li>
+        <li>P4.1：世界时间线是独立 `apps.timelines` + lazy `/w/&lt;world&gt;/timeline`；MVP 仅创建/删除/按年排序。</li>
+        <li>P4.2：时间线条目支持编辑（回填/保存/按年重排）；无多时间线/纪元/SSR。</li>
+        <li>P2.3：地图支持 1–3× 缩放（逆坐标，拖动仍准）。</li>
+        <li>P2.4：地图支持平移/边界夹取/放置-移动模式；无瓦片/触摸手势。</li>
+        <li>P2.5：owner 可上传 PNG/JPEG/WebP 地图背景（≤4MB，本地 media）；无裁剪/对象存储。</li>
+        <li>P2.6：地图背景随 ZIP 导出/导入（10MB 上限）；无裁剪/对象存储/其他媒体。</li>
+        <li>P4.3：时间线按纪元客户端筛选；无后端分页/年份范围。</li>
+        <li>P4.4：公开 RSS 2.0（`/feed.xml`、`/w/&lt;world&gt;/feed.xml`）；无分页/Atom/时间线 feed。</li>
+        <li>P4.5：公开搜索返回世界 + 卡片；世界最多 8 条，无分页/用户搜索/SSR。</li>
+        <li>P4.6：登录 10/min、注册 20/hour 限流；LocMem。</li>
+        <li>P4.7：5 次密码错误锁定账号 15 分钟，成功登录重置；无验证码/2FA/锁定审计。</li>
+        <li>P4.8：默认信任 REMOTE_ADDR；TRUST_PROXY_HEADERS=1 才使用 XFF；无多级代理/Redis。</li>
+        <li>P4.9：公开搜索加入创作者（公开 profile + 公开世界，最多 8）；无分页/SSR。</li>
+        <li>P4.10：搜索标题精确/前缀/包含优先于正文；无 BM25/分页/高亮。</li>
+        <li>P4.11：时间线可选结束年份，显示 487–490 区间；无 Era 区间/多时间线/BCE。</li>
+        <li>P4.12：搜索关键词安全高亮（React mark）；无多关键词/SSR。</li>
+        <li>P4.13：搜索卡片支持 limit/offset/has_more + 加载更多；世界/创作者不分页。</li>
+        <li>P5.1：生产 settings 环境化（secret/DEBUG/hosts/SSL/HSTS/secure cookies/SMTP）；deploy check 0，实际编排未执行。</li>
+        <li>P5.2：登录用户可修改密码，当前 session 保持；无忘记密码/2FA/其他设备失效。</li>
+        <li>P4.14：旧站式横向时间线画布（轴线/事件/纪元色带/缩放/平移/轴线新建）。</li>
+        <li>P4.15：Era 独立区间模型/API + 真实色带 + owner 管理；无月刻度。</li>
+        <li>P4.16：多时间线模型/API/切换器/新建；demo 主时间线 + 航海志。</li>
+        <li>P4.17：条目可选月份 + 短跨度月份 tick。</li>
+        <li>P5.3：Tiptap 斜杠菜单、选区浮条（下划线/链接）、块 +、官方 DragHandle nested 拖拽、Tab/Shift-Tab 任意嵌套、nested/toggle、官方表格、官方 TaskList、官方 Mention @卡片 + slug/标题自动识别、正文卡片名自动链接、左侧 gutter 对齐、媒体库、图片轮播、页面图标/封面、callout/image 上传或 URL/bookmark/card embed；无任意文本自动识别/拖入容器/协作。</li>
+        <li>P5.4：卡片评论 + 选区锚点 mark + 回复/解决/删除 + 通知 API/顶栏 badge。</li>
+        <li>P2.1 的世界地图是独立 `apps.maps` + lazy `/w/&lt;world&gt;/map`；MVP 是抽象网格，不是瓦片地图，也不进 SSR/sitemap。</li>
+      </ul>
+    </section>
+
+    <section id="modules">
+      <div class="sec-head"><span class="sec-no">05</span><h2>仓库与模块</h2></div>
+
+      <h3>5.1 目标仓库结构</h3>
+<pre><code>opuscule/
+├── backend/
+│   ├── manage.py
+│   ├── pyproject.toml
+│   ├── config/
+│   │   ├── settings/{base,dev,prod,test}.py
+│   │   ├── urls.py  asgi.py  wsgi.py  celery.py
+│   ├── apps/
+│   │   ├── common/          # 基类、审计、outbox、权限工具
+│   │   ├── identity/        # User / Profile / 平台角色
+│   │   ├── worlds/          # World / Member / Secret / Invitation
+│   │   ├── assets/          # Asset / 上传 / 哈希去重 / 引用计数
+│   │   ├── collections/     # Collection 树（只导航，不含 Card FK）
+│   │   ├── entities/        # EntityType / PropertyDef
+│   │   ├── cards/           # Card(kind) / home_collection / PropertyValue / CardRevision
+│   │   ├── tools/           # ToolKind / CardTool / CollectionView / ToolRevision
+│   │   ├── links/           # LinkIndex / 反链 / 重命名传播 / 巡检
+│   │   ├── timelines/       # Timeline / TimeNode / Hist / Override
+│   │   ├── maps/            # WorldMap / Layer / Feature / MapLink
+│   │   ├── graphs/          # Graph / Node / Edge
+│   │   ├── publishing/      # 公开站投影 / 发布事件 / 缓存失效
+│   │   ├── search/          # SearchDoc / 索引任务 / 查询
+│   │   ├── suggestions/     # ChangeSet / Change / 应用器
+│   │   ├── ai/              # 供应商网关 / 会话 / 工具
+│   │   ├── realtime/        # SSE / 在场（不碰领域模型）
+│   │   └── wargame/         # P4：确定性推演
+│   ├── templates/           # 公开站 + 登录/密码/错误页
+│   ├── static/              # 公开站 CSS/JS（小）
+│   └── tests/
+├── frontend/
+│   ├── pnpm-workspace.yaml
+│   ├── apps/workspace/      # React SPA
+│   ├── packages/editor/     # Tiptap 节点与菜单
+│   ├── packages/tools/      # 11 工具的五类宿主与注册表
+│   ├── packages/ui/         # 设计系统
+│   ├── packages/api-client/ # OpenAPI 生成
+│   ├── packages/block-schema/ # 块 JSON schema + 校验
+│   └── e2e/                 # Playwright
+├── contracts/
+│   ├── openapi.yaml         # CI 生成，不手改
+│   ├── block-schema.json
+│   └── events.schema.json
+├── infra/
+│   ├── compose.dev.yml      # Postgres / Redis / MinIO
+│   ├── docker/              # 后端/前端镜像
+│   ├── nginx/  systemd/
+│   └── backup/
+├── docs/
+│   ├── adr/
+│   ├── migration/
+│   └── plans/
+├── scripts/
+│   ├── export_legacy.py
+│   ├── import_world.py
+│   └── reindex.py
+└── Makefile
+</code></pre>
+      <p class="small">
+        当前工作区里的 <span class="mono">src/opuscule</span> 与 <span class="mono">main.py</span> 是 stdlib 脚手架，
+        不是产品代码；P0 开始时用上述结构替换，旧文件保留在历史快照里。这份方案也会取代当前
+        <span class="mono">AGENTS.md</span> 的 stdlib-first 运行时约定，P0 时同步更新项目约定与项目 skill。
+      </p>
+
+      <h3>5.2 Django app 的职责与依赖</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>app</th><th>拥有</th><th>允许依赖</th><th>关键测试</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">common</span></td><td>BaseModel、AuditEvent、OutboxEvent、权限工具、分页</td><td>无领域依赖</td><td>outbox 幂等、审计不可变</td></tr>
+            <tr><td><span class="mono">identity</span></td><td>User、Profile、平台角色</td><td>common</td><td>角色矩阵、登录/CSRF、封禁</td></tr>
+            <tr><td><span class="mono">worlds</span></td><td>World、Member、Secret、Invitation</td><td>identity, common</td><td>shared/private、密码 token、7 世界上限</td></tr>
+            <tr><td><span class="mono">assets</span></td><td>Asset、预签名上传、哈希去重、引用计数、清理</td><td>worlds, common</td><td>跨世界拒绝、孤儿清理、私有/公开</td></tr>
+            <tr><td><span class="mono">collections</span></td><td>Collection 树、排序、公开可见性</td><td>worlds, common</td><td>树环检测、跨世界拒绝、无 CASCADE 删卡</td></tr>
+            <tr><td><span class="mono">entities</span></td><td>EntityType、PropertyDef、继承/校验</td><td>worlds, common</td><td>类型 key 唯一、属性值类型</td></tr>
+            <tr><td><span class="mono">cards</span></td><td>Card(kind)、home_collection、CollectionPage、PropertyValue、CardRevision、CardAlias、Outbox</td><td>worlds, collections, entities, common</td><td>乐观锁、修订合并、块 schema、单一 home</td></tr>
+            <tr><td><span class="mono">tools</span></td><td>ToolKind、CardTool、CollectionView、ToolRevision、工具配置 schema</td><td>cards, collections, assets, entities</td><td>11 工具宿主、视图配置、payload 校验、公开只读</td></tr>
+            <tr><td><span class="mono">links</span></td><td>LinkIndex（源/目标多态）、反链、重命名传播、巡检</td><td>cards, tools, timelines, worlds, common</td><td>同世界、去重、块锚点、修复</td></tr>
+            <tr><td><span class="mono">timelines</span></td><td>Timeline、TimeNode、Hist、Override、Calendar</td><td>cards, worlds, common</td><td>非空真子集、排序、历法</td></tr>
+            <tr><td><span class="mono">maps</span></td><td>WorldMap、Layer、Feature、MapLink</td><td>cards, worlds, common</td><td>环检测、视口、跨世界</td></tr>
+            <tr><td><span class="mono">graphs</span></td><td>Graph、Node、Edge、布局</td><td>cards, worlds, common</td><td>节点/边同图、布局快照</td></tr>
+            <tr><td><span class="mono">publishing</span></td><td>公开站投影、PublishEvent、缓存键、工具只读页</td><td>worlds, cards, collections, tools, timelines</td><td>公开范围、缓存失效、密码、工具可见性</td></tr>
+            <tr><td><span class="mono">search</span></td><td>SearchDoc、索引任务、查询（卡片/工具/时间节点）</td><td>cards, tools, timelines, worlds, common</td><td>世界作用域、中文命中、源多态、重建</td></tr>
+            <tr><td><span class="mono">suggestions</span></td><td>ChangeSet、Change、应用器（v1 不编辑工具）</td><td>cards, links, timelines, maps（服务层）</td><td>AI 不直写、部分失败、重复应用</td></tr>
+            <tr><td><span class="mono">ai</span></td><td>供应商网关、会话、工具、配额</td><td>suggestions, identity, common</td><td>流式、BYOK 加密、工具循环</td></tr>
+            <tr><td><span class="mono">realtime</span></td><td>SSE 事件、在场</td><td>common（只发 payload）</td><td>断线重连、世界隔离</td></tr>
+            <tr><td><span class="mono">wargame</span></td><td>Ruleset、Setup、Run、Command、Snapshot</td><td>maps, cards, worlds</td><td>确定性重放、种子</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>5.3 依赖规则：一条 DAG，不做环</h3>
+<pre><code>common
+  ↑
+identity → worlds → collections
+                 → assets
+                 → entities
+                 → cards ──→ links
+                 │           ↑
+                 ├────────── timelines
+                 ├────────── maps
+                 ├────────── graphs
+                 └────────── tools ──→ publishing
+
+publishing → worlds + cards + collections + tools + timelines
+search     → cards + tools + timelines + worlds
+suggestions→ cards + links + timelines + maps（只经服务层）
+ai         → suggestions + identity
+realtime   → common
+wargame    → maps + cards
+</code></pre>
+      <ul>
+        <li><strong>禁止：</strong><span class="mono">cards</span> 直接 import <span class="mono">links</span> / <span class="mono">tools</span> / <span class="mono">search</span> / <span class="mono">publishing</span>；<span class="mono">collections</span> 反向 import <span class="mono">cards</span>；<span class="mono">tools</span> 不直接渲染；<span class="mono">worlds</span> 反向依赖内容 app；<span class="mono">ai</span> 直接 import 领域模型写库。</li>
+        <li><strong>跨 app 写入</strong>只走服务函数或 outbox 事件；<span class="mono">links</span> 监听 <span class="mono">CardSaved</span> / <span class="mono">ToolSaved</span>，不反向调用。</li>
+        <li><strong>强制手段：</strong><span class="mono">import-linter</span> 合同 + 一条 <span class="mono">pytest</span> 测试；CI 失败即阻断合并。</li>
+      </ul>
+
+      <h3>5.4 契约：四类 schema，一份生成物</h3>
+      <div class="grid">
+        <div class="card">
+          <h4>HTTP API</h4>
+          <p>DRF + drf-spectacular 生成 <span class="mono">openapi.yaml</span>；<span class="mono">openapi-typescript</span> 生成 <span class="mono">api-client</span>。CI 做 breaking-change diff。</p>
+        </div>
+        <div class="card">
+          <h4>块文档</h4>
+          <p><span class="mono">block-schema.json</span> 是编辑器、后端校验、迁移脚本的单一来源；节点白名单与版本号进 schema。</p>
+        </div>
+        <div class="card">
+          <h4>工具配置</h4>
+          <p><span class="mono">tool-schema/*.json</span> 按 ToolKind 定义 CollectionView config 与 CardTool state；11 工具共用校验器。</p>
+        </div>
+        <div class="card">
+          <h4>领域事件</h4>
+          <p><span class="mono">events.schema.json</span> 定义 outbox / SSE 的 payload；生产者和消费者都做 schema 校验。</p>
+        </div>
+      </div>
+
+      <h3>5.5 前端包</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>包</th><th>职责</th><th>不做什么</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">apps/workspace</span></td><td>路由、布局、数据获取、权限可见性、编辑器/画布/图谱页面</td><td>不直接拼 HTML；不持有领域规则</td></tr>
+            <tr><td><span class="mono">packages/editor</span></td><td>Tiptap 扩展、斜杠菜单、块工具条、自定义卡片/时间线/地图节点</td><td>不请求业务 API；只通过回调</td></tr>
+            <tr><td><span class="mono">packages/block-schema</span></td><td>块 JSON 类型、Zod 校验、版本迁移</td><td>不依赖 React</td></tr>
+            <tr><td><span class="mono">packages/tools</span></td><td>11 工具的五类宿主、ToolKind 注册表、CollectionView/CardTool 渲染器</td><td>不直接请求 API；通过注入的服务</td></tr>
+            <tr><td><span class="mono">packages/api-client</span></td><td>OpenAPI 生成的类型与 fetch 封装</td><td>不手写重复类型</td></tr>
+            <tr><td><span class="mono">packages/ui</span></td><td>按钮、表单、面板、对话框、空状态、设计 token</td><td>不包含页面级业务</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>5.6 仓库与协作约定</h3>
+      <ul>
+        <li>新仓独立历史；旧仓打 tag <span class="mono">legacy-0.8.1</span>，不 force-push、不删除。</li>
+        <li>trunk-based：短分支 + PR；每个 PR 必须带测试或明确“无行为变化”。</li>
+        <li>ADR 放 <span class="mono">docs/adr/</span>：0001 双面架构、0002 Card/Collection、0003 LinkIndex 同步、0004 修订存储、0005 搜索、0006 迁移切换、0007 工具宿主、0008 公共 IA、0009 Era/Hist、0010 运行时、0011 许可证、0012 parity、0013 块 schema v2。</li>
+        <li>环境：local（compose）、preview（每 PR）、staging（迁移演练）、prod（香港源站）。</li>
+        <li>新项目建独立的 Python 3.14.6 venv（当前宿主；3.13 可用时优先）；不要复用根 <span class="mono">.venv</span>，保持依赖隔离。</li>
+        <li>版本：语义化；数据库迁移遵循 expand/contract，禁止在同一发布里先删列。</li>
+      </ul>
+    </section>
+
+    <section id="domain">
+      <div class="sec-head"><span class="sec-no">06</span><h2>领域模型</h2></div>
+
+      <p>
+        这一章是后续所有功能的地基。原则只有三条：<strong>Card 是唯一内容基元、引用是显式行、
+        同一世界内所有外键必须同界</strong>。下面的代码是结构示意，不是最终迁移文件。
+      </p>
+
+      <h3>6.1 世界、身份与权限</h3>
+<pre><code>class World:
+    id, slug, name, kind(shared|private), owner_id
+    description, theme_json
+    is_public_read, listing_visible
+    published_at, published_version
+    deleted_at(null)          # 软删除；默认 manager 过滤
+    created_at, updated_at
+
+class WorldMember:
+    world_id, user_id, role(owner|editor|viewer)
+    unique(world, user)
+
+class WorldInvite:          # P0.8 一次性邀请
+    world_id, token(unique), role(editor|viewer)
+    created_by, expires_at(7d), max_uses(1), used_count
+    revoked_at(null)
+
+class WorldAuditEvent:      # P0.10 治理审计
+    world_id, actor_id(null), target_user_id(null)
+    action(created|settings|publish|delete|restore|member|invite|transfer)
+    metadata(json), created_at
+
+class MapMarker:             # P2.1 地图，独立 apps.maps
+    world_id, card_id(null), label, kind(place|event|character|note)
+    x, y (0..1), created_by, created_at, updated_at
+
+class TimelineEntry:         # P4.1 时间线，独立 apps.timelines
+    world_id, card_id(null), year, era, title, description, created_by
+
+class WorldSecret:
+    world_id, scope(read|edit), password_hash(Argon2)
+    created_at, updated_at
+</code></pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>世界类型</th><th>默认可见</th><th>可列出</th><th>编辑</th><th>密码</th></tr></thead>
+          <tbody>
+            <tr><td>共建 shared</td><td>全服公开可读</td><td>是</td><td>登录用户可改（受治理约束）</td><td>无</td></tr>
+            <tr><td>私人 private</td><td>默认私有</td><td>可选</td><td>owner / editor</td><td>read / edit；可只设 edit</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>站点角色（superuser / admin / user / guest）与世界角色正交；admin 能封号，不自动获得私人世界内容权限。</li>
+        <li>P0.7 的最小成员管理：owner 可按已注册用户名添加 editor/viewer、改角色、移除；owner 不能被移除/降级；所有权转移仍在后续。</li>
+        <li>P0.8 的一次性邀请：token 只允许一次使用、7 天过期、owner 可撤销；接受必须登录，登录/注册支持安全 next 回跳；邮件发送与多次邀请未做。</li>
+        <li>P0.9 的治理：世界软删除（`deleted_at`，owner 可在回收站恢复）、所有权转移（原 owner → editor，目标 → owner）；不做物理删除/保留期限。</li>
+        <li>P0.10 的审计：世界创建/设置/公开/删除/恢复、成员、邀请、所有权转移写 `WorldAuditEvent`；owner 可在工作区查看最近 100 条；不做导出/不可篡改/保留策略。</li>
+        <li>私人世界上限 7 个（P0.6 已强制）；共建世界仅管理员创建。</li>
+        <li>密码只存 Argon2 哈希；校验通过签发 <strong>限定 world + scope + 短时</strong>的签名 token，不绕过 <span class="mono">request.user</span> 体系。</li>
+      </ul>
+
+      <h3>6.1.1 个人主页 /u/&lt;username&gt;</h3>
+      <p>
+        旧站已经有个人主页，不能在新架构里漏掉。它不是“世界首页”，也不是 Collection 的一层；
+        它是<strong>跨世界的作者门面</strong>：头像用显示名首字母，展示公开世界、精选世界、最近公开卡片与外部链接。
+        旧 <span class="mono">/u/&lt;username&gt;</span> 的 URL 语义保留。
+      </p>
+<pre><code>class UserProfile:
+    user_id(unique)          # OneToOne auth.User
+    display_name, headline, bio
+    location, website
+    links_json               # [{label, url}]
+    pinned_world_ids         # 有序；必须是本人 world membership
+    is_public
+    # P0.4 parity（旧站已有，先记录不假装已做）
+    layout, blocks_json, accent
+</code></pre>
+      <div class="callout rec">
+        <span class="tag">P0.3 边界</span>
+        公开主页只投影 <span class="mono">is_public_read</span> 的世界与 <span class="mono">is_public</span> 的卡片；
+        私人世界和私密卡不出现。主页 <span class="mono">is_public=false</span> 时对他人 404，本人和 staff 可读。
+        本人可改显示名/一句话简介/简介/所在地/网站/链接/置顶/公开开关；区块排版、主题色、自定义 block 编辑器是 P0.4
+        parity，不在 P0.3 冒充完成。
+      </div>
+      <ul>
+        <li>个人主页与 Collection 正交：<span class="mono">/u/&lt;username&gt;</span> 是作者页，<span class="mono">/s/&lt;world&gt;/</span> 是世界页；不要把作者页塞进 Collection 树。</li>
+        <li>置顶世界必须同时是本人的 membership；公开访客只看到其中 <span class="mono">is_public_read=true</span> 的世界，私有世界 ID 不进入响应。</li>
+        <li>链接只接受 <span class="mono">http(s)</span>、<span class="mono">mailto</span> 和站内绝对路径；裸域名补 <span class="mono">https://</span>，奇怪协议丢弃。</li>
+        <li>旧 <span class="mono">UserProfile.blocks/layout/accent</span> 不丢：迁移时保留原值，P0.4 再决定是否重建编辑器；如果降级必须在 parity matrix 签字。</li>
+      </ul>
+
+      <h3>6.2 卡片、集合、类型与属性（v0.2）</h3>
+<pre><code>class Collection:            # 只做导航；不含 Card FK
+    id, world_id, parent_id(null), name, slug
+    position_key, icon, description, is_public
+    unique(world, slug)
+
+class Card:
+    id, world_id, home_collection_id(null)
+    kind(content|tool)
+    type_id(null)            # content 必填；tool 可空
+    title, slug
+    body_json                # Tiptap doc，块 ID 稳定
+    body_text                # 派生，供搜索/链接扫描
+    is_public, presence_json # presence_json 保留旧 era_mode/era_ids 语义
+    is_auxiliary             # 视图行（table/board）默认不进树/搜索
+    revision
+    created_by, updated_by
+    created_at, updated_at, deleted_at
+    # v1 不做 CollectionItem 跨集合露出；一张卡一个 home
+
+class CollectionPage:        # cards app，解 collections ↔ cards 的 FK 环
+    collection_id(unique), card_id(unique)
+    # 旧“卡片带子节点”用它做带自页的集合
+
+class CollectionView:        # table / board / radar / todo / dictionary
+    id, collection_id, kind
+    name, config_json, position, is_default
+
+class CardTool:              # canvas / soundscape 等页面型工具
+    card_id(unique), tool_key
+    schema_version, state_json, state_bytes
+
+class EntityType:
+    id, world_id(null=全局内置), key, display_name
+    icon, color, parent_id(null), position
+
+class PropertyDef:
+    id, type_id, key, display_name
+    value_kind(text|number|date|bool|ref|enum|multi)
+    config_json, required, position
+
+class PropertyValue:
+    id, card_id, property_def_id
+    value_text, value_number, value_date, value_bool
+    value_ref_card_id, value_json
+    unique(card_id, property_def_id)
+    index(property_def_id, value_text), index(value_ref_card_id)
+
+class CardAlias:
+    card_id, alias
+    unique(card_id, alias)
+
+class Asset:
+    id, world_id, sha256, mime, bytes, width, height
+    storage_key, visibility, ref_count, created_by
+
+class ToolKind:              # 11 工具的注册表
+    key, host(view|card|page|block|asset),
+    schema_json, version, is_public
+</code></pre>
+      <div class="callout rec">
+        <span class="tag">已定 · 单一真值</span>
+        扩展 Collection 树，但 Card 只有一个 <span class="mono">home_collection</span>；v1 不做
+        <span class="mono">CollectionItem</span> 跨集合露出，避免“Card.collection_id + CollectionItem”双真值。
+        删除 Collection 用 <span class="mono">PROTECT</span> / 软删，禁止 CASCADE 删卡；旧卡片带子节点的，
+        用 <span class="mono">cards.CollectionPage</span> 做成“带自页的集合”，不要生成同名卡片与集合，也不要在
+        <span class="mono">collections</span> 表上直接放 Card 外键（会形成 app 依赖环）。
+      </div>
+      <ul>
+        <li>全局 slug registry（world + slug + kind + object_id）在 P1 前落地；旧 URL 用墓碑 + 301，避免拆表后 slug 冲突。</li>
+        <li>排序用 <span class="mono">position_key</span>（字符串/分数），不要整数全表重排；Collection 深度建议 ≤5，公开站只投影前 2 层。</li>
+        <li><span class="mono">CollectionView</span> 必须在 P0 进 schema（至少 table 一种），否则 P2 每条 Collection 都要补迁移。</li>
+        <li>公式属性不落 <span class="mono">PropertyValue</span>，读取时求值；引用属性同时写 <span class="mono">LinkIndex</span>。</li>
+        <li><span class="mono">Card.presence_json</span> 保留“某卡在某时期是否出现”的旧语义；P0 进 schema，UI 可 P2 再做。</li>
+        <li>约束：<span class="mono">kind=content</span> 必须有 <span class="mono">type_id</span>；<span class="mono">kind=tool</span> 必须有 <span class="mono">CardTool</span> 且 <span class="mono">body_json</span> 为空；视图工具不建 Card，只建 CollectionView。</li>
+      </ul>
+
+      <h3>6.3 引用图：LinkIndex</h3>
+<pre><code>class LinkIndex:
+    id, world_id
+    source_card_id(null), source_tool_id(null), source_node_id(null)
+    source_block_id
+    target_card_id(null), target_timeline_id(null)
+    target_map_id(null), target_graph_id(null)
+    relation(mention|embed|property_ref|timeline_ref|map_ref|graph_ref|tool_ref)
+    created_at
+    check(num_nonnulls(source_*) = 1)
+    check(num_nonnulls(target_*) = 1)
+    unique NULLS NOT DISTINCT
+      (source_card_id, source_tool_id, source_node_id,
+       source_block_id, target_card_id, target_timeline_id,
+       target_map_id, target_graph_id, relation)
+    index(target_card_id), index(target_tool_id), index(source_block_id)
+</code></pre>
+      <ul>
+        <li><strong>不用 GenericForeignKey。</strong> 源与目标都用多个可空显式外键 + check constraint，保留数据库级引用完整性；唯一约束必须 <span class="mono">NULLS NOT DISTINCT</span>（PG15+），否则 NULL 目标会重复。</li>
+        <li><strong>源多态：</strong> 工具（table/board/canvas）与时间节点也会产生引用；<span class="mono">source_*</span> 至少一个非空，不能只支持 Card。</li>
+        <li><strong>写入时机：</strong> 卡片/工具保存后由 <span class="mono">CardSaved</span> / <span class="mono">ToolSaved</span> outbox 事件触发；解析 Tiptap JSON 的 <span class="mono">cardLink</span> 节点、属性引用、嵌入节点，diff 出增删行。</li>
+        <li><strong>重命名传播：</strong> 只改 <span class="mono">Card.title</span>，不重写链接行；引用显示文本由渲染时按 target 当前标题计算，另写一条修订记录。</li>
+        <li><strong>反链：</strong> 对 <span class="mono">target_*</span> 索引查询；按 relation 分组；分页。</li>
+        <li><strong>巡检：</strong> 每晚抽样/全量重解析，比较 LinkIndex；不一致写审计并修复，修复动作可回滚。</li>
+      </ul>
+
+      <h3>6.4 修订：不可变、可合并、可重放</h3>
+<pre><code>class CardRevision:
+    id, card_id, seq
+    author_id(null), reason(autosave|manual|restore|import|ai)
+    base_seq(null), snapshot_json(null), delta_json
+    created_at, updated_at
+    unique(card, seq)
+
+class ToolRevision:          # canvas / soundscape 等页面型工具
+    id, card_tool_id, seq
+    author_id(null), reason(autosave|manual|restore|import|ai)
+    state_json(null), delta_json(null)
+    created_at
+    unique(card_tool, seq)
+
+# delta 示例：按块 ID 的原子操作
+{"ops": [
+  {"op": "replace", "block_id": "b_8f2", "path": "/content", "value": [...]},
+  {"op": "insert",  "block_id": "b_a31", "after": "b_8f2", "value": {...}},
+  {"op": "delete",  "block_id": "b_77c"},
+  {"op": "move",    "block_id": "b_77c", "after": "b_a31"}
+]}
+</code></pre>
+      <ul>
+        <li><strong>会话合并：</strong> 同一作者、<span class="mono">reason=autosave</span>、距上一条 &lt; 5 分钟 → 追加 delta，更新 <span class="mono">updated_at</span>，不新增行。</li>
+        <li><strong>快照：</strong> 每 50 条 delta 或每 24 小时落一个 <span class="mono">snapshot_json</span>；恢复 = 最近快照 + 重放。</li>
+        <li><strong>恢复：</strong> 生成新 revision（<span class="mono">reason=restore</span>），绝不原地回滚；历史不可变。</li>
+        <li><strong>保留：</strong> 90 天全量；之后每月保留 1 个快照 + 最近 100 条；归档冷存储。旧站 1,256 条快照不逐条迁移。</li>
+        <li><strong>工具修订：</strong> canvas/soundscape 用 <span class="mono">ToolRevision</span>（快照 + 操作日志），不与 CardRevision 混；table/board/radar 等视图不产生独立修订，数据仍在 Card/PropertyValue。</li>
+      </ul>
+
+      <h3>6.5 时间线：Timeline、TimeNode、Hist</h3>
+<pre><code>class Timeline:
+    id, world_id(unique), name
+    origin_value, calendar_id, settings_json
+
+class TimeNode:
+    id, timeline_id
+    kind(point|span)
+    start_value, end_value(null)     # 规范化 epoch day
+    precision(year|month|day|hour)
+    display_json                     # 历法年月日时
+    sort_key                         # 可排序字符串/数值
+    label, body_json, confidence
+    created_by, updated_at
+
+class Hist:
+    id, timeline_id, name, slug, description
+    kind(interval|curated)
+    start_value(null), end_value(null)   # interval
+    theme, icon, cover                    # 旧 Era 的展示层
+    status(draft|active|archived)
+    calendar_version
+
+class HistMembership:        # 仅 curated 使用；interval 成员派生
+    hist_id, node_id
+    unique(hist, node)
+
+class HistNodeOverride:
+    hist_id, node_id
+    label_override, start_override, end_override, body_json
+    unique(hist, node)
+</code></pre>
+      <ul>
+        <li><strong>区间 Hist（已定）：</strong> <span class="mono">kind=interval</span> 用 <span class="mono">start/end</span> 派生成员，保留 theme/icon/cover；草稿允许空/全量，发布时才要求“非空真子集”。空/全量的旧 Era 不硬造 Hist，改存档案/视图。</li>
+        <li><strong>TimeValue：</strong> 不直接用 <span class="mono">DATE</span> 存虚构历法；用历法服务把年月日时换算成 <span class="mono">epoch_day</span>，排序、比较、区间都用它，显示用 <span class="mono">display_json</span>。</li>
+        <li><strong>历法变更：</strong> 月份表/闰年规则一变，<span class="mono">epoch_day</span> 就会失效；Calendar 带 <span class="mono">version</span>，变更时跑重算任务并保留旧版本。</li>
+        <li><strong>成员差异：</strong> 样本 19 个事件中 11 个无归属事件会被区间自动归入，3 个显式 FK 与区间冲突，2 个落在所有 Era 之外；迁移必须生成逐条 diff + 人工 override 表，不能静默。</li>
+        <li><strong>卡片可见性：</strong> 旧 <span class="mono">Card.era_mode/era_ids</span> 迁到 <span class="mono">Card.presence_json</span>，不要丢；P0 进 schema，P2 再做 UI。</li>
+        <li><strong>总时间线：</strong> 不建一条全量 Hist；UI 的“总览”是对 Timeline 全节点的特判。</li>
+        <li><strong>旧 URL：</strong> <span class="mono">/s/&lt;world&gt;/era/&lt;id&gt;</span> 301 到对应 History/Band；保留外链。</li>
+      </ul>
+
+      <h3>6.6 地图：多图、子图、标注</h3>
+<pre><code>class WorldMap:
+    id, world_id, name, kind(2d|3d)
+    projection_json, root_scale
+
+class MapLayer:
+    id, map_id, name, position, kind(raster|vector)
+    visible, opacity
+
+class MapFeature:
+    id, map_id, layer_id
+    kind(pin|region|text|path)
+    geometry_json, style_json, label
+    card_id(null)
+
+class MapLink:
+    id, parent_map_id, target_map_id
+    viewport_json(x, y, w, h), label
+    unique(target_map_id)            # 一棵子图树，先不做 DAG
+</code></pre>
+      <ul>
+        <li><strong>多张独立大地图：</strong> 天堂/地面/地狱是三张 <span class="mono">WorldMap</span>，不是三个文档。</li>
+        <li><strong>子地图：</strong> <span class="mono">MapLink</span> 的视口矩形指向父图的一块区域；<span class="mono">target_map_id</span> 唯一，写入时做祖先环检测。</li>
+        <li><strong>v1 渲染：</strong> 单张栅格底图 + 矢量标注，先不做瓦片金字塔；P3b 再上瓦片。FMG 整包不进入新仓，旧地图导出为图片/JSON 归档。</li>
+      </ul>
+
+      <h3>6.7 关系图与流程图</h3>
+<pre><code>class Graph:
+    id, world_id, name, kind(relation|flow)
+    layout_json, created_by
+
+class GraphNode:
+    id, graph_id, card_id(null)
+    kind, label, x, y, style_json
+
+class GraphEdge:
+    id, graph_id, source_node_id, target_node_id
+    kind, label, condition_json, style_json
+</code></pre>
+      <p>
+        关系树和流程图共用一套图数据层，靠 <span class="mono">Graph.kind</span> 与不同布局/节点渲染器区分。
+        <span class="mono">condition_json</span> 承载跑团分支、条件、状态转移；v1 只做编辑与只读展示，不做规则执行。
+      </p>
+
+      <h3>6.8 搜索</h3>
+<pre><code>class SearchDoc:
+    id, world_id
+    source_kind(card|tool|time_node|map_feature|graph_node)
+    source_id
+    block_id(null)
+    kind(title|body|property|timeline|tool)
+    text
+    is_public_snapshot
+    tsv SearchVectorField
+    updated_at
+    unique(source_kind, source_id, block_id)
+    index GIN(tsv), index(world_id, source_kind, source_id)
+</code></pre>
+      <p>
+        中文检索不依赖 Postgres 默认分词器：索引时把中文切成 bigram，写入 <span class="mono">tsv</span>；
+        查询同时用 <span class="mono">websearch_to_tsquery</span> 与 <span class="mono">pg_trgm</span> 相似度。
+        所有查询强制带 <span class="mono">world_id</span>，公开搜索再加 <span class="mono">is_public_snapshot</span>；
+        时间节点、工具页各自可命中，不再把整条时间线聚成一个结果。
+      </p>
+
+      <h3>6.9 AI 与建议层</h3>
+<pre><code>class ChangeSet:
+    id, world_id, conversation_id
+    status(proposed|applied|rejected|partial)
+    created_by, created_at, reviewed_by
+
+class Change:
+    id, changeset_id
+    op(create_card|update_card|create_node|update_node|link)
+    target_type, target_id(null), payload_json
+    status(pending|applied|failed)
+</code></pre>
+      <ul>
+        <li>AI 工具只读；写操作只生成 <span class="mono">Change</span>，由用户确认后经领域服务应用。</li>
+        <li>低风险文本补全可直接应用（可撤销）；高风险的结构写入必须显式确认。</li>
+        <li>部分失败标记 <span class="mono">partial</span>，重复应用返回 409；每次应用写审计。</li>
+        <li><strong>v1 边界：</strong> AI 不直接编辑 canvas / table / soundscape 等工具 payload；工具内容的 AI 化留到 P4，避免建议层与 ToolRevision 纠缠。</li>
+      </ul>
+
+      <h3>6.10 发布</h3>
+<pre><code>class PublishEvent:
+    id, world_id, version
+    actor_id, counts_json, created_at
+</code></pre>
+      <p>
+        世界级发布，内容级 <span class="mono">is_public</span> 控制可见：Card、Collection、WorldMap、
+        Graph、Tool 各自有公开开关；公开站读实时数据 + 缓存。工具页（table/board/radar/canvas 等）
+        必须有只读 SSR 渲染，否则 P3 对等不成立。旧站“按文档五态发布”简化为世界发布 + 内容
+        <span class="mono">is_public</span> + 派生“有未发布改动”徽标（<span class="mono">updated_at &gt; published_at</span>），
+        不再维护 live/stale/pending 五态。
+      </p>
+
+      <h3>6.11 兵棋（P4，仅定边界）</h3>
+<pre><code>WargameRuleset   id, world_id, version, schema_json
+WargameSetup     id, world_id, map_id, ruleset_version, seed, initial_state_json
+WargameRun       id, setup_id, status, current_turn
+WargameCommand   id, run_id, turn, seq, actor, command_json
+WargameSnapshot  id, run_id, turn, state_json
+</code></pre>
+      <p>
+        确定性要求：<span class="mono">seed + initial_state + command 序列</span> 必须复现同一结果；
+        禁止直接调用 <span class="mono">random()</span>，所有随机数走种子化 PRNG；支持回到第 3 回合改一个决定重推。
+        v1 只做引擎与回放，不做 AI 自动对弈。
+      </p>
+
+      <h3>6.12 不变量清单</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>不变量</th><th>执行点</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>所有 Card / Link / Timeline / Map / Graph / Tool / Asset 外键必须同 world。</td><td>模型 clean + 服务层 + 测试</td></tr>
+            <tr><td>2</td><td>LinkIndex 每行恰好一个源、一个目标；源/目标/关系唯一（NULLS NOT DISTINCT）。</td><td>DB check + unique constraint</td></tr>
+            <tr><td>3</td><td>CardRevision / ToolRevision 不可变；seq 单调；恢复生成新行。</td><td>服务层禁止 update/delete</td></tr>
+            <tr><td>4</td><td>Hist 有父 Timeline；curated 非空真子集；interval 草稿可空/全量，发布时才校验真子集。</td><td>clean + serializer + 定期巡检</td></tr>
+            <tr><td>5</td><td>MapLink 无环；子图只有一个父。</td><td>写入时递归 CTE / 祖先遍历</td></tr>
+            <tr><td>6</td><td>公开查询必须过滤 world + is_public + 未删除；工具页同样。</td><td>查询集助手 + 权限测试</td></tr>
+            <tr><td>7</td><td>AI 不直接写领域表；只经 ChangeSet 应用。</td><td>import-linter + 代码审查</td></tr>
+            <tr><td>8</td><td>块 ID 在卡片内唯一；节点类型在白名单内。</td><td>schema 校验 + 保存时拒绝</td></tr>
+            <tr><td>9</td><td>世界密码 Argon2；edit token 短时；每次写校验。</td><td>服务层 + 安全测试</td></tr>
+            <tr><td>10</td><td>SearchDoc 只含本世界内容；公开搜索不泄漏私有世界。</td><td>索引器 + 查询守卫</td></tr>
+            <tr><td>11</td><td>Card 只有一个 home_collection；Collection 删除不得 CASCADE 删卡；树无环。</td><td>DB FK + 服务层 + 测试</td></tr>
+            <tr><td>12</td><td>工具状态不进 Card.body；页面型工具走 CardTool + ToolRevision，视图型工具无独立状态。</td><td>模型边界 + import-linter</td></tr>
+            <tr><td>13</td><td>全局 slug registry 唯一；旧 URL 只能 301 到墓碑/新对象，不能复用给不同内容。</td><td>DB unique + 迁移脚本 + 301 测试</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="mechanisms">
+      <div class="sec-head"><span class="sec-no">07</span><h2>关键机制</h2></div>
+
+      <h3>7.1 编辑器与块 schema</h3>
+      <p>
+        编辑器是 Tiptap（ProseMirror）。块 JSON 是唯一权威，服务端不解析成 HTML 再存回。
+        节点分三组：文本块、媒体块、引用块。每个块必须有稳定 <span class="mono">blockId</span>，
+        它同时是修订 diff、链接锚点、AI 定点编辑、评论定位的共同前提。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>组</th><th>节点</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>文本</td><td>doc, paragraph, heading, blockquote, bulletList, orderedList, listItem, taskList, taskItem, codeBlock, horizontalRule, hardBreak, text</td><td>基础排版；标题级别限制 1–3；代码块不做语法高亮也可用。</td></tr>
+            <tr><td>媒体</td><td>image, file, callout</td><td>图片走对象存储；上传后只存 asset_id + alt；callout 是自定义节点。</td></tr>
+            <tr><td>引用</td><td>cardLink, timelineEmbed, mapEmbed, graphEmbed, toolEmbed, bookmark, dice</td><td>只存实体 ID + 视图参数；渲染时按权限与当前数据加载，不复制内容。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><strong>工具不入编辑器：</strong> table/board/radar/todo/dictionary 走 CollectionView 页面；canvas/soundscape 走 CardTool 页面；Tiptap 只承载 embed/dice 等微件节点，避免 11 套编辑器扩展把 schema 撑爆。</li>
+        <li><strong>校验：</strong> 服务端用同一份 JSON Schema 校验；未知节点类型拒绝保存，导入器隔离到待审区，避免 XSS 与 schema 漂移。</li>
+        <li><strong>旧数据：</strong> BlockNote 的 <span class="mono">blocks_doc</span> 与旧 <span class="mono">blocks</span> 都转到 Tiptap JSON；映射表单独维护，迁移脚本带 dry-run。</li>
+        <li><strong>自动保存：</strong> 前端 2 秒空闲防抖 + 切换/关闭强制保存；请求带 <span class="mono">If-Match: revision</span>；冲突返回 409 + 当前内容，前端给“保留我的 / 用服务器 / 并排看”。</li>
+        <li><strong>本地草稿：</strong> IndexedDB 存最近一次未确认内容；刷新/断网可恢复；不作为权威。</li>
+      </ul>
+
+      <h3>7.2 保存事务：同步写最小数据，异步做重活</h3>
+      <div class="flow">
+        <div class="step"><b>1</b>鉴权 + 世界 ACL + edit token</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>2</b><span class="mono">select_for_update</span> 锁 Card/Tool；校验 revision</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>3</b>校验块 JSON / 工具 schema / 属性值；生成 body_text</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>4</b>写 Card + CardRevision，或 CardTool + ToolRevision，再写 Outbox</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>5</b>返回新 revision；worker 更新链接/搜索</div>
+      </div>
+      <ul>
+        <li>同步部分只做：权限、乐观锁、schema 校验、Card/PropertyValue/Revision/Outbox 等少量表写入；链接与搜索索引不在请求链路。目标 P95 &lt; 300 ms。</li>
+        <li>链接与搜索索引异步：UI 显示“链接更新中/已同步”；失败重试 + 死信；提供手动重建。</li>
+        <li>幂等：请求带 <span class="mono">request_id</span>；重复提交返回同一 revision，不重复写修订。</li>
+        <li>冲突：<span class="mono">If-Match</span> 不匹配返回 409，body 带当前 revision 与内容摘要；不静默覆盖。</li>
+      </ul>
+
+      <h3>7.3 链接同步与重命名传播</h3>
+      <ol>
+        <li>解析卡片块 JSON / 工具引用 / 时间节点关联：收集 <span class="mono">cardLink</span>、引用属性、嵌入节点、工具视图引用的 target。</li>
+        <li>过滤同世界、未删除、目标存在；生成 <span class="mono">(source_kind, source_id, block, target_kind, target_id, relation)</span> 集合；源可以是 Card / Tool / TimeNode。</li>
+        <li>与 LinkIndex 现有行做 diff：插入新增、删除消失；不 update（关系变化 = 删 + 插）。</li>
+        <li>worker 记录 <span class="mono">source_revision</span>；若卡片已更新则重跑；写入幂等，旧事件不能覆盖新索引。</li>
+        <li>重命名不重写链接行；引用显示文本按 target 当前 title 渲染；写一条 <span class="mono">rename</span> 修订。</li>
+        <li>反链查询走 <span class="mono">target_card_id</span> / <span class="mono">target_tool_id</span> 索引；按 relation 分组；只返回当前用户可读对象。</li>
+        <li>每晚巡检：重解析 + 对比；不一致写审计并修复；修复记录可回滚。</li>
+      </ol>
+
+      <h3>7.4 修订合并、快照与恢复</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>参数</th><th>默认</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>合并窗口</td><td>5 分钟</td><td>同作者 + autosave 才合并；手动保存/恢复/AI 应用不合并。</td></tr>
+            <tr><td>快照间隔</td><td>50 条 delta 或 24h</td><td>二者先到先落；快照是完整 body_json 或工具 state_json。</td></tr>
+            <tr><td>工具修订</td><td>独立 seq</td><td>canvas/soundscape 用快照 + 操作日志；视图工具（table/board 等）不产生独立修订。</td></tr>
+            <tr><td>热保留</td><td>90 天</td><td>全量修订在线可查。</td></tr>
+            <tr><td>冷保留</td><td>每月 1 快照 + 最近 100 条</td><td>归档到对象存储；恢复需异步任务。</td></tr>
+            <tr><td>恢复</td><td>新建 revision</td><td>不删除历史；恢复本身可再恢复。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>7.5 权限与密码 token</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>身份</th><th>读公开世界</th><th>读私人世界</th><th>写卡片</th><th>治理</th></tr></thead>
+          <tbody>
+            <tr><td>游客</td><td>✓</td><td>仅 read token</td><td>✗</td><td>✗</td></tr>
+            <tr><td>登录用户</td><td>✓</td><td>成员 / read token</td><td>成员 + edit token</td><td>✗</td></tr>
+            <tr><td>世界 owner/editor</td><td>✓</td><td>✓</td><td>✓（edit token）</td><td>世界内</td></tr>
+            <tr><td>Admin</td><td>✓</td><td>✗（不自动穿透）</td><td>✗</td><td>封禁/举报</td></tr>
+            <tr><td>Superuser</td><td>✓</td><td>✓</td><td>✓</td><td>全站</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><strong>read token：</strong> 签名 cookie，24h，绑定 world + scope，HttpOnly/Secure/SameSite=Lax。</li>
+        <li><strong>edit token：</strong> 15 分钟，绑定 world + user/session；每次写请求校验；过期重新输入密码。</li>
+        <li><strong>限流：</strong> 密码尝试按 IP + world 计数；连续失败退避；审计。</li>
+        <li><strong>测试：</strong> 每种身份 × 每种世界 × 读/写/治理，至少 30 条矩阵用例；专门测 IDOR 与跨世界泄漏。</li>
+      </ul>
+
+      <h3>7.6 缓存与发布</h3>
+      <ul>
+        <li>公开页缓存键：<span class="mono">public:{world_slug}:{published_version}:{path}</span>；发布时版本 +1，旧键自然失效。</li>
+        <li>响应头：<span class="mono">Cache-Control: public, max-age=60, s-maxage=600, stale-while-revalidate=60</span>；带 ETag。</li>
+        <li>卡片保存标记世界 dirty；发布时批量清缓存 + CDN purge；未发布改动只在工作区可见。</li>
+        <li>工作区 API 不缓存 HTML；世界元数据/类型定义可短缓存，保存后主动失效。</li>
+      </ul>
+
+      <h3>7.7 AI：建议层是边界</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>风险</th><th>例子</th><th>策略</th></tr></thead>
+          <tbody>
+            <tr><td>低</td><td>续写、润色、建议标签</td><td>可直接应用，保留 undo/修订</td></tr>
+            <tr><td>中</td><td>新建卡片、补属性</td><td>建议集 + 一键确认</td></tr>
+            <tr><td>高</td><td>改时间线日期、删关系、批量改写</td><td>必须逐条确认 + 影响预览</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>上下文打包：当前卡片 + 一跳反链 + 相关时间线节点 + 类型属性；按 token 预算裁剪，不把整个世界塞进去。</li>
+        <li>工具只读：搜索、读卡、读时间线、读地图摘要；写操作转为 ChangeSet。</li>
+        <li>流式：AI Stream 进程直连上游，SSE 转发；超时、并发、重试独立配置；不在 Web worker 里跑。</li>
+        <li>BYOK：信封加密（主密钥 + 每用户 DEK），日志脱敏；用户可删除凭据；不迁移旧密钥。</li>
+      </ul>
+
+      <h3>7.8 搜索与索引</h3>
+      <ul>
+        <li>Outbox → Celery → SearchDoc；保存不等待索引；失败重试；每日全量重建兜底。</li>
+        <li>中文：bigram 写入 tsv + <span class="mono">pg_trgm</span> 相似度；英文按词；混合查询取并集排序。</li>
+        <li>命中到块/节点：结果带 source_kind + source_id + block_id + 高亮片段；Card 跳块锚点，时间节点跳 <span class="mono">?node=</span>，工具跳工具页。</li>
+        <li>作用域：所有查询强制 world_id；公开搜索只查 is_public_snapshot；私有世界不进入公开索引。</li>
+      </ul>
+
+      <h3>7.9 性能预算</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>指标</th><th>目标</th><th>手段</th></tr></thead>
+          <tbody>
+            <tr><td>保存 P95</td><td>&lt; 300 ms</td><td>同步只写少量表；链接/搜索异步；覆盖索引。</td></tr>
+            <tr><td>反链 P95</td><td>&lt; 200 ms</td><td>LinkIndex(target) 索引 + 分页 + 只读投影。</td></tr>
+            <tr><td>公开首屏（缓存命中）</td><td>&lt; 1.5 s 内地</td><td>SSR + 边缘缓存 + 极小 JS + Brotli/HTTP3。</td></tr>
+            <tr><td>工作区首可用</td><td>&lt; 3 s 内地</td><td>路由分包；编辑器按需加载；世界元数据预取。</td></tr>
+            <tr><td>时间线 10k 节点</td><td>流畅</td><td>虚拟化 + 分层渲染 + 视口裁剪。</td></tr>
+            <tr><td>关系图 2k 节点</td><td>流畅</td><td>Web Worker 布局 + 边简化 + 渐进渲染。</td></tr>
+            <tr><td>Collection 树 1k 节点</td><td>&lt; 100 ms</td><td>一次拉平 + 应用层组树；不要递归 N 次。</td></tr>
+            <tr><td>表格视图 10k 行</td><td>&lt; 500 ms</td><td>键集分页 + 列投影；不返回整包 Payload。</td></tr>
+            <tr><td>Canvas 2k 节点</td><td>首屏 &lt; 1 s；交互 60fps</td><td>视口裁剪 + 分层 + 懒加载；大 payload 限流。</td></tr>
+            <tr><td>工具公开页（缓存命中）</td><td>&lt; 1.5 s 内地</td><td>SSR 只读渲染 + CDN；不加载工作区工具包。</td></tr>
+            <tr><td>搜索 P95</td><td>&lt; 300 ms</td><td>GIN + 限制候选 + 结果缓存。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="migration">
+      <div class="sec-head"><span class="sec-no">08</span><h2>数据迁移</h2></div>
+
+      <p>
+        迁移的目标不是“把旧表搬过去”，而是<strong>把活内容翻译成新语义，并证明没有丢</strong>。
+        旧库有 1,013 条软删除文档、1,256 条版本快照、5 篇活工具空壳；软删文档不进新库，
+        但 11 种工具必须按 §0.1 重建并对等验收，不能再用“归档”替代。
+      </p>
+
+      <h3>8.1 迁移范围</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>类别</th><th>处理</th><th>理由</th></tr></thead>
+          <tbody>
+            <tr><td>世界 / 用户 / 成员 / 邀请 / 资料</td><td>全量迁移</td><td>身份与权限是继续使用的前提。</td></tr>
+            <tr><td>个人主页 <span class="mono">UserProfile</span></td><td>资料、链接、置顶、<span class="mono">is_public</span> 全量；<span class="mono">blocks/layout/accent</span> 保留原值</td><td>P0.3 先重建公开主页与资料编辑；自定义区块排版是 P0.4 parity，不能静默丢失。</td></tr>
+            <tr><td>类型 / 属性定义</td><td>全量迁移</td><td>卡片没有类型就没有意义。</td></tr>
+            <tr><td>活文档 22 / 内容卡 10 / live Card 行 14</td><td>只迁 10 张内容卡；4 条非 card 容器行丢弃；6 张需从旧 <span class="mono">blocks</span> 转换</td><td>live Card 行 14 = 10 条 content card + 4 条 folder/map/graph/familyTree 容器行；29 条随软删文档丢弃。</td></tr>
+            <tr><td>Collection 树（3 folder + 10 内容卡）</td><td>folder → Collection；folder 的 Card 行 → CollectionPage；根级内容卡 → Inbox</td><td>无内容卡带子节点；folder 106 是唯一“容器 + Card 行 + 子卡”样本；禁止 CASCADE，禁止同名双项。</td></tr>
+            <tr><td>时间事件（19）/ 时代（4）</td><td>全量迁移；Era → 区间 Hist；逐条 diff + override</td><td>样本迁移差异：11 个自动归入、3 个显式冲突、2 个无区间；2 个 Era 覆盖 0 节点，不能硬造 Hist。</td></tr>
+            <tr><td>关系树（2 棵）/ 地图（1 张 / 8 标注）</td><td>全量迁移；FMG 整包归档</td><td>关系与标注可重建；地图底图不进入新编辑器。</td></tr>
+            <tr><td>历史快照（1,256）</td><td>基线 + 最近 10 条；按版本 payload 取，不从当前卡倒推</td><td>逐条迁移没有产品价值，且旧格式解析成本高。</td></tr>
+            <tr><td>软删除文档（1,013）</td><td>归档 JSON，不进新库</td><td>用户已删除；保留旧库即可。</td></tr>
+            <tr><td>工具文档（11 种；5 篇活空壳）</td><td><strong>重建</strong>：视图 5 / 卡片 1 / 工具页 2 / 资产 1 / 块 2；旧 payload 做 L1 迁移</td><td>用户已定重建；重建的是功能与宿主，不是 11 个独立表。</td></tr>
+            <tr><td>AI 凭据 / 会话</td><td>凭据重填；会话归档</td><td>安全与隐私；旧密钥材料不带入。</td></tr>
+            <tr><td>Presence / 旧会话</td><td>丢弃</td><td>临时状态。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>8.2 字段映射</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>旧</th><th>新</th><th>规则 / 注意</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">World</span></td><td><span class="mono">World</span></td><td>全部 <span class="mono">kind=private</span>；<span class="mono">is_public_read = is_published</span>；<span class="mono">listing_visible = is_published &amp;&amp; audience=public</span>；slug 保留；旧 <span class="mono">published_slug</span> 不同则建 301 映射。</td></tr>
+            <tr><td><span class="mono">publish_password</span></td><td><span class="mono">WorldSecret(read)</span></td><td>若旧值是 Django 可校验哈希，首次解锁时验证并重哈希为 Argon2；否则要求重设。</td></tr>
+            <tr><td><span class="mono">auth_user</span> 密码 / OTP</td><td><span class="mono">User</span> / 2FA</td><td>Django 密码哈希可保留，首次登录自动升级；旧 OTP 设备不迁移，管理员重新录入。</td></tr>
+            <tr><td><span class="mono">UserProfile</span></td><td><span class="mono">UserProfile</span></td><td>display_name/headline/bio/location/website/links/pinned/is_public 直迁；accent 保留；旧 blocks/layout 先存原值，P0.4 再映射。</td></tr>
+            <tr><td><span class="mono">Membership</span></td><td><span class="mono">WorldMember</span></td><td>owner/editor/viewer 原样；guest 是隐式角色，不建行。</td></tr>
+            <tr><td><span class="mono">EntityType</span></td><td><span class="mono">EntityType</span></td><td><span class="mono">name→display_name</span>；生成稳定 <span class="mono">key</span>；<span class="mono">parent→parent_id</span>（可保留继承）。</td></tr>
+            <tr><td><span class="mono">PropertyDef</span></td><td><span class="mono">PropertyDef</span></td><td><span class="mono">value_type→value_kind</span>；options/formula/reference_type 进 <span class="mono">config_json</span>；建旧 ID → 新 ID 映射表。</td></tr>
+            <tr><td><span class="mono">Document(card)+Card</span></td><td><span class="mono">Card(kind=content)</span></td><td>title=name；slug；type 取 <span class="mono">Card.entity_type</span>，空则 <span class="mono">Document.entity_type</span>；正文优先 <span class="mono">blocks_doc</span>，否则转换 <span class="mono">blocks</span>；<span class="mono">body→body_text</span>；<span class="mono">hidden/is_published</span> → <span class="mono">is_public</span>。</td></tr>
+            <tr><td><span class="mono">Document.parent</span></td><td><span class="mono">Collection</span> 树</td><td>folder → Collection；card 的 <span class="mono">home_collection</span> 由父节点决定；卡片下挂子节点时用 <span class="mono">cards.CollectionPage</span> 做“带自页的集合”，不要生成同名卡片与集合；position 保留。</td></tr>
+            <tr><td><span class="mono">Card.values</span></td><td><span class="mono">PropertyValue</span></td><td>按旧 PropertyDef ID 查新 ID 拆行；引用值写 <span class="mono">value_ref_card_id</span> 并建 LinkIndex；公式不落行；<span class="mono">era_mode/era_ids</span> → <span class="mono">Card.presence_json</span>。</td></tr>
+            <tr><td><span class="mono">Card.aliases</span></td><td><span class="mono">CardAlias</span></td><td>独立表，供搜索与自动识别；保留原名。</td></tr>
+            <tr><td><span class="mono">Card.comments</span></td><td>归档</td><td>评论是独立产品面；v1 不做评论区，导出 JSON，P2 再评估。</td></tr>
+            <tr><td><span class="mono">Document(timeline)+TimelineEvent</span></td><td><span class="mono">TimeNode</span></td><td>单点 → point；year/month/day/hour + precision → epoch_day + display_json；<span class="mono">linked_cards</span> → LinkIndex；<span class="mono">TimelineEvent.era</span> 与 <span class="mono">Era</span> 区间做 diff，不静默覆盖。</td></tr>
+            <tr><td><span class="mono">Era</span></td><td><span class="mono">Hist(kind=interval)</span></td><td>按区间派生成员；name/theme/icon/cover 迁移；旧 era 页面 301 到 Hist；区间覆盖全部/为空时改为归档/视图，不硬造 Hist；迁移差异 11 自动 + 3 冲突 + 2 无区间，逐条 override。</td></tr>
+            <tr><td><span class="mono">Document(table/board/radar/todo/dictionary)</span></td><td><span class="mono">CollectionView</span></td><td>旧 payload 转 view config；数据映射到 Card/PropertyValue；行卡 <span class="mono">is_auxiliary=true</span>，不进树/搜索；不建 5 张工具表。</td></tr>
+            <tr><td><span class="mono">Document(chapter)</span></td><td><span class="mono">Card(kind=content)</span></td><td>长文正文进 Tiptap；Collection 顺序即章节顺序；不另造 Chapter 表。</td></tr>
+            <tr><td><span class="mono">Document(canvas/soundscape)</span></td><td><span class="mono">Card(kind=tool)+CardTool</span></td><td>payload → <span class="mono">state_json</span>；大 payload 单独限流；ToolRevision 保留快照；不进 Card.body。</td></tr>
+            <tr><td><span class="mono">Document(media)</span></td><td><span class="mono">Asset</span> + 媒体库页</td><td>文件去重入对象存储；元数据/权限/引用计数；不把二进制塞 DB。</td></tr>
+            <tr><td><span class="mono">Document(embed/dice)</span></td><td>Tiptap 块节点</td><td>整篇 → 一张单块 Card；embed → bookmark/embed 节点；dice → dice 节点；旧 payload 转 attrs。</td></tr>
+            <tr><td><span class="mono">Document(voice/note)</span></td><td>归档 / 待定</td><td>不在 11 项清单内；ADR-0007 默认归档，线上占比高再评估；避免把边缘类型静默丢掉。</td></tr>
+            <tr><td><span class="mono">Document(map)+MapLayer/MapMarker</span></td><td><span class="mono">WorldMap/MapLayer/MapFeature</span></td><td>marker 的 kind/x/y/points/color → feature；<span class="mono">map_data</span> 整包存对象存储归档，不解析。</td></tr>
+            <tr><td><span class="mono">TreeVariant/Node/Edge</span></td><td><span class="mono">Graph/Node/Edge</span></td><td>variant → graph；node.card → card_ref；edge 的 start/end 进 <span class="mono">style_json</span> 或扩展字段。</td></tr>
+            <tr><td><span class="mono">DocumentVersion</span></td><td><span class="mono">CardRevision / ToolRevision</span></td><td>从版本 payload 取最新基线；最近 10 条可解析 → delta；其余归档；导入期 reason=import 禁用 5 分钟合并。</td></tr>
+            <tr><td><span class="mono">PublishLog</span></td><td><span class="mono">PublishEvent</span></td><td>版本、时间、操作者、计数保留。</td></tr>
+            <tr><td>旧 slug / published_slug</td><td>全局 slug registry + 301</td><td>拆表后 per-table unique 会冲突；建 world+slug+kind 的唯一 registry、墓碑与 301 测试；旧链接不能打开另一篇内容。</td></tr>
+            <tr><td><span class="mono">InviteCode</span></td><td><span class="mono">Invitation</span></td><td>已用/上限/过期保留；过期的可重发。</td></tr>
+            <tr><td><span class="mono">Report/ModerationEvent</span></td><td><span class="mono">Report/AuditEvent</span></td><td>治理记录保留，便于历史追溯。</td></tr>
+            <tr><td><span class="mono">AiCredential/Conversation</span></td><td>不迁移 / 归档 JSON</td><td>凭据重填；会话导出到归档，不进新库。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>8.3 ETL 流水线</h3>
+      <div class="flow">
+        <div class="step"><b>1 冻结</b>停写；复制 SQLite；校验 sha256</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>2 导出</b>每个世界一份 JSONL + media manifest</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>3 转换</b>slug、Collection、类型、块、属性、Era、工具、链接</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>4 导入</b>dry-run → 正式；幂等</div>
+        <div class="arrow">→</div>
+        <div class="step"><b>5 校验</b>计数/哈希/链接/截图</div>
+      </div>
+      <pre><code># 旧站导出（只读）
+python scripts/export_legacy.py \
+  --sqlite /srv/opuscule/db.sqlite3 \
+  --out /backup/legacy-2026-10-20 \
+  --include-live-only \
+  --media /srv/opuscule/media
+
+# 新站导入（先演练）
+python backend/manage.py import_legacy \
+  --world 7 --input /backup/legacy-2026-10-20 \
+  --dry-run --report /tmp/import-report.json
+
+# 正式导入（维护窗口内）
+python backend/manage.py import_legacy \
+  --world 7 --input /backup/legacy-2026-10-20 \
+  --commit --report /backup/import-report.json
+</code></pre>
+      <ul>
+        <li><strong>幂等：</strong> 每张卡带 <span class="mono">legacy_id</span> 映射；重复导入跳过或更新，不产生重复。</li>
+        <li><strong>可重放：</strong> 导出文件带 schema_version 与校验和；导入器版本化；同一输入可重复得到同一结果。</li>
+        <li><strong>可解释：</strong> 每条跳过/降级/失败都写进报告（旧类型、无法解析的块、丢失的引用），不是“静默成功”。</li>
+      </ul>
+
+      <h3>8.4 LinkIndex 重建</h3>
+      <p>
+        旧站的图谱是即时算的，没有现成链接表；迁移时必须主动重建。来源五路：
+      </p>
+      <ol>
+        <li>正文 <span class="mono">[[名称]]</span> 与自动识别命中的卡片名/别名（复用旧 <span class="mono">autolink.find_mentions</span>）。</li>
+        <li>引用属性的目标卡片。</li>
+        <li>时间事件的 <span class="mono">linked_cards</span> 与时间节点引用。</li>
+        <li>关系树节点的 <span class="mono">card</span> 引用。</li>
+        <li>地图标注的 <span class="mono">card</span> 引用。</li>
+        <li>工具视图/画布里的卡片引用（table 行、canvas 节点、board 卡）。</li>
+      </ol>
+      <p>
+        重建后与旧 <span class="mono">build_graph</span> 的边集合对比：差集必须能解释（例如旧图只算了已发布卡片、新图算了全部）。
+        不能解释的差异阻断切换。
+      </p>
+
+      <h3>8.5 修订迁移</h3>
+      <p>
+        1,256 条旧快照不需要全部重放。每张卡：
+      </p>
+      <ul>
+        <li>最新 payload → 一条 <span class="mono">snapshot_json</span> 基线（reason=import）。</li>
+        <li>最近 10 条可解析 payload → 转成 delta；解析失败的跳过并记录。</li>
+        <li>更早的 → 打包进归档 zip，附索引；需要时人工取回。</li>
+        <li>工具 payload → <span class="mono">ToolRevision</span> 基线（canvas/soundscape）；视图工具与媒体不产生独立修订。</li>
+      </ul>
+
+      <h3>8.6 工具文档重建与对等</h3>
+      <p>
+        11 种工具不再归档，而是按 §0.1 的五类宿主重建。数据迁移只做 L1（内容/配置不丢），
+        L2/L3 的对等由新实现补齐；旧站样本里 5 篇活工具全是空壳、6 类无活文档，
+        所以真正的风险不是数据，而是“公开页/编辑态/权限/搜索/修订”五个横切面的契约。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>工具</th><th>L1 迁移</th><th>P3 对等验收</th></tr></thead>
+          <tbody>
+            <tr><td>table / board / radar</td><td>旧 payload → CollectionView config；行/列数据映射 Card/PropertyValue</td><td>只读公开页、筛选/排序/分组、权限、搜索命中、无独立修订</td></tr>
+            <tr><td>todo / dictionary</td><td>payload → view config + 任务/词条卡</td><td>列表、行内编辑、空态、批量操作、公开页</td></tr>
+            <tr><td>chapter</td><td>正文 → Tiptap；顺序 → Collection</td><td>长文、目录、锚点、修订、公开页</td></tr>
+            <tr><td>canvas / soundscape</td><td>payload → CardTool.state_json；快照</td><td>编辑/只读、保存冲突、ToolRevision、公开只读、权限</td></tr>
+            <tr><td>media</td><td>文件 → Asset + 引用重写</td><td>上传/去重/权限/删除守卫/公开 CDN</td></tr>
+            <tr><td>embed / dice</td><td>payload → Tiptap attrs</td><td>渲染、安全白名单、导出、公开页</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        旧站 <span class="mono">voice</span> / <span class="mono">note</span> 不在 11 项内，默认归档；
+        若线上占比高，P0 前重新评估，不要静默丢。
+      </p>
+
+      <h3>8.7 校验清单</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>检查</th><th>通过标准</th></tr></thead>
+          <tbody>
+            <tr><td>计数</td><td>世界/成员/类型/属性/卡片/事件/树/地图/标注逐项对账，差异为 0 或有解释；10 张内容卡 + 4 条非 card 容器行 + 29 条软删 Card 行分开报。</td></tr>
+            <tr><td>正文</td><td>每张内容卡纯文本哈希一致；4 张非空 blocks_doc + 6 张旧 blocks 转换分别报；块数差异有报告；图片/附件 URL 可访问。</td></tr>
+            <tr><td>链接</td><td>LinkIndex 数量与旧图谱边集合差异可解释；源多态覆盖 Card/Tool/TimeNode；抽样 100 张卡人工核对。</td></tr>
+            <tr><td>时间线</td><td>19 个事件的日期、精度、关联卡片一致；4 个 Era 的迁移差异 11 自动 + 3 冲突 + 2 无区间，逐条解释；空/全量 Era 有处置。</td></tr>
+            <tr><td>工具</td><td>11/11 parity matrix 有 L1/L2/L3 结论；5 篇活工具空壳与 6 类无活文档分别报；公开页/编辑态/权限/搜索/修订逐项过。</td></tr>
+            <tr><td>Collection</td><td>3 folder、10 张内容卡、folder 106 的 CollectionPage 都有唯一 home；无同名双项；无 CASCADE；树无环；slug 无冲突。</td></tr>
+            <tr><td>重复导入</td><td>同一输入连跑两次，计数/哈希/ID 映射不变；legacy_map 覆盖 Card/Collection/Tool/Asset/Node。</td></tr>
+            <tr><td>公开页</td><td>首页/卡片页/工具页/时间线/搜索/密码页截图对照；旧 URL 301 正确，不能打开另一篇内容。</td></tr>
+            <tr><td>权限</td><td>3 个用户 × 公开/私有 × 读/写矩阵通过；旧密码仍可解锁或明确要求重设；工具页不泄漏私有世界。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>8.8 切换运行手册</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>时点</th><th>动作</th><th>回滚点</th></tr></thead>
+          <tbody>
+            <tr><td>T-14</td><td>旧站内容冻结公告；停止大改；导出演练 #1；冻结 11 工具 parity matrix。</td><td>无</td></tr>
+            <tr><td>T-7</td><td>导出演练 #2；导入 staging；校验报告评审；11 工具 L3 签字；Era diff 解释完。</td><td>继续用旧站</td></tr>
+            <tr><td>T-1</td><td>最终备份；维护窗口公告；DNS TTL 调低；回滚演练。</td><td>DNS 未切，随时取消</td></tr>
+            <tr><td>T-0</td><td>停旧站写；最终导出；导入 prod；校验；切换 DNS；冒烟（卡片/工具页/搜索/密码/301）。</td><td>DNS 切回旧站（旧库未删）</td></tr>
+            <tr><td>T+1</td><td>监控错误率、保存成功率、搜索、404；处理用户反馈。</td><td>同上</td></tr>
+            <tr><td>T+30</td><td>旧站转只读归档；保留备份与导出文件。</td><td>只读仍可查</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout risk">
+        <span class="tag">回滚边界</span>
+        切换后新站产生的写入，回滚到旧站时不会自动带回。维护窗口内的写入应尽量暂停；
+        若必须接受写入，先导出新站增量并人工合并，或明确接受这段数据丢失。这个边界必须在上线前写进公告。
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="sec-head"><span class="sec-no">09</span><h2>路线图</h2></div>
+
+      <p>
+        排序原则：越基础、越难回头改的越靠前；越贵、越依赖数据积累的越靠后。
+        P0–P3.5 是 v1 的范围，P4 明确后置。
+      </p>
+
+      <div class="phase">
+        <div class="pno">P0</div>
+        <div>
+          <h3>地基：世界、Card/Collection、工具占位 <span class="status now">起点</span></h3>
+          <p>新仓骨架、Docker/CI、World/Member/Secret、EntityType/PropertyDef/PropertyValue、Card(kind)/Collection/CollectionView/CardTool/Asset、Tiptap 编辑器、LinkIndex、CardRevision、最小公开页、迁移脚本骨架。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="pno">P1</div>
+        <div>
+          <h3>可信可用：搜索、导出、治理、备份 <span class="status next">内测</span></h3>
+          <p>中文搜索、Markdown/JSON 导出、回滚/封禁/举报、审计、备份与恢复演练、Asset 上传、embed、公开站 SEO/RSS/OG、内测反馈闭环。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="pno">P2</div>
+        <div>
+          <h3>时间与图：区间 Hist、关系图/流程图、首批视图 <span class="status next">功能对等</span></h3>
+          <p>时间点/时间段、区间 Hist + 展示字段、自定义历法、时间线虚拟化、图数据层、React Flow、CollectionView 的 table/board/radar、旧事件/时代/关系树迁移。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="pno">P3</div>
+        <div>
+          <h3>地图、AI 与 11 工具：对等收敛 <span class="status later">切换门</span></h3>
+          <p>地图 spike、WorldMap/Feature/MapLink、子图视口、AI 网关与流式、建议集、配额/BYOK、剩余工具（todo/dictionary/chapter/canvas/soundscape/media/dice）、公开站工具只读。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="pno">P3.5</div>
+        <div>
+          <h3>对等验收、迁移演练与切换 <span class="status later">发布门</span></h3>
+          <p>11/11 parity matrix、Era diff 签字、两次迁移演练、回滚演练、DNS 切换、30 天 hypercare；未过门不切。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="pno">P4</div>
+        <div>
+          <h3>后置：兵棋、3D、CRDT <span class="status later">不做</span></h3>
+          <p>确定性推演引擎、3D 只读展示、Yjs 块级协同。等 v1 稳定、有真实需求再立项。</p>
+        </div>
+      </div>
+
+      <h3>9.1 P0 的七个工作流</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>工作流</th><th>交付</th><th>验收</th></tr></thead>
+          <tbody>
+            <tr><td>仓库与基础设施</td><td>backend/frontend 骨架、compose、CI、preview、ADR-0001..0013</td><td>一条命令起本地；CI 绿；PR 有 preview。</td></tr>
+            <tr><td>身份与世界</td><td>User/Profile（含 <span class="mono">/u/&lt;username&gt;</span> 公开个人主页）、世界创建/发布/软删除/恢复/所有权转移、World/Member/Secret、邀请、7 世界上限、密码 token</td><td>权限矩阵测试；密码解锁/编辑 token 通过安全评审。</td></tr>
+            <tr><td>类型与卡片</td><td>EntityType/PropertyDef/PropertyValue、Collection、Card(kind)、home_collection、块 schema</td><td>新增类型不迁移；卡片保存/读取/软删除；单一 home。</td></tr>
+            <tr><td>工具与资产</td><td>ToolKind/CollectionView/CardTool/Asset 骨架；11 工具 parity matrix</td><td>至少 table 视图 + 1 个工具页 + 上传；11/11 host 有 ADR。</td></tr>
+            <tr><td>编辑器</td><td>Tiptap 节点、斜杠菜单、自动保存、冲突 UI、旧块迁移</td><td>10 种文本块 + 4 种引用块端到端；冲突可恢复。</td></tr>
+            <tr><td>链接与修订</td><td>LinkIndex（源多态）、反链、重命名、CardRevision/ToolRevision、恢复</td><td>改标题反链更新；恢复生成新修订；巡检可修复。</td></tr>
+            <tr><td>公开页与迁移</td><td>最小公开首页/卡片页/工具页、缓存头、导出/导入 dry-run</td><td>游客可读；缓存命中；22 个活文档 + 5 工具空壳演练通过。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>9.2 关键路径与并行</h3>
+      <pre><code>关键路径：
+World/权限 → Card/Collection → CollectionView/ToolKind/Asset
+      → 编辑器 → LinkIndex/Revision → 公开页/工具只读
+      → 11 工具 parity → 迁移演练 → 切换
+
+可并行（P1 之后）：
+搜索 / 导出 / 治理
+Timeline/区间 Hist ──┐
+Graph/Flow         ──┼→ 公开站投影 → 切换
+Maps spike         ──┘
+11 工具（视图/页面/块）──→ parity matrix
+AI 网关/建议层       ──→（P3，与地图、工具并行）
+</code></pre>
+
+      <h3>9.3 估算与假设</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>阶段</th><th>单人</th><th>双人</th><th>主要不确定性</th></tr></thead>
+          <tbody>
+            <tr><td>P0</td><td>9–12 周</td><td>6–7 周</td><td>占位模型、编辑器迁移、权限安全评审、旧块转换</td></tr>
+            <tr><td>P1</td><td>7–10 周</td><td>4–6 周</td><td>中文搜索质量、治理范围、备份演练、Asset</td></tr>
+            <tr><td>P2</td><td>10–15 周</td><td>6–8 周</td><td>Hist 语义、时间线性能、图布局、CollectionView</td></tr>
+            <tr><td>P3</td><td>21–27 周</td><td>11–14 周</td><td>11 工具重建、地图 spike、AI 供应商差异、流式稳定性</td></tr>
+            <tr><td>P3.5</td><td>3–4 周</td><td>2–3 周</td><td>parity matrix、两次演练、回滚、hypercare</td></tr>
+            <tr><td>总计</td><td><strong>50–68 周</strong></td><td><strong>30–38 周</strong></td><td>不含 P4；不含内容运营；含 20% 缓冲</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        假设：1–2 名全栈；设计/产品由你兼任；旧站不需要同时加新功能；AI 供应商已有可用 key；
+        地图走“栅格 + 矢量标注”而非瓦片/3D。设计要求独立配置时，设计侧另排 19–22 周（可与工程并行）；
+        任一假设变化，重新估算。
+      </p>
+
+      <h3>9.4 切换时点：P3 对等切换（已定）</h3>
+      <div class="callout rec">
+        <span class="tag">已拍板</span>
+        P3 功能对等切换，不再保留 P2 核心版先切的退路。切换前必须完成 11/11 工具的 parity matrix、
+        两次迁移演练、回滚演练与 30 天 hypercare 计划；任何未解释差异或权限缺口不切。
+      </div>
+      <p>
+        这会把地图、AI、11 工具、Collection/Hist 的延期全部传导到切换日。因此 §0 的工期重估不是保守，
+        而是把发布门算进去的结果；P3.5 的 3–4 周必须单独排，不能塞进 P3。
+      </p>
+
+      <h3>9.5 前 14 天清单（v0.2）</h3>
+      <ol>
+        <li>旧仓打 tag <span class="mono">legacy-0.8.1</span>；复制线上 SQLite 与 media；记录 sha256；生产库盘点。</li>
+        <li>写“范围合同”：11 工具逐项标 L1/L2/L3 对等深度、公开/不公开、修订/不修订；签字后再写代码。</li>
+        <li>复核已落盘的 ADR-0007（工具宿主）、0008（Collection + 公共 IA）、0009（Era/Hist）、0010（运行时）、0011（许可证）；补 ADR-0013（块 schema）。</li>
+        <li>建 3.14.6 venv（3.13 可用时优先）；Django 6.1.x + DRF 3.18.x + drf-spectacular spike；确认 OpenAPI 生成。</li>
+        <li>建新仓骨架、compose、CI；<span class="mono">assets</span> / <span class="mono">tools</span> 两个 app 的边界先立住。</li>
+        <li>实现 World/Member/Secret + 权限矩阵测试；先把安全边界立住。</li>
+        <li>实现 Card（kind）/ Collection / CollectionView / CardTool / Asset 骨架；不写 11 个工具实现。</li>
+        <li>Tiptap spike：文本块 + <span class="mono">toolEmbed</span> / <span class="mono">bookmark</span> / <span class="mono">dice</span> 节点；BlockNote 迁移 fixture。</li>
+        <li>LinkIndex 源多态 + CardRevision/ToolRevision spike；跑通一条反链与一次恢复。</li>
+        <li>迁移 exporter / importer dry-run；在旧库副本上先出 Era 迁移差异报告（11 自动 + 3 冲突 + 2 无区间）与工具 5 篇空壳清单。</li>
+      </ol>
+    </section>
+
+    <section id="quality">
+      <div class="sec-head"><span class="sec-no">10</span><h2>质量与运维</h2></div>
+
+      <h3>10.1 测试金字塔</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>层</th><th>覆盖</th><th>工具</th><th>门槛</th></tr></thead>
+          <tbody>
+            <tr><td>领域单元</td><td>权限矩阵、LinkIndex 源/目标多态、修订合并/重放、区间 Hist 校验、Collection 树、工具宿主、地图环检测</td><td>pytest + factories</td><td>核心模块 ≥ 90% 行覆盖；关键不变量 100% 用例</td></tr>
+            <tr><td>API</td><td>状态码、序列化、分页、冲突 409、跨世界 403/404、工具端点</td><td>pytest + DRF APIClient</td><td>每个端点至少 1 正 1 反</td></tr>
+            <tr><td>契约</td><td>OpenAPI diff、块 schema、工具 config schema、事件 schema</td><td>drf-spectacular + ajv/zod</td><td>breaking change 阻断</td></tr>
+            <tr><td>E2E</td><td>登录→建卡→编辑→保存→反链→发布→游客读；CollectionView/工具页；密码世界；冲突</td><td>Playwright</td><td>关键路径 12–15 条</td></tr>
+            <tr><td>迁移</td><td>旧库 fixture → 导出 → 导入 → 对账；11 工具 L1/Era diff/Collection</td><td>pytest + golden files</td><td>差异 0 或有解释；连跑两次计数不变</td></tr>
+            <tr><td>工具 parity</td><td>11/11 × L1/L2/L3 × 只读/编辑/权限/搜索/修订</td><td>Playwright + 验收脚本</td><td>矩阵无空项；L3 工具逐项签字</td></tr>
+            <tr><td>性能</td><td>保存、反链、公开首屏、时间线 10k、图 2k、表格 10k 行、canvas 2k 节点</td><td>k6 / Locust</td><td>达到 §7.9 预算</td></tr>
+            <tr><td>安全</td><td>权限 fuzz、IDOR、XSS、CSRF、上传、密码暴力</td><td>pytest + ZAP baseline</td><td>高危 0；中危有处置</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>10.2 CI/CD</h3>
+      <pre><code>PR:
+  backend: ruff → mypy/pyright → pytest → import-linter → migration-check
+  frontend: eslint → tsc → vitest → build → playwright (compose)
+  contracts: openapi diff → generated client typecheck
+  security: pip-audit / npm audit / license-scan / SBOM (block copyleft mismatch)
+  runtime: django 6.1.x + drf 3.18 compatibility smoke
+
+main:
+  build images → staging deploy → smoke → migration dry-run
+  tag → prod deploy (manual approval) → smoke → announce</code></pre>
+
+      <h3>10.3 部署拓扑</h3>
+      <pre><code>香港源站（或香港 VPS）
+├── nginx                 TLS / HTTP2+3 / 静态 / 缓存 / SSE 路由
+├── web                   gunicorn config.wsgi  (2–4 workers)
+├── realtime              uvicorn config.asgi   (SSE)
+├── ai-stream             uvicorn config.asgi   (SSE)
+├── worker                celery worker + beat
+├── postgres              独立实例/托管（不与 web 抢内存）
+├── redis                 缓存/队列/pubsub
+└── 对象存储 + CDN         公开静态/媒体/瓦片
+
+环境：local → preview → staging → prod
+迁移：expand → deploy → backfill → contract（禁止同发布删列）</code></pre>
+
+      <h3>10.4 SLO 与可观测性</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>信号</th><th>目标 / 告警</th><th>工具</th></tr></thead>
+          <tbody>
+            <tr><td>可用性</td><td>公开站 99.9%；工作区 99.5%</td><td>uptime + Sentry</td></tr>
+            <tr><td>保存成功率</td><td>&gt; 99.5%；失败可重试</td><td>业务指标 + 日志</td></tr>
+            <tr><td>保存 P95</td><td>&lt; 300 ms</td><td>直方图</td></tr>
+            <tr><td>SSE 断线率</td><td>&lt; 1%/小时</td><td>连接日志</td></tr>
+            <tr><td>链接不一致</td><td>巡检差异 &lt; 0.1%</td><td>巡检任务</td></tr>
+            <tr><td>修订表增速</td><td>可解释；异常告警</td><td>每日计数</td></tr>
+            <tr><td>搜索零结果率</td><td>观察趋势，不设硬指标</td><td>查询日志（脱敏）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        结构化日志带 request_id / world_id / user_id（脱敏）；慢查询日志；Sentry 捕获异常；
+        关键业务事件（发布、恢复、权限变更、AI 应用）写审计表。
+      </p>
+
+      <h3>10.5 备份与恢复</h3>
+      <ul>
+        <li>Postgres 每日全量 + WAL 归档（或托管 PITR）；保留 30 天；对象存储开启版本控制。</li>
+        <li>每月一次恢复演练：从备份恢复到 staging，跑迁移校验 + 冒烟；没演练过的备份不算备份。</li>
+        <li>RPO 24h（或 PITR 15min）；RTO 4h；写进运维手册。</li>
+        <li>导出文件与旧库至少保留 1 年；切换后 30 天内不删除任何旧数据。</li>
+      </ul>
+
+      <h3>10.6 安全检查清单</h3>
+      <div class="grid">
+        <div class="card">
+          <h4>边界</h4>
+          <ul>
+            <li>所有查询强制 world 作用域；IDOR 测试。</li>
+            <li>密码 Argon2；token 短时；每次写校验。</li>
+            <li>CSRF / SameSite / CORS 收紧。</li>
+            <li>Admin 2FA（TOTP）必须；旧设备重新录入。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>内容</h4>
+          <ul>
+            <li>块 JSON 白名单；HTML 净化；CSP。</li>
+            <li>工具 payload 按 ToolKind schema 校验；canvas 不执行用户脚本。</li>
+            <li>上传 MIME/大小校验；图片重编码；私有 bucket；Asset 引用计数。</li>
+            <li>公开页不渲染用户原始 HTML。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>密钥</h4>
+          <ul>
+            <li>AI key 信封加密；日志脱敏；可删除。</li>
+            <li>SECRET_KEY / DB / S3 凭据走环境/密钥管理。</li>
+            <li>依赖审计与定期升级。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>10.7 香港源站 → 内地用户</h3>
+      <ul>
+        <li>香港源站不需要 ICP；一旦使用大陆 CDN 节点，接入域名必须先备案。</li>
+        <li>不备案时不要盲目套全球 CDN：内地流量可能被调度到境外 PoP，反而更慢；正确做法是香港源站 + 强 SSR 边缘缓存 + CN2/GIA 线路。</li>
+        <li>延迟必须实测：电信/联通/移动 × 华南/华北 × 高峰/低谷；瓶颈通常是跨境抖动与丢包，不是平均延迟。</li>
+        <li>优化：SSR + 边缘缓存、首屏包极小化、工作区延迟加载、Brotli、HTTP/3、BBR、移动端降级。</li>
+      </ul>
+
+      <h3>10.8 运行手册（必须写下来）</h3>
+      <ul>
+        <li><strong>迁移：</strong> 导出 → 导入 dry-run → 校验 → 正式导入 → 冒烟 → 切换。</li>
+        <li><strong>回滚：</strong> DNS 切回旧站；旧库不删；新站增量导出；公告数据边界。</li>
+        <li><strong>重建索引：</strong> 清空 SearchDoc / LinkIndex 分片 → 重放 outbox / 全量扫描 → 校验。</li>
+        <li><strong>恢复修订：</strong> 选快照 → 重放 → 生成新 revision → 通知作者。</li>
+        <li><strong>AI 上游故障：</strong> 明确降级文案；不静默失败；配额与重试上限。</li>
+      </ul>
+    </section>
+
+    <section id="risks">
+      <div class="sec-head"><span class="sec-no">11</span><h2>风险与决策</h2></div>
+
+      <h3>11.1 风险登记</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>风险</th><th>触发信号</th><th>影响</th><th>缓解</th></tr></thead>
+          <tbody>
+            <tr><td>重写范围失控</td><td>P0 超过 12 周；需求不断加</td><td>切换无限延期</td><td>P0 只做七个工作流；新增需求进 P1+ backlog；每月复盘。</td></tr>
+            <tr><td>11 工具重建吞掉 P3</td><td>parity 实测 &gt;24 人周；工具需求继续加</td><td>P3 无法按期，切换无限延期</td><td>逐工具 L1/L2/L3；分波交付；冷门工具 L2；超预算就砍范围，不砍验收。</td></tr>
+            <tr><td>Era 语义丢失</td><td>11 自动 + 3 冲突 + 2 无区间的差异无法解释；色带/卡片可见性消失</td><td>世界构建语义回退</td><td>区间 Hist + 展示字段 + presence_json；逐条 diff + override；空/全量归档。</td></tr>
+            <tr><td>设计产能不足</td><td>设计/产品与工程同一人；无独立设计预算</td><td>工具与 Collection 视觉难产，P2/P3 返工</td><td>按 19–22 周单列设计；先做 4 原型 + token；不接受“边写边设计”。</td></tr>
+            <tr><td>旧内容迁移丢失</td><td>校验差异无法解释</td><td>用户信任受损</td><td>两次演练；全量对账；旧库保留；抽样人工验收。</td></tr>
+            <tr><td>Django 6.1 / DRF 兼容</td><td>drf-spectacular 或 3.18 阻断；6.1 进入尾期</td><td>P0 返工或 P3 撞支持窗口</td><td>第 1 周 spike；P3 前升 6.2 LTS；锁版本 + CI。</td></tr>
+            <tr><td>许可证/依赖风险</td><td>Tiptap Pro、Redis 7.4+、MinIO AGPL、BlockNote MPL</td><td>发布/合规返工</td><td>SBOM + license scan；只白名单 MIT 包；Redis 7.2/Valkey；MinIO 仅 dev。</td></tr>
+            <tr><td>编辑器迁移成本超预期</td><td>BlockNote → Tiptap 块转换失败率高</td><td>P0 延期</td><td>先做 14 种块的 spike；无法转换的卡片只读降级 + 导出保底。</td></tr>
+            <tr><td>权限/密码漏洞</td><td>IDOR、token 重放、暴力破解</td><td>私有世界泄漏</td><td>矩阵测试 + 安全评审 + 限流 + 短 token；上线前渗透测试。</td></tr>
+            <tr><td>链接最终一致性困扰用户</td><td>保存后反链短暂缺失</td><td>体验/信任</td><td>UI 显示“同步中”；提供手动刷新；worker 快速消费；巡检兜底。</td></tr>
+            <tr><td>中文搜索质量差</td><td>零结果/误命中</td><td>Wiki 不可用</td><td>P1 先做 spike；bigram + trigram；必要时换 Meilisearch。</td></tr>
+            <tr><td>地图成本失控</td><td>spike 超过 2 周仍无结论</td><td>P3 延期</td><td>v1 只做栅格 + 矢量标注；瓦片/3D/FMG 后置；明确降级。</td></tr>
+            <tr><td>地图能力回退</td><td>新编辑器不等于 FMG 的地图生成能力</td><td>用户觉得地图变弱</td><td>P3 前确认地图是否核心；若核心，保留 FMG 只读查看器或延长 P3；不承诺完整替代。</td></tr>
+            <tr><td>AI 供应商差异/不稳定</td><td>流式中断、工具调用不兼容</td><td>体验差</td><td>适配层 + 超时/重试/降级；录制 fixtures 测试；不把 AI 当唯一路径。</td></tr>
+            <tr><td>单人维护压力</td><td>bus factor = 1</td><td>长期不可持续</td><td>ADR/运行手册/测试；关键模块文档化；不引入过多中间件。</td></tr>
+            <tr><td>跨境链路抖动</td><td>内地高峰丢包</td><td>首屏慢</td><td>SSR + 边缘缓存；实测；CN2/GIA；移动端降级。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>11.2 已定与后续细节</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>决策</th><th>结论</th><th>影响</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>切换时点</td><td><strong>P3 功能对等</strong></td><td>parity matrix 先于日期；P3.5 必排。</td></tr>
+            <tr><td>2</td><td>旧工具文档</td><td><strong>重建 11 种</strong></td><td>五类宿主；+18–24 人周；P3 升到 21–27 周。</td></tr>
+            <tr><td>3</td><td>导航模型</td><td><strong>新增 Collection 树</strong></td><td>P0 进 schema；公开 IA 已定：Collection 树为导航权威。</td></tr>
+            <tr><td>4</td><td>旧 Era 语义</td><td><strong>区间 Hist</strong></td><td>11 自动 + 3 冲突 + 2 无区间的迁移差异；展示字段与 presence 需保留。</td></tr>
+            <tr><td>5</td><td>前端 / 运行时</td><td><strong>React + Tiptap + Django 6.1</strong></td><td>DRF 3.18；6.2 LTS 升级要排。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>状态 / 仍未定</th><th>选项</th><th>结论</th></tr></thead>
+          <tbody>
+            <tr><td>6</td><td>11 工具对等深度</td><td>L1 数据 / L2 最小可编辑 / L3 功能对等</td><td><strong>已拍板</strong>：默认 11/11 L3；table/canvas/board 必 L3；冷门工具降 L2 需签字。</td></tr>
+            <tr><td>7</td><td>公开站 IA</td><td>Collection 树权威 / 类型分区为主 / 两套并存</td><td><strong>已拍板</strong>：Collection 树权威，类型分区降为浏览维度；公开 URL 形态待定。</td></tr>
+            <tr><td>8</td><td>Era 展示 + 卡片可见性</td><td>保留展示字段 + presence_json / 丢弃</td><td><strong>已拍板</strong>：保留；P2/P3 上线时点待排期。</td></tr>
+            <tr><td>9</td><td>设计产能</td><td>独立设计师 / 与工程同一人</td><td><strong>已拍板</strong>：独立 19–22 周（P0–P2）；同一人 36–46 周；具体人力配置待定。</td></tr>
+            <tr><td>10</td><td>voice / note</td><td>重建 / 归档</td><td><strong>仍待定</strong>：默认归档；线上占比高再评估。</td></tr>
+            <tr><td>11</td><td>Django 6.2 升级</td><td>P3 前 / 上线后</td><td><strong>仍待定</strong>：建议 P3 前完成，避免 6.1 支持窗口与切换撞车。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>11.3 可以边做边定</h3>
+      <ul>
+        <li>搜索：pg_trgm 还是 Meilisearch：P1 spike 后用数据决定；v1 先 pg_trgm + bigram。</li>
+        <li>地图：Konva 还是 PixiJS/FMG：P3 两周 spike 后决定；默认栅格 + 矢量标注。</li>
+        <li>对象存储：R2 / B2 / 自建 MinIO：接口 S3 兼容；MinIO 只用于 dev/小规模，生产评估 AGPL。</li>
+        <li>部署：Docker Compose 还是 systemd：小团队优先 Compose；生产再固化。</li>
+        <li>队列：Celery 还是 Django 6.1 <span class="mono">django.tasks</span>：outbox 轻任务可先 django.tasks，重任务 Celery；ADR-0010 定。</li>
+        <li>Tiptap：只白名单 MIT 包；Pro UI / AI / 协作平台默认不买，避免“开源核心 + 付费 UI”的隐性依赖。</li>
+        <li>Redis：7.2 或 Valkey 8（7.4+ 许可变化）；MinIO 生产许可、BlockNote MPL notice 进 SBOM。</li>
+      </ul>
+
+      <h3>11.4 什么时候该重新评估这个方案</h3>
+      <ul>
+        <li>P0 结束时，如果占位模型、编辑器迁移或权限模型超过估算 50%，先停下来复盘，不要硬推。</li>
+        <li>如果 11 工具 parity 实测超过 24 人周，或设计产能没有独立预算，P3 日期必须后移，不能靠加班补。</li>
+        <li>如果线上真实内容远大于本机样本（例如数万张卡、数百 GB 媒体），迁移与性能策略要重做。</li>
+        <li>如果 Django 6.1 在 P3 前进入安全支持尾期，或 DRF 3.18 出现阻断问题，先升 6.2 LTS 再继续。</li>
+        <li>如果公开站 Collection 化导致旧 URL/SEO 大面积失效，回到“类型分区为主、Collection 为辅助”的 IA。</li>
+        <li>如果团队扩到 5 人以上、需要独立扩缩容，再考虑把 AI/地图/搜索拆成服务；不要提前微服务化。</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <div class="sec-head"><span class="sec-no">12</span><h2>附录</h2></div>
+
+      <h3>12.1 术语</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>术语</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td>Card</td><td>平台统一内容基元；设定、人物、时间线节点、地图都围绕它组织。</td></tr>
+            <tr><td>Collection</td><td>卡片的导航树（文件夹/分区）；单一 home；本方案新增。</td></tr>
+            <tr><td>CollectionView</td><td>table/board/radar/todo/dictionary 的保存视图；只存配置，数据仍是 Card/PropertyValue。</td></tr>
+            <tr><td>CardTool</td><td>canvas/soundscape 等页面型工具的 side table；state_json + ToolRevision。</td></tr>
+            <tr><td>Asset</td><td>上传资产的元数据；对象存储 + 哈希去重 + 引用计数。</td></tr>
+            <tr><td>LinkIndex</td><td>卡片/工具/时间节点间的显式引用行；反链、重命名传播、块级锚点的基础。</td></tr>
+            <tr><td>CardRevision / ToolRevision</td><td>不可变修订；delta + 周期快照；恢复 = 新修订。</td></tr>
+            <tr><td>Timeline / Hist</td><td>世界级全量时间线 / 视角分支；区间 Hist 用 start/end 派生成员，curated Hist 用显式成员。</td></tr>
+            <tr><td>Parity L1/L2/L3</td><td>工具重建的验收刻度：数据保留 / 最小可编辑 / 功能对等。</td></tr>
+            <tr><td>TimeValue / epoch_day</td><td>把虚构历法的年月日时换算成可排序的规范值；显示另存。</td></tr>
+            <tr><td>ChangeSet</td><td>AI 或批量操作的变更集；用户确认后经领域服务应用。</td></tr>
+            <tr><td>Outbox</td><td>与业务写入同事务的事件表；worker 消费，保证最终一致性。</td></tr>
+            <tr><td>SSR / SPA</td><td>服务端渲染公开页 / 单页应用工作区。</td></tr>
+            <tr><td>P0–P4</td><td>本方案的阶段划分；P0–P3 为 v1，P4 后置。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>12.2 旧表 → 新表速查</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>旧表</th><th>新表</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">world_world</span></td><td><span class="mono">worlds_world</span></td></tr>
+            <tr><td><span class="mono">world_membership</span></td><td><span class="mono">worlds_worldmember</span></td></tr>
+            <tr><td><span class="mono">world_entitytype</span></td><td><span class="mono">entities_entitytype</span></td></tr>
+            <tr><td><span class="mono">world_propertydef</span></td><td><span class="mono">entities_propertydef</span></td></tr>
+            <tr><td><span class="mono">world_document</span> + <span class="mono">world_card</span></td><td><span class="mono">cards_card</span> + <span class="mono">collections_collection</span> + <span class="mono">cards_collectionpage</span></td></tr>
+            <tr><td><span class="mono">world_document</span>（工具类型）</td><td><span class="mono">tools_collectionview</span> / <span class="mono">cards_cardtool</span> / <span class="mono">assets_asset</span> / Tiptap 块</td></tr>
+            <tr><td><span class="mono">world_documentversion</span></td><td><span class="mono">cards_cardrevision</span> + <span class="mono">tools_toolrevision</span></td></tr>
+            <tr><td><span class="mono">world_timelineevent</span></td><td><span class="mono">timelines_timenode</span></td></tr>
+            <tr><td><span class="mono">world_era</span></td><td><span class="mono">timelines_hist</span>（区间派生）</td></tr>
+            <tr><td><span class="mono">world_mapmarker</span></td><td><span class="mono">maps_mapfeature</span></td></tr>
+            <tr><td><span class="mono">world_treevariant/node/edge</span></td><td><span class="mono">graphs_graph/node/edge</span></td></tr>
+            <tr><td><span class="mono">world_publishlog</span></td><td><span class="mono">publishing_publishevent</span></td></tr>
+            <tr><td><span class="mono">ai_aichangeset/change</span></td><td><span class="mono">suggestions_changeset/change</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>12.3 ADR 清单</h3>
+      <ul>
+        <li><strong>ADR-0001</strong> 两个面 + 四类进程：为什么不是全站 SPA，也不是微服务。</li>
+        <li><strong>ADR-0002</strong> Card + Collection：为什么补导航层，为什么不做 Document 万能容器。</li>
+        <li><strong>ADR-0003</strong> LinkIndex 同步：为什么链接 diff 异步，为什么重命名不重写行。</li>
+        <li><strong>ADR-0004</strong> 修订存储：为什么 delta + snapshot，为什么恢复生成新行。</li>
+        <li><strong>ADR-0005</strong> 搜索：为什么 v1 用 Postgres bigram + trgm，不引独立引擎。</li>
+        <li><strong>ADR-0006</strong> 迁移与切换：一次性 ETL + 只读并行，不做长期双写。</li>
+        <li><strong>ADR-0007</strong> 工具宿主与 11/11 对等矩阵：五类宿主、视图行默认 Card + is_auxiliary、ToolKind、CardTool、ToolRevision、逐工具 L1/L2/L3。</li>
+        <li><strong>ADR-0008</strong> Collection 与公共 IA：单一 home、CollectionView、公开站是否 Collection 化、全局 slug registry。</li>
+        <li><strong>ADR-0009</strong> Era → 区间 Hist：区间/展示元数据、成员派生、Card presence、旧 URL 301、空/全量处理。</li>
+        <li><strong>ADR-0010</strong> 运行时：Django 6.1.x + DRF 3.18、6.2 LTS 升级、django.tasks vs Celery。</li>
+        <li><strong>ADR-0011</strong> 许可证与依赖：Tiptap Pro、BlockNote MPL、Redis 7.2/Valkey、MinIO AGPL、SBOM。</li>
+        <li><strong>ADR-0012</strong> P3 parity、迁移验收与回滚：11 工具矩阵、Era diff、单实体重导。</li>
+        <li><strong>ADR-0013</strong> 块 schema v2：toolEmbed、bookmark、dice、未知节点隔离。</li>
+      </ul>
+
+      <h3>12.4 参考</h3>
+      <ul>
+        <li>产品与技术方案：<span class="mono">/Users/ltz2024/PycharmProjects/worldbuilding_timeline/docs/opuscule-architecture-proposal.md</span></li>
+        <li>旧站代码与文档：<span class="mono">https://github.com/Ltz7zip/Opuscule</span>（README / TECHNO / PLAN）</li>
+        <li>旧站测试：519 条 Django TestCase，作为行为对照基线。</li>
+        <li>Tiptap / ProseMirror、React Flow、Konva、Django REST Framework、PostgreSQL 官方文档。</li>
+      </ul>
+
+      <div class="callout">
+        <span class="tag">下一步</span>
+        如果这份方案的方向成立，先把 11.2 的 5 个决策拍板，然后按 9.5 的前 14 天清单启动 P0。
+        在 P0 的第一个可运行闭环之前，不要同时开地图、AI、移动端三条战线。
+      </div>
+    </section>
+
+    <footer class="doc-foot">
+      <span>Opuscule · Refactor blueprint · v0.2</span>
+      <span>设计评审稿 · 2026-10-20 · 五项决策已定 · 依据 opuscule-architecture-proposal.md</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var sections = links.map(function (a) {
+      return document.querySelector(a.getAttribute('href'));
+    }).filter(Boolean);
+
+    if (!('IntersectionObserver' in window)) return;
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var id = '#' + entry.target.id;
+        links.forEach(function (a) {
+          if (a.getAttribute('href') === id) {
+            a.classList.add('active');
+          } else {
+            a.classList.remove('active');
+          }
+        });
+      });
+    }, { rootMargin: '-18% 0px -72% 0px', threshold: 0 });
+
+    sections.forEach(function (section) { observer.observe(section); });
+  })();
+</script>
+</body>
+</html>

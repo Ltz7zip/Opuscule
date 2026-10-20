@@ -1,0 +1,195 @@
+/* Layer 3: primitive components shared across pages.
+   Buttons, fields, panels, chips, status pills and dialogs live here.
+   Page-level rules stay in app.css and may override these. */
+
+.icon-btn,
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.icon-btn {
+  width: 32px;
+  padding: 0;
+  color: var(--muted-foreground);
+}
+
+.icon-btn:hover,
+.btn-ghost:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover { filter: brightness(0.94); }
+
+.btn-secondary {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.btn-secondary:hover { background: var(--muted); }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.avatar {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-xs);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 21px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 10.5px;
+  background: var(--muted);
+}
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.field input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0 11px;
+  font-size: 13px;
+  outline: none;
+}
+.field input::placeholder { color: var(--muted-foreground); opacity: .7; }
+.field input:focus { border-color: var(--border-strong); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 18%, transparent); }
+
+.form-error {
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--destructive) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--destructive-subtle);
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.field-wide { grid-column: 1 / -1; }
+.field textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 84px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+}
+.field textarea:focus { border-color: var(--border-strong); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 18%, transparent); }
+
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--overlay);
+  overflow: auto;
+}
+.dialog {
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-xl);
+}
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.dialog-head h2 { margin: 0 0 5px; font-size: 18px; letter-spacing: -.02em; }
+.dialog-head p { margin: 0; max-width: 48ch; color: var(--muted-foreground); font-size: 11px; line-height: 1.6; }
+.dialog-form { display: flex; flex-direction: column; gap: 13px; }
+.dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+.dialog-head-actions { display:flex; align-items:center; gap:6px; }
+.btn-sm { padding:6px 9px; font-size:10.5px; }
+
+.btn-danger { border: 1px solid color-mix(in srgb, var(--destructive) 45%, var(--border)); background: color-mix(in srgb, var(--destructive) 12%, var(--card)); color: var(--destructive); }
+.btn-danger:hover { background: color-mix(in srgb, var(--destructive) 20%, var(--card)); }
+
+.dialog-compact { width: min(440px, 100%); }
+.dialog-compact .dialog-actions { justify-content: flex-end; }
+.dialog-field { display: flex; flex-direction: column; gap: 6px; }
+.dialog-field > span { color: var(--muted-foreground); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .09em; text-transform: uppercase; }
+.dialog-field input,
+.dialog-field textarea { width: 100%; min-height: 38px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); color: var(--foreground); padding: 8px 11px; font-size: var(--text-md); outline: none; }
+.dialog-field textarea { min-height: 108px; resize: vertical; line-height: 1.6; }
+.dialog-hint { margin: 0; color: var(--muted-foreground); font-size: var(--text-xs); line-height: 1.6; }
