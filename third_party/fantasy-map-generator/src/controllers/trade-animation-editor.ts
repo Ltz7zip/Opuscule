@@ -1,6 +1,8 @@
 import { closeDialogs, destroyDialog } from "@/components/dialog/dialog-helpers";
 import { ensureEl } from "../utils";
 
+declare const iconHtml: (name: string, size?: number) => string;
+
 const DEFAULTS = TradeAnimation.getDefaultOptions();
 const INPUTS = [
   {
@@ -126,7 +128,7 @@ function buildDialogHTML(): string {
         <td style="padding: 0">${input}</td>
         <td style="padding: 0">
           <button id="${id}Reset" data-tip="Reset to default"
-            style="font-size:.85em; padding:1px 5px; margin-left: 0.3em">↺</button>
+            style="display: inline-flex; align-items: center; font-size:.85em; padding:1px 5px; margin-left: 0.3em">${iconHtml("refresh-cw", 12)}</button>
         </td>
       </tr>`;
   }).join("");

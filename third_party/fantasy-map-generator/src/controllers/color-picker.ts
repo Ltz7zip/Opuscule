@@ -122,7 +122,7 @@ function renderPicker(): SVGSVGElement {
         <rect id="pickerHeader" x="0" y="-30" width="${PICKER_WIDTH}" height="30"></rect>
         <text id="pickerLabel" x="12" y="-10">Color Picker</text>
         <rect id="pickerCloseRect" x="${PICKER_WIDTH - 23}" y="-21" width="14" height="14"></rect>
-        <text id="pickerCloseText" x="${PICKER_WIDTH - 20}" y="-10">✕</text>
+        <path id="pickerCloseText" d="M${PICKER_WIDTH - 19} -17l6 6m0-6l-6 6" fill="none" stroke="#f8ffff" stroke-width="2" stroke-linecap="round"></path>
       </g>
     </svg>`
   );

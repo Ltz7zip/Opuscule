@@ -10,6 +10,8 @@ import { precreatedHeightmaps } from "@/data/precreated-heightmaps";
 import { hostText } from "@/services/i18n";
 import { createSliderRow, type SliderRow } from "@/services/panels/slider";
 
+declare const icon: (name: string, size?: number) => SVGElement;
+
 /** 一个滑杆项：source 是 FMG 里那个输入控件的 id */
 interface SliderSpec {
   label: string;
@@ -120,7 +122,7 @@ function templateRow(): HTMLElement {
   const chev = document.createElement("span");
   chev.className = "tx-chev";
   chev.setAttribute("aria-hidden", "true");
-  chev.textContent = "▾";
+  if (typeof icon === "function") chev.append(icon("chevron-down", 12));
   button.append(label, chev);
   // 转达：FMG 的入口就是那个容器，点它走 Controllers.HeightmapSelection.open()
   button.addEventListener("click", () => document.getElementById("templateInputContainer")?.click());

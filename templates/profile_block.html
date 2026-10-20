@@ -10,12 +10,12 @@
     <div class="block-tools">
       <span class="block-label">{{ block.label }}</span>
       <span class="block-actions">
-        <button type="button" data-act="up" title="上移" aria-label="上移">↑</button>
-        <button type="button" data-act="down" title="下移" aria-label="下移">↓</button>
+        <button type="button" data-act="up" title="上移" aria-label="上移"><span data-icon="arrow-up" data-icon-size="13" aria-hidden="true"></span></button>
+        <button type="button" data-act="down" title="下移" aria-label="下移"><span data-icon="arrow-down" data-icon-size="13" aria-hidden="true"></span></button>
         <button type="button" data-act="hide" title="隐藏这个区块">隐藏</button>
         <button type="button" data-act="show" title="重新显示这个区块">显示</button>
         {% if block.type == 'note' %}
-          <button type="button" data-act="remove" title="删除这个区块" aria-label="删除">×</button>
+          <button type="button" data-act="remove" title="删除这个区块" aria-label="删除"><span data-icon="x" data-icon-size="13" aria-hidden="true"></span></button>
         {% endif %}
       </span>
     </div>
@@ -43,7 +43,7 @@
       {% if profile.links %}
         <ul class="link-list">
           {% for link in profile.links %}
-            <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a></li>
+            <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"><span class="link-list-ic" data-icon="external-link" data-icon-size="12" aria-hidden="true"></span><span>{{ link.label }}</span></a></li>
           {% endfor %}
         </ul>
       {% else %}

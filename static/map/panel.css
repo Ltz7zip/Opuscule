@@ -314,16 +314,19 @@ body:has(> #tx-bar) #options #optionsHide {
   color: var(--tx-mute);
 }
 
-#mapLayers li.buttonoff::before {
-  content: "○";
+#mapLayers li::before {
+  content: "";
+  display: inline-block;
+  width: 7px; height: 7px;
   margin-right: var(--tx-2);
-  color: var(--tx-dim);
+  vertical-align: middle;
+  border: 1.5px solid var(--tx-dim);
+  border-radius: 50%;
 }
 
 #mapLayers li:not(.buttonoff)::before {
-  content: "●";
-  margin-right: var(--tx-2);
-  color: var(--tx-green);
+  border-color: var(--tx-green);
+  background: var(--tx-green);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -864,6 +867,9 @@ body:has(> #tx-bar) #options #optionsHide {
 
 /* 排序按钮：平时隐去，指到那一行才出现（安静优先） */
 #options .tx-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 18px;
   padding: 0;
@@ -888,6 +894,14 @@ body:has(> #tx-bar) #options #optionsHide {
 #options .tx-iconbtn:hover:not(:disabled) {
   background: var(--tx-canvas);
   color: var(--tx-ink);
+}
+
+#options .tx-iconbtn__icon {
+  display: inline-flex;
+}
+
+#options .tx-iconbtn__icon svg {
+  display: block;
 }
 
 #options .tx-iconbtn:disabled {
@@ -1499,11 +1513,17 @@ input.tx-check[type="checkbox"] {
 }
 
 .tx-card__close {
+  display: inline-flex;
+  align-items: center;
   border: 0;
   background: transparent;
   color: var(--tx-mute);
   font-size: var(--tx-fs-ui);
   cursor: pointer;
+}
+
+.tx-card__close svg {
+  display: block;
 }
 
 .tx-card__close:hover {

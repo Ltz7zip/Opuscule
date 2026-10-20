@@ -191,6 +191,7 @@ h4.ai-md-heading, h5.ai-md-heading, h6.ai-md-heading { font-size: 13px; }
   cursor: pointer;
 }
 .ai-code-copy:hover { color: var(--ink); background: var(--panel); border-color: var(--line); }
+.ai-code-copy svg { display: block; }
 .ai-code-body { margin: 0; padding: 8px 10px; overflow-x: auto; background: transparent; }
 .ai-code-body code {
   padding: 0;
@@ -241,7 +242,7 @@ h4.ai-md-heading, h5.ai-md-heading, h6.ai-md-heading { font-size: 13px; }
   color: var(--ink-dim);
   transition: transform 140ms ease;
 }
-.ai-think-caret::before { content: "▸"; }
+.ai-think-caret svg { display: block; }
 .ai-think[open] .ai-think-caret { transform: rotate(90deg); }
 .ai-think-title { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); }
 .ai-think-meta {
@@ -265,6 +266,7 @@ h4.ai-md-heading, h5.ai-md-heading, h6.ai-md-heading { font-size: 13px; }
   cursor: pointer;
 }
 .ai-think-copy:hover { color: var(--ink); background: var(--panel); border-color: var(--line); }
+.ai-think-copy svg { display: block; }
 .ai-think-body {
   max-height: 220px;
   overflow-y: auto;

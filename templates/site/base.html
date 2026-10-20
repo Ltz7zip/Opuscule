@@ -197,5 +197,7 @@
   <!-- 全链路体验层（DESIGN.md）：
        遮罩揭开、打字机标题、导航进度线、滚动显现、共享元素、离开上报 -->
   <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
+  <!-- 图标：全站同一套线性图标（24×24 / stroke 2 / currentColor），页面里用 data-icon 占位 -->
+  <script src="{% static 'icons.js' %}?v={{ static_version }}" defer></script>
 </body>
 </html>

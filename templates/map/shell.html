@@ -53,7 +53,7 @@
     ><span class="tx-bar__label">面板</span></button>
 
     <details class="tx-menu">
-      <summary data-icon="map" title="换一张地图"><span class="tx-bar__label">世界地图</span><span class="tx-chev" aria-hidden="true">▾</span></summary>
+      <summary data-icon="map" title="换一张地图"><span class="tx-bar__label">世界地图</span><span class="tx-chev" data-icon="chevron-down" data-icon-size="12" aria-hidden="true"></span></summary>
       <div class="tx-menu__panel" role="menu">
         {% for map in shell.maps %}
           <a class="tx-menu__item{% if map.current %} is-current{% endif %}" role="menuitem"
@@ -82,7 +82,7 @@
     {% endif %}
 
     <details class="tx-menu tx-menu--actions">
-      <summary title="菜单" aria-label="菜单"><span aria-hidden="true">☰</span></summary>
+      <summary title="菜单" aria-label="菜单" data-icon="menu" data-icon-size="16"></summary>
       <div class="tx-menu__panel" role="menu">
         <div class="tx-menu__group" aria-label="操作">
           <button type="button" class="is-primary" data-icon="save" data-action="save" role="menuitem">保存到这个世界</button>
@@ -125,13 +125,13 @@
 
   <div class="tx-zoom-stack" role="group" aria-label="缩放">
     <button type="button" data-canvas-zoom="in" title="放大" aria-label="放大">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      <svg data-icon="zoom-in" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"></svg>
     </button>
     <button type="button" data-canvas-zoom="out" title="缩小" aria-label="缩小">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+      <svg data-icon="zoom-out" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"></svg>
     </button>
     <button type="button" data-canvas-zoom="reset" title="复位缩放" aria-label="复位缩放">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      <svg data-icon="maximize" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"></svg>
     </button>
   </div>
 

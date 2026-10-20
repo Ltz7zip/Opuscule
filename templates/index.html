@@ -24,6 +24,7 @@
        之间跳转时顶栏和左栏能接着飞；不加载 experience.js，经典时间线的交互保持原样。 -->
   <link rel="stylesheet" href="{% static 'experience.css' %}?v={{ static_version }}" />
   <script src="{% static 'theme-toggle.js' %}?v={{ static_version }}" defer></script>
+  <script src="{% static 'icons.js' %}?v={{ static_version }}" defer></script>
 </head>
 <body class="tl-body">
   <div class="tlx-shell">
@@ -41,7 +42,7 @@
         </nav>
         <div class="tlx-top-right">
           <label class="tlx-search">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.1" /><path d="m15.2 15.2 4.4 4.4" /></svg>
+            <svg data-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg>
             <input id="tlxSearch" type="search" placeholder="搜索事件 / 纪元…" autocomplete="off" aria-label="搜索事件或纪元" />
           </label>
           <div class="save-chip" id="saveChip" hidden role="status" aria-live="polite">
@@ -49,7 +50,7 @@
           </div>
           <button class="tlx-chip-btn" id="tlxPrecision" type="button">精度：月</button>
           <button class="tlx-btn tlx-btn--primary" id="tlxNewEvent" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
+            <svg data-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>
             新建时间点
           </button>
           <button class="tlx-btn" id="tlxShare" type="button">分享</button>
@@ -99,10 +100,10 @@
           </div>
           <div class="tlx-canvas-tools">
             <button class="tlx-icon-btn" id="tlxPanLeft" type="button" aria-label="向左翻页" data-tip="向左翻页　←">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.4 6.4 8.8 12l5.6 5.6" /></svg>
+              <svg data-icon="chevron-left" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
             <button class="tlx-icon-btn" id="tlxPanRight" type="button" aria-label="向右翻页" data-tip="向右翻页　→">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 6.4 15.2 12l-5.6 5.6" /></svg>
+              <svg data-icon="chevron-right" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
           </div>
         </div>
@@ -128,7 +129,7 @@
             <div class="point-marker" id="pointMarker" hidden>
               <div class="pm-tip" id="pmTip">Month 5, Year -8<span class="tip-action"> · 点击添加</span></div>
               <button class="pm-plus" id="pmPlus" type="button" aria-label="在此新建时间点">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
+                <svg data-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
             </div>
 
@@ -162,45 +163,37 @@
             <div class="sel-bar" id="selBar" hidden>
               <span class="sel-count" id="selCount">0 已选择</span>
               <button class="sel-btn" id="selCopy" type="button" title="复制所选" aria-label="复制所选">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" /></svg>
+                <svg data-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <button class="sel-btn" id="selDelete" type="button" title="删除所选" aria-label="删除所选">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" /></svg>
+                <svg data-icon="trash-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <button class="sel-btn" id="selClose" type="button" title="取消选择" aria-label="取消选择">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" /></svg>
+                <svg data-icon="x" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
             </div>
 
             <!-- 底部工具条 -->
             <div class="toolbar" id="toolbar">
               <button class="tool-btn is-active" data-tool="select" type="button" data-tip="选择　V" aria-label="选择">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.9 18.3 12l-6.2 1.1-2.6 5.7z" /></svg>
+                <svg data-icon="mouse-pointer-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <button class="tool-btn" data-tool="hand" type="button" data-tip="只拖画面　H" aria-label="拖动画布">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8.4 11V5.9a1.45 1.45 0 0 1 2.9 0V11M11.3 10.6V4.9a1.45 1.45 0 0 1 2.9 0v5.7M14.2 10.9V6.4a1.45 1.45 0 0 1 2.9 0V14a6 6 0 0 1-6 6h-.6a5.6 5.6 0 0 1-4.4-2.1l-2.4-3.1a1.5 1.5 0 0 1 2.2-2z" />
-                </svg>
+                <svg data-icon="hand" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <span class="tool-sep" aria-hidden="true"></span>
               <button class="tool-btn" data-tool="list" type="button" data-tip="列表视图" aria-label="列表视图">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3.6" y="4.6" width="16.8" height="4.2" rx="1.2" /><path d="M3.6 12.4h5.6v7h-5.6zM12.2 12.6h8.2M12.2 15.6h8.2M12.2 18.6h8.2" />
-                </svg>
+                <svg data-icon="list" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <button class="tool-btn" data-tool="calendar" type="button" data-tip="日历设置" aria-label="日历视图">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3.2" y="5.2" width="17.6" height="15.6" rx="2.4" /><path d="M3.2 9.6h17.6M7.9 3.2v4M16.1 3.2v4M11 13.6l1.9-1.2v5.4M10.4 17.8h5" />
-                </svg>
+                <svg data-icon="calendar" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <span class="tool-sep" aria-hidden="true"></span>
               <button class="tool-btn" data-tool="flag" type="button" data-tip="只看重点" aria-label="标记">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 20.4V4.2M6.6 5.2h9.9l-1.9 3.6 1.9 3.6H6.6" /></svg>
+                <svg data-icon="flag" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
               <button class="tool-btn" data-tool="copy" type="button" data-tip="复制这条记录　⌘D" aria-label="复制所选">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="4" y="4" width="11.6" height="11.6" rx="2.6" /><rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.6" />
-                </svg>
+                <svg data-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg>
               </button>
             </div>
 
@@ -218,20 +211,14 @@
           <!-- 右侧缩放控件（画布卡右上角） -->
           <div class="zoom-stack" id="zoomStack">
             <button class="zoom-btn" id="zoomIn" type="button" data-tip="放大　+" aria-label="放大">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M10.2 7.2v6M7.2 10.2h6" />
-              </svg>
+              <svg data-icon="zoom-in" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
             <span class="tlx-zoom-val" id="tlxZoomVal">100%</span>
             <button class="zoom-btn" id="zoomOut" type="button" data-tip="缩小　−" aria-label="缩小">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.2" cy="10.2" r="6.4" /><path d="M15.1 15.1 20 20M7.2 10.2h6" />
-              </svg>
+              <svg data-icon="zoom-out" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
             <button class="zoom-btn" id="zoomFit" type="button" data-tip="适应内容　F" aria-label="适应内容">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 8.6V5.6A1.6 1.6 0 0 1 5.6 4h3M15.4 4h3A1.6 1.6 0 0 1 20 5.6v3M20 15.4v3a1.6 1.6 0 0 1-1.6 1.6h-3M8.6 20h-3A1.6 1.6 0 0 1 4 18.4v-3" />
-              </svg>
+              <svg data-icon="maximize" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
           </div>
 
@@ -253,7 +240,7 @@
 
         <div class="tlx-detail-empty" id="tlxDetailEmpty">
           <div class="tlx-detail-empty-ic" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><rect x="3.6" y="4.6" width="16.8" height="14.8" rx="2.4" /><path d="M7.4 9.4h9.2M7.4 13h6.2" /></svg>
+            <svg data-icon="file-text" viewBox="0 0 24 24"></svg>
           </div>
           <p>选中一个时间点或纪元查看详情</p>
         </div>
@@ -262,30 +249,26 @@
         <div class="editor" id="editor" hidden role="dialog" aria-modal="true" aria-label="编辑记录">
           <div class="ed-cover" id="edCover" data-filled="false">
             <button class="ed-cover-hit" id="edCoverBtn" type="button" title="设置封面" aria-label="设置封面">
-              <svg class="ed-cover-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.4v15.2M4.4 12h15.2" /></svg>
+              <svg class="ed-cover-plus" data-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
             <span class="ed-cover-badge" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8z" /></svg>
+              <svg data-icon="pen-line" viewBox="0 0 24 24"></svg>
             </span>
           </div>
 
           <div class="ed-title" id="edTitle" contenteditable="true" spellcheck="false" data-placeholder="未命名"></div>
 
           <button class="ed-del" id="edDelete" type="button" title="删除" aria-label="删除">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4.4 6.8h15.2M9.3 6.8V4.4h5.4v2.4M6.5 6.8l1 12.8h9l1-12.8M10.4 10.6v6M13.6 10.6v6" />
-            </svg>
+            <svg data-icon="trash-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
           </button>
 
           <div class="ed-dates">
             <button class="ed-date" id="edStart" type="button">
-              <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="16" rx="2.4" /><path d="M3 9.6h18M7.8 3v4M16.2 3v4M11.2 13v4.6h2.6" />
-              </svg>
+              <svg class="ed-date-ic" data-icon="calendar" viewBox="0 0 24 24" aria-hidden="true"></svg>
               <span class="ed-date-text" id="edStartText">Month 5, Year -8</span>
             </button>
             <button class="ed-date" id="edEnd" type="button" hidden>
-              <svg class="ed-date-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15.4M13.4 6 19.4 12l-6 6" /></svg>
+              <svg class="ed-date-ic" data-icon="arrow-right" viewBox="0 0 24 24" aria-hidden="true"></svg>
               <span class="ed-date-text" id="edEndText">Month 5, Year -8</span>
             </button>
           </div>
@@ -295,14 +278,14 @@
           <hr class="ed-divider" />
 
           <button class="ed-cards" id="edCards" type="button">
-            <svg class="ed-cards-ic" id="edCardsIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.2v13.6M5.2 12h13.6" /></svg>
+            <svg class="ed-cards-ic" id="edCardsIcon" data-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>
             <span id="edCardsText">添加卡片</span>
           </button>
 
           <div class="tlx-ed-foot">
             <button class="tlx-save" id="tlxSave" type="button">保存修改</button>
             <button class="tlx-icon-btn" id="tlxOpenRecord" type="button" title="在新窗口打开" aria-label="在新窗口打开">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-8.6 8.6M18 14.4V19a1.4 1.4 0 0 1-1.4 1.4H5.4A1.4 1.4 0 0 1 4 19V7.8a1.4 1.4 0 0 1 1.4-1.4H10" /></svg>
+              <svg data-icon="external-link" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
           </div>
         </div>
@@ -358,12 +341,12 @@
         <button class="st-field" id="stRangeStart" type="button">
           <span class="st-label">开始</span>
           <span class="st-value" id="stRangeStartText">21年1月1日</span>
-          <svg class="st-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 9.4 12 15l5.6-5.6" /></svg>
+          <svg class="st-chevron" data-icon="chevron-down" viewBox="0 0 24 24" aria-hidden="true"></svg>
         </button>
         <button class="st-field" id="stRangeEnd" type="button">
           <span class="st-label">结束</span>
           <span class="st-value" id="stRangeEndText">120年12月30日</span>
-          <svg class="st-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 9.4 12 15l5.6-5.6" /></svg>
+          <svg class="st-chevron" data-icon="chevron-down" viewBox="0 0 24 24" aria-hidden="true"></svg>
         </button>
 
         <button class="st-row-btn" id="stFit" type="button">适应数据</button>
@@ -408,7 +391,7 @@
         <div class="st-sat">
           <span class="st-value-sm" id="stSatellites">无卫星</span>
           <button class="st-pill" id="stAddSatellite" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>添加卫星
+            <svg data-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>添加卫星
           </button>
         </div>
       </div>
@@ -427,7 +410,7 @@
     <div class="hp-head">
       <h2 class="hp-title">操作指南</h2>
       <button class="hp-close" id="helpClose" type="button" aria-label="关闭">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" /></svg>
+        <svg data-icon="x" viewBox="0 0 24 24" aria-hidden="true"></svg>
       </button>
     </div>
     <div class="hp-body">

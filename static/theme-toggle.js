@@ -25,7 +25,7 @@
       btn.title = dark ? '切换到浅色模式' : '切换到深色模式';
       var glyph = btn.querySelector('.theme-toggle__glyph');
       if (glyph) {
-        glyph.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (dark ? SUN : MOON) + '</svg>';
+        glyph.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon" aria-hidden="true">' + (dark ? SUN : MOON) + '</svg>';
       }
       var label = btn.querySelector('.theme-toggle__text');
       if (label) label.textContent = dark ? '浅色' : '深色';

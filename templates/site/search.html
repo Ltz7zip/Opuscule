@@ -39,7 +39,7 @@
     {% if pager.total %}
       <div class="list-foot">
         <span class="list-count">已显示 {{ hits|length }} / {{ pager.total }} 条</span>
-        <a class="to-top" href="#">回到顶部 ↑</a>
+        <a class="to-top" href="#" data-icon="arrow-up" data-icon-size="12"><span>回到顶部</span></a>
       </div>
     {% endif %}
     {% if can_load_more %}

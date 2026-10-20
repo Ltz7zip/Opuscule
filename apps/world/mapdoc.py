@@ -129,9 +129,12 @@ def map_page(request, view: str = DEFAULT_VIEW, world_slug=None):
             marker_counts[marker.kind] = marker_counts.get(marker.kind, 0) + 1
 
     stats = [f"{layer_count} 层"]
-    for kind, label in (("pin", "图钉"), ("zone", "区域"), ("text", "文字")):
-        if marker_counts.get(kind):
-            stats.append(f"{marker_counts[kind]} {label}")
+    text_count = marker_counts.get("label", 0) + marker_counts.get("text", 0)
+    for count, label in ((marker_counts.get("pin", 0), "图钉"),
+                         (marker_counts.get("zone", 0), "区域"),
+                         (text_count, "文字")):
+        if count:
+            stats.append(f"{count} {label}")
 
     sibling_maps = [
         {"id": doc.id, "name": doc.name, "current": doc.id == doc_id}

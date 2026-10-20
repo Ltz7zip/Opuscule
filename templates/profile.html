@@ -99,11 +99,11 @@
         <div class="block-tools">
           <span class="block-label">自定义文字</span>
           <span class="block-actions">
-            <button type="button" data-act="up" title="上移" aria-label="上移">↑</button>
-            <button type="button" data-act="down" title="下移" aria-label="下移">↓</button>
+            <button type="button" data-act="up" title="上移" aria-label="上移"><span data-icon="arrow-up" data-icon-size="13" aria-hidden="true"></span></button>
+            <button type="button" data-act="down" title="下移" aria-label="下移"><span data-icon="arrow-down" data-icon-size="13" aria-hidden="true"></span></button>
             <button type="button" data-act="hide" title="隐藏这个区块">隐藏</button>
             <button type="button" data-act="show" title="重新显示这个区块">显示</button>
-            <button type="button" data-act="remove" title="删除这个区块" aria-label="删除">×</button>
+            <button type="button" data-act="remove" title="删除这个区块" aria-label="删除"><span data-icon="x" data-icon-size="13" aria-hidden="true"></span></button>
           </span>
         </div>
         <div class="block-body">
@@ -117,7 +117,7 @@
     <aside class="profile-panel" id="profilePanel" aria-label="自定义主页">
       <div class="panel-head">
         <h2>自定义主页</h2>
-        <button type="button" class="panel-close" id="panelClose" aria-label="关闭">×</button>
+        <button type="button" class="panel-close" id="panelClose" aria-label="关闭"><span data-icon="x" data-icon-size="15" aria-hidden="true"></span></button>
       </div>
       <div class="panel-body">
         <section class="panel-sec">
@@ -195,6 +195,7 @@
     </aside>
   {% endif %}
 
+  <script src="{% static 'icons.js' %}?v={{ static_version }}"></script>
   <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
   {% if profile.editable %}<script src="{% static 'profile.js' %}?v={{ static_version }}"></script>{% endif %}
 </body>

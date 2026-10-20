@@ -206,7 +206,13 @@
           var row = document.createElement('div');
           row.className = 'picker-row' + (i === active ? ' is-active' : '');
           var label = document.createElement('b');
-          label.textContent = item.label;
+          if (item.icon) {
+            label.className = 'picker-icon-label';
+            label.innerHTML = iconHtml(item.icon, 15);
+            label.appendChild(document.createTextNode(item.label));
+          } else {
+            label.textContent = item.label;
+          }
           row.appendChild(label);
           row.addEventListener('mousedown', function (event) { event.preventDefault(); finish(item); });
           list.appendChild(row);
@@ -614,7 +620,7 @@
       el.className = 'rt-node is-empty';
       el.style.left = node.x + 'px';
       el.style.top = node.y + 'px';
-      el.innerHTML = '<div class="rt-card"></div><div class="rt-name">' + esc(node.name) + '</div>';
+      el.innerHTML = '<div class="rt-card">' + iconHtml('plus', 30) + '</div><div class="rt-name">' + esc(node.name) + '</div>';
       wrap.appendChild(el);
     });
 
@@ -1087,6 +1093,7 @@
       var meta = [node.card_name || (S.doc && S.doc.name), node.deceased ? '已故' : '在世']
         .filter(Boolean).join(' · ');
       body = '<div class="rt-card">'
+        + (node.name ? '' : iconHtml('plus', 30))
         + '<span class="rt-eyebrow">' + esc(roleOf(node)) + '</span>'
         + '<span class="rt-name">' + esc(node.name || '添加名称') + '</span>'
         + '<span class="rt-meta">' + esc(meta) + '</span>'
@@ -1100,7 +1107,7 @@
         handle.type = 'button';
         handle.className = 'rt-handle rt-handle--' + side;
         handle.dataset.side = side;
-        handle.textContent = '+';
+        handle.innerHTML = iconHtml('plus', 12);
         handle.title = '点：在这个方向新建一个人；拖到另一张卡：直接连过去';
         el.appendChild(handle);
       });
@@ -2039,7 +2046,7 @@
     var choices = S.relations.map(function (r) {
       return { value: r.kind, label: r.label + (r.enabled === false ? '（已停用）' : ''), relation: r };
     });
-    choices.push({ value: '', label: '＋ 新增一条关系', relation: null });
+    choices.push({ value: '', label: '新增一条关系', icon: 'plus', relation: null });
     askChoice({ title: '关系清单：选一条改名，或新增', options: choices }).then(function (picked) {
       if (!picked) return null;
       if (!picked.relation) {

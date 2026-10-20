@@ -118,7 +118,7 @@
             <input id="sbSearch" type="search" placeholder="搜索文档…" autocomplete="off" aria-label="搜索文档" />
             <kbd>⌘K</kbd>
           </div>
-          <button class="sb-icon" id="sbMenu" type="button" title="展开 / 折叠全部">⇕</button>
+          <button class="sb-icon" id="sbMenu" type="button" title="展开 / 折叠全部"><svg data-icon="chevrons-up-down" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
         </div>
 
         {# 侧栏顶部的视图药丸（用 #tbNav / data-nav，JS 直接读这两个钩子） #}
@@ -150,20 +150,20 @@
         {% comment %}底部：宽胶囊（新建文档 ⌘N）+ 一个圆形「更多」按钮。动作列表（建议 / 导入导出 / 类型 / 纪元 / 主题 / 回收站）与「文件夹 / 模板」都收进这个圆形按钮的浮层里，不铺在侧栏上。{% endcomment %}
         <div class="sb-dock">
           <div class="sb-menu" id="sbMenuPop" hidden>
-            <button class="sb-act" id="newFolderBtn" type="button" title="新建文件夹">＋ 文件夹</button>
-            <button class="sb-act" id="templateBtn" type="button" title="用引导模板新建（角色 / 地点 / 事件）">模板</button>
-            <button class="sb-act" id="suggestBtn" type="button" title="值得添加的东西">建议</button>
-            <button class="sb-act" id="exchangeBtn" type="button" title="导入 / 导出">导入导出</button>
-            <button class="sb-act" id="typesBtn" type="button">类型</button>
-            <button class="sb-act" id="erasBtn" type="button">纪元</button>
-            <button class="sb-act" id="themeBtn" type="button">主题</button>
-            <button class="sb-act" id="archivesBtn" type="button" title="整包存一份 / 读回某个存档">存档</button>
-            <button class="sb-act" id="trashBtn" type="button">回收站</button>
+            <button class="sb-act" id="newFolderBtn" type="button" title="新建文件夹"><svg data-icon="folder-plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span>文件夹</span></button>
+            <button class="sb-act" id="templateBtn" type="button" title="用引导模板新建（角色 / 地点 / 事件）"><svg data-icon="layout-template" viewBox="0 0 24 24" aria-hidden="true"></svg><span>模板</span></button>
+            <button class="sb-act" id="suggestBtn" type="button" title="值得添加的东西"><svg data-icon="sparkles" viewBox="0 0 24 24" aria-hidden="true"></svg><span>建议</span></button>
+            <button class="sb-act" id="exchangeBtn" type="button" title="导入 / 导出"><svg data-icon="arrow-right-left" viewBox="0 0 24 24" aria-hidden="true"></svg><span>导入导出</span></button>
+            <button class="sb-act" id="typesBtn" type="button"><svg data-icon="tag" viewBox="0 0 24 24" aria-hidden="true"></svg><span>类型</span></button>
+            <button class="sb-act" id="erasBtn" type="button"><svg data-icon="globe" viewBox="0 0 24 24" aria-hidden="true"></svg><span>纪元</span></button>
+            <button class="sb-act" id="themeBtn" type="button"><svg data-icon="droplet" viewBox="0 0 24 24" aria-hidden="true"></svg><span>主题</span></button>
+            <button class="sb-act" id="archivesBtn" type="button" title="整包存一份 / 读回某个存档"><svg data-icon="archive" viewBox="0 0 24 24" aria-hidden="true"></svg><span>存档</span></button>
+            <button class="sb-act" id="trashBtn" type="button"><svg data-icon="trash-2" viewBox="0 0 24 24" aria-hidden="true"></svg><span>回收站</span></button>
           </div>
           <div class="sb-foot">
-            <button class="sb-new" id="newDocBtn" type="button" title="新建文档">＋ 新建文档</button>
+            <button class="sb-new" id="newDocBtn" type="button" title="新建文档"><svg data-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span>新建文档</span></button>
             <button class="sb-compose" id="sbComposeBtn" type="button" title="更多" aria-label="更多"
-                    aria-expanded="false" aria-controls="sbMenuPop">✎</button>
+                    aria-expanded="false" aria-controls="sbMenuPop"><svg data-icon="pen-line" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
           </div>
         </div>
       </aside>
@@ -210,7 +210,7 @@
     <div class="md-box" role="dialog" aria-modal="true" aria-labelledby="mdTitle">
       <header class="md-head">
         <h2 id="mdTitle">标题</h2>
-        <button class="md-close" id="mdClose" type="button" aria-label="关闭">✕</button>
+        <button class="md-close" id="mdClose" type="button" aria-label="关闭"><svg data-icon="x" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       </header>
       <div class="md-body" id="mdBody"></div>
     </div>
@@ -233,11 +233,7 @@
   {# AI 入口：右下角悬浮球。只读成员也可见（聊天可用），应用变更集时才按写入权限拦截 #}
   <button class="ai-fab" id="aiBtn" type="button" title="AI 助手"
           aria-label="打开 AI 助手" aria-haspopup="dialog" aria-controls="aiDrawer">
-    <svg class="ai-fab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 2.6l1.9 5.1 5.1 1.9-5.1 1.9L12 16.6l-1.9-5.1L5 9.6l5.1-1.9L12 2.6z" fill="currentColor"/>
-      <path d="M18.6 14.2l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1 1-2.6z" fill="currentColor" opacity=".68"/>
-      <path d="M5.4 15l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9L2.8 17.6l1.9-.7.7-1.9z" fill="currentColor" opacity=".5"/>
-    </svg>
+    <svg class="ai-fab-icon" data-icon="sparkles" viewBox="0 0 24 24" aria-hidden="true" focusable="false"></svg>
   </button>
 
   <!-- 正文编辑器孤岛：frontend/editor 的构建产物（React + BlockNote），已提交进仓库。

@@ -1,4 +1,4 @@
-import{Jn as e,P as t}from"./utils-Dk4MDzbZ.js?v=2";import{i as n}from"./tooltips-3xx1wzLl.js?v=2";var r=e=>e.filter(e=>e.i&&!e.removed);function i(e,t){return e?.length?e.map(e=>t.find(t=>t.i===e)?.name??``).join(`, `):`all`}function a({title:i,heading:a,items:o,allowed:s,onApply:c}){let l=r(o).map(({i:t,name:n,fullName:r,color:i})=>`<tr data-tip="${e(n)}">
+import{Jn as e,P as t}from"./utils-Dk4MDzbZ.js";import{i as n}from"./tooltips-3xx1wzLl.js";var r=e=>e.filter(e=>e.i&&!e.removed);function i(e,t){return e?.length?e.map(e=>t.find(t=>t.i===e)?.name??``).join(`, `):`all`}function a({title:i,heading:a,items:o,allowed:s,onApply:c}){let l=r(o).map(({i:t,name:n,fullName:r,color:i})=>`<tr data-tip="${e(n)}">
       <td><span style="color:${e(i??``)}">⬤</span></td>
       <td>
         <input data-i="${t}" id="limitation${t}" type="checkbox" class="checkbox" ${!s?.length||s.includes(t)?`checked`:``}>

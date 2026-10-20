@@ -340,6 +340,9 @@ body.is-editing .profile-block.is-off:hover { border-color: var(--mp-ink-2); }
 }
 .block-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .block-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: 500 11px/1 var(--mp-font);
   width: auto; min-width: 22px; height: 22px; padding: 0 7px;
   border: 1px solid transparent; border-radius: var(--mp-r-sm);
@@ -399,17 +402,20 @@ body.is-editing .profile-block.is-off:hover { border-color: var(--mp-ink-2); }
   overflow-wrap: anywhere;
   transition: background-color .13s ease, color .13s ease;
 }
-.link-list a::before {
-  content: "↗";
+.link-list .link-list-ic {
   flex: 0 0 auto;
-  font-size: 10px; color: var(--mp-ink-3);
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  color: var(--mp-ink-3);
   transition: color .13s ease;
 }
+.link-list .link-list-ic svg { display: block; }
 .link-list a:hover {
   background: var(--mp-muted);
   color: var(--mp-ink);
 }
-.link-list a:hover::before { color: var(--mp-ink); }
+.link-list a:hover .link-list-ic { color: var(--mp-ink); }
 
 /* 题材标签 */
 .genre-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -580,6 +586,9 @@ body.is-editing .profile-panel { transform: none; visibility: visible; }
   color: var(--mp-ink);
 }
 .panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px; height: 28px; padding: 0;
   font: 400 17px/1 var(--mp-font);
   border: 1px solid transparent; border-radius: var(--mp-r-sm);
@@ -672,6 +681,9 @@ body.is-editing .profile-panel { transform: none; visibility: visible; }
 .link-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 9px; }
 .link-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) auto; gap: 6px; }
 .link-row .link-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px; height: 28px; align-self: center; padding: 0;
   font: 400 14px/1 var(--mp-font);
   border: 1px solid transparent; border-radius: var(--mp-r-sm);

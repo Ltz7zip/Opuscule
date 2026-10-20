@@ -310,7 +310,7 @@
               <span class="auth-val" data-val></span>
               <button class="auth-submit" id="authSubmit" type="submit">
                 <span class="auth-submit-fill" aria-hidden="true"></span>
-                <span class="auth-submit-label" data-submit-label>Request</span><i class="auth-submit-arrow">→</i>
+                <span class="auth-submit-label" data-submit-label>Request</span><span class="auth-submit-arrow" data-icon="arrow-right" data-icon-size="15" aria-hidden="true"></span>
               </button>
             </div>
             <div class="auth-under" data-under></div>
@@ -400,6 +400,8 @@
      data-granted-en="PERMISSION AUTHORIZED · UNFOLDING THE WORLD LINE"></div>
 
 <script type="module" src="{% static 'auth.js' %}?v={{ static_version }}"></script>
+<!-- 图标：全站同一套线性图标（24×24 / stroke 2 / currentColor），页面里用 data-icon 占位 -->
+<script src="{% static 'icons.js' %}?v={{ static_version }}" defer></script>
 <!-- 体验层：导航进度线 / Ripple / 焦点管理 / 离开处理（不接管登录页自己的外壳） -->
 <script src="{% static 'experience.js' %}?v={{ static_version }}"></script>
 </body>

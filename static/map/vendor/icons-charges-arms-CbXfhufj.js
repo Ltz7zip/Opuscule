@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" fill="#d7374a" stroke="#000" viewBox="50 50 200 200">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" fill="#d7374a" stroke="#000" viewBox="50 50 200 200">
   <metadata source="http://wappenwiki.org/images/e/e3/Sm%C3%A5land_%28Armorial_Su%C3%A9dois%29.svg" license="https://creativecommons.org/licenses/by-nc-sa/3.0"/>
   <g id="arbalest" stroke-width="0.288">
     <g>

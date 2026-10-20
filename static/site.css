@@ -221,10 +221,12 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
   backdrop-filter: blur(10px);
 }
 .te-dock-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   min-width: 34px; height: 30px; padding: 0 12px; cursor: pointer;
   border: 0; border-radius: 999px; background: transparent;
   color: #4a4438; font: inherit; font-size: 12.5px;
 }
+.te-dock-btn svg { display: block; }
 .te-dock-btn:hover { background: rgba(27, 23, 16, .06); color: #1b1710; }
 .te-dock-sep { width: 1px; height: 18px; background: rgba(27, 23, 16, .12); margin: 0 4px; }
 .timeline-embed.is-full .te-frame { height: min(78vh, 760px); }
@@ -264,8 +266,10 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
   background: var(--surface, #fff); border: 1px solid var(--line, #e2ddd2); border-radius: 999px;
 }
 .fc-btn:hover { border-color: var(--ink-dim, #6b6459); }
-.fc-icon { opacity: .6; }
+.fc-icon { opacity: .6; display: inline-flex; align-items: center; }
+.fc-icon svg { display: block; }
 .fc-caret { opacity: .5; font-size: 10px; }
+.fc-caret svg { display: block; }
 .fc-menu {
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 20;
   min-width: 200px; max-height: 60vh; overflow: auto; padding: 6px;
@@ -279,7 +283,7 @@ body { overflow-x: hidden; }   /* 100vw 在带滚动条的浏览器里会多出�
 }
 .fc-item:hover { background: rgba(27, 23, 16, .05); }
 .fc-item.is-on { background: rgba(27, 23, 16, .07); font-weight: 600; }
-.fc-count { color: var(--ink-dim, #857c6b); font-size: 12px; }
+.fc-count { color: var(--ink-dim, #857c6b); font-size: 12px; display: inline-flex; align-items: center; }
 
 /* ------------------------------------------------------- 搜索结果 */
 .crumbs { color: var(--ink-dim, #857c6b); font-size: 13px; margin: 4px 0 14px; }

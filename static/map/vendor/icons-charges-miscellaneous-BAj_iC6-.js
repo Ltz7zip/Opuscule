@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-QTnfLwEv.js?v=2";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" fill="#d7374a" stroke="#000" viewBox="50 50 200 200">
+import{n as e}from"./rolldown-runtime-QTnfLwEv.js";var t=e({default:()=>n}),n=`<svg xmlns="http://www.w3.org/2000/svg" fill="#d7374a" stroke="#000" viewBox="50 50 200 200">
   <metadata author="Baseluna014" source="https://commons.wikimedia.org/wiki/File:Villadose-Stemma.svg" license="https://creativecommons.org/licenses/by-sa/4.0"/>
   <g id="amphora" stroke-width=".509">
     <linearGradient id="gradient1" x2="1">

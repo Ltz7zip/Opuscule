@@ -5,6 +5,8 @@
 import { hostContext } from "@/services/hosted";
 import { createDropdown, type Dropdown } from "@/services/panels/dropdown";
 
+declare const icon: (name: string, size?: number) => SVGElement;
+
 export interface CardMarker {
   id: number;
   kind: string;
@@ -67,7 +69,8 @@ function build(): HTMLElement {
   const close = document.createElement("button");
   close.type = "button";
   close.className = "tx-card__close";
-  close.textContent = "✕";
+  close.setAttribute("aria-label", "关掉卡片");
+  if (typeof icon === "function") close.append(icon("x", 12));
   close.title = "关掉卡片";
   close.addEventListener("click", () => {
     root.hidden = true;

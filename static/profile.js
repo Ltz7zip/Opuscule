@@ -91,7 +91,7 @@
     remove.className = 'link-remove';
     remove.title = '删除这条链接';
     remove.setAttribute('aria-label', '删除这条链接');
-    remove.textContent = '×';
+    remove.innerHTML = iconHtml('x', 14);
     remove.addEventListener('click', function () { row.remove(); });
     row.append(label, url, remove);
     linksWrap.appendChild(row);
