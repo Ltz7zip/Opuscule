@@ -1,0 +1,221 @@
+/* Minimal access surface. The legacy terminal styling is intentionally not
+   carried over: same markup, same phases, one quiet card. */
+
+.auth-terminal {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.auth-shell {
+  width: min(440px, 100%);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-6);
+  padding: 0;
+}
+
+.auth-line,
+.auth-rail,
+.auth-core,
+.auth-anno,
+.auth-verify,
+.auth-panel-head,
+.auth-id-head,
+.auth-nameplate,
+.auth-infostrip,
+.auth-panel-foot,
+.auth-lamps,
+.auth-ctrl,
+.auth-cap-en,
+.auth-top-ver,
+.auth-top-rule,
+.auth-top-world,
+.auth-top-clock,
+.auth-under,
+.auth-dash {
+  display: none;
+}
+
+.auth-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-top-mark,
+.auth-top-brand { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+.auth-top-brand {
+  color: var(--foreground);
+  text-decoration: none;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+
+.auth-brand-glyph {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+}
+
+.auth-top-spacer { flex: 1; }
+
+.auth-top-chip {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.auth-stage { display: block; }
+
+.auth-warn,
+.auth-grant,
+.auth-hint {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.auth-warn { display: none; }
+.auth-shell[data-has-error="1"] .auth-warn { display: block; }
+.auth-warn-t { display: flex; gap: var(--space-2); color: var(--destructive); }
+.auth-warn-t span:first-child { font-family: var(--font-mono); }
+.auth-warn-lines { display: flex; flex-direction: column; gap: var(--space-1); }
+.auth-warn-lines > div:not(.auth-cn) { display: none; }
+.auth-cn { color: var(--muted-foreground); }
+
+.auth-grant { display: none; }
+.auth-shell[data-state="unfold"] .auth-grant { display: block; color: var(--success); }
+.auth-grant-box { display: flex; align-items: center; gap: var(--space-2); }
+.auth-grant-box .g-blink { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--success); }
+
+.auth-panel {
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.auth-id-body { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.auth-heading h1 {
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+.auth-heading p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-md);
+  line-height: 1.6;
+}
+
+.auth-creds { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.auth-field { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.auth-fl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.auth-r { margin-left: auto; font-family: var(--font-mono); font-size: var(--text-xs); }
+.auth-level { color: var(--muted-foreground); }
+
+.auth-bar { display: flex; align-items: center; gap: var(--space-2); }
+
+
+.auth-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: var(--text-md);
+  outline: 0;
+}
+
+.auth-input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.auth-input::placeholder { color: var(--muted-foreground); }
+
+.auth-submit {
+  display: inline-flex;
+  width: 100%;
+  height: 44px;
+  margin-top: var(--space-4);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-submit:disabled { opacity: .55; cursor: default; }
+.auth-submit-fill { display: none; }
+.auth-submit-arrow { width: 16px; height: 16px; }
+
+.auth-hint { color: var(--destructive); border-color: var(--destructive); }
+.auth-field[data-field="invite"] { display: none; }
+.auth-shell[data-mode="register"] .auth-field[data-field="invite"] { display: flex; }
+
+.auth-switch {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  font-size: var(--text-sm);
+}
+.auth-switch a { display: inline-flex; min-height: 44px; align-items: center; color: var(--muted-foreground); }
+.auth-switch a:hover { color: var(--foreground); }
+
+.auth-bottom { display: flex; flex-direction: column; gap: var(--space-2); }
+.auth-cap { margin: 0; color: var(--muted-foreground); font-size: var(--text-sm); line-height: 1.5; }
+.auth-statusline { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted-foreground); font-size: var(--text-xs); }
+.auth-statusline a { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+
+@media (max-width: 640px) {
+  .auth-terminal { padding: var(--space-4); }
+  .auth-top-brand { min-height: 44px; }
+  .auth-panel { padding: var(--space-5); }
+  .auth-shell { gap: var(--space-5); }
+}

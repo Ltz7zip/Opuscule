@@ -10,3 +10,8 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* One stroke weight for every Lucide glyph; sizes stay 16/18/20. */
+.lucide { stroke-width: 1.5; }
+
+

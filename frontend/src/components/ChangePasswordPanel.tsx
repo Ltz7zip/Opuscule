@@ -41,7 +41,7 @@ export function ChangePasswordPanel() {
     <section className="panel password-panel" aria-label="修改密码">
       <div className="password-head">
         <div>
-          <div className="sidebar-title"><KeyRound size={13} /> 修改密码</div>
+          <div className="sidebar-title"><KeyRound size={16} /> 修改密码</div>
           <div className="sidebar-sub">修改后当前会话保持登录，其他设备需重新登录。</div>
         </div>
       </div>
@@ -59,7 +59,7 @@ export function ChangePasswordPanel() {
           <input required type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
         </label>
         <button type="submit" className="btn btn-secondary" disabled={saving || !current || !next || !confirm}>
-          {saving ? <Loader2 size={14} className="spin" /> : null}
+          {saving ? <Loader2 size={16} className="spin" /> : null}
           {saving ? "更新中…" : "更新密码"}
         </button>
       </form>

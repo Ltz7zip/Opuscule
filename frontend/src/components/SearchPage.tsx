@@ -1,19 +1,55 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Loader2, Search } from "lucide-react";
 
 import { searchCards } from "../api";
 import type { SearchResult, SearchUserResult, SearchWorldResult, SessionState } from "../types";
+import { typeLabel } from "../lib/labels";
 import { useDocumentMeta } from "../lib/meta";
-import { Topbar } from "./Topbar";
-import { SiteFooter } from "./SiteFooter";
+import { useSharedSource } from "../lib/viewTransition";
+import { SiteFoot } from "./SiteFoot";
+import { SiteHeader } from "./SiteHeader";
+import { TypeIcon } from "./TypeIcon";
 
 interface SearchPageProps {
   session: SessionState | null;
   onLogout: () => void;
 }
 
-function initialQuery(): string {
-  return new URLSearchParams(window.location.search).get("q") ?? "";
+function readParam(name: string): string {
+  return new URLSearchParams(window.location.search).get(name) ?? "";
+}
+
+function SearchHit({ result, query }: { result: SearchResult; query: string }) {
+  const source = useSharedSource("icon", result.card_slug);
+  return (
+    <li className="site-hit">
+      <a
+        className="site-hit-name site-hit-main"
+        href={`/w/${result.world_slug}/wiki/${result.card_slug}`}
+        onPointerEnter={source.onPointerEnter}
+        onPointerLeave={source.onPointerLeave}
+        onFocus={source.onFocus}
+        onBlur={source.onBlur}
+        onTouchStart={source.onTouchStart}
+      >
+        <span className="site-hit-icon" ref={source.ref} aria-hidden="true">
+          <TypeIcon typeKey={result.type_key} size={16} />
+        </span>
+        <span className="site-hit-text">
+          <span className="site-hit-title">
+            <Highlight text={result.title} query={query} />
+          </span>
+          <span className="site-hit-meta">
+            {result.world_name} · {typeLabel(result.type_key)}
+          </span>
+          {result.snippet && (
+            <span className="site-hit-snippet">
+              <Highlight text={result.snippet} query={query} />
+            </span>
+          )}
+        </span>
+      </a>
+    </li>
+  );
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -29,9 +65,11 @@ function Highlight({ text, query }: { text: string; query: string }) {
   );
 }
 
+/** Legacy world/site search layout: 25px title, 44px search row, hit rows. */
 export function SearchPage({ session, onLogout }: SearchPageProps) {
-  const [query, setQuery] = useState(initialQuery);
-  const [activeQuery, setActiveQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(() => readParam("q"));
+  const [worldSlug] = useState(() => readParam("world"));
+  const [activeQuery, setActiveQuery] = useState(() => readParam("q"));
   const [results, setResults] = useState<SearchResult[]>([]);
   const [worlds, setWorlds] = useState<SearchWorldResult[]>([]);
   const [users, setUsers] = useState<SearchUserResult[]>([]);
@@ -49,11 +87,11 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
   });
 
   useEffect(() => {
-    const q = initialQuery().trim();
+    const q = readParam("q").trim();
     if (!q) return;
     void runSearch(q);
     document.title = `搜索：${q} · Opuscule`;
-    // runSearch is intentionally tied to the initial URL only.
+    // runSearch intentionally reads the initial URL only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -72,10 +110,13 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
     setError(null);
     try {
       const data = await searchCards(q);
-      setWorlds(data.worlds ?? []);
-      setUsers(data.users ?? []);
-      setResults(data.results);
-      setHasMore(data.has_more);
+      const scoped = worldSlug
+        ? data.results.filter((item) => item.world_slug === worldSlug)
+        : data.results;
+      setWorlds(worldSlug ? [] : data.worlds ?? []);
+      setUsers(worldSlug ? [] : data.users ?? []);
+      setResults(scoped);
+      setHasMore(data.has_more && !worldSlug);
       setActiveQuery(data.query);
       setSearched(true);
       document.title = `搜索：${q} · Opuscule`;
@@ -93,8 +134,11 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
     setError(null);
     try {
       const data = await searchCards(q, results.length);
-      setResults((current) => [...current, ...data.results]);
-      setHasMore(data.has_more);
+      const scoped = worldSlug
+        ? data.results.filter((item) => item.world_slug === worldSlug)
+        : data.results;
+      setResults((current) => [...current, ...scoped]);
+      setHasMore(data.has_more && !worldSlug);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "加载更多失败");
     } finally {
@@ -107,116 +151,146 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
     const q = query.trim();
     const params = new URLSearchParams();
     if (q) params.set("q", q);
-    window.history.replaceState(null, "", `/search${q ? `?${params.toString()}` : ""}`);
+    if (worldSlug) params.set("world", worldSlug);
+    window.history.replaceState(null, "", `/search${params.toString() ? `?${params.toString()}` : ""}`);
     void runSearch(q);
   };
 
+  const total = results.length + worlds.length + users.length;
+
   return (
-    <div className="app-shell search-page">
-      <Topbar mode="public" publicLabel="搜索" session={session} onLogout={onLogout} />
-      <main id="main-content" tabIndex={-1} className="search-shell">
-        <header className="search-hero">
-          <span className="eyebrow"><Search size={13} /> 公开搜索</span>
-          <h1>在雾里找一条线索</h1>
-          <p>搜索公开世界与 Wiki 卡片；私有世界不会出现在结果里。</p>
-          <form className="search-form" onSubmit={submit} role="search">
-            <Search size={16} />
-            <input
-              type="search"
-              name="q"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="输入关键词，例如：灯塔、船长、雾港"
-              aria-label="搜索公开 Wiki"
-              autoFocus
-            />
-            <button type="submit" className="btn btn-primary" disabled={loading || !query.trim()}>
-              {loading ? <Loader2 size={14} className="spin" /> : "搜索"}
-            </button>
-          </form>
-        </header>
+    <div className="site-page search-page">
+      <SiteHeader session={session} onLogout={onLogout} active="search" />
 
-        {error && <div className="error" role="alert">{error}</div>}
+      <main id="main-content" tabIndex={-1} className="site-wrap">
+        <nav className="site-crumbs" aria-label="面包屑">
+          <a href="/explore">公开世界</a> / 搜索
+        </nav>
+        <h1 className="site-page-title">搜索</h1>
 
-        {loading && (
-          <div className="loading">
-            <Loader2 size={16} className="spin" /> 正在搜索…
-          </div>
+        <form className="site-search-inline" onSubmit={submit} role="search">
+          {worldSlug && <input type="hidden" name="world" value={worldSlug} />}
+          <input
+            type="search"
+            name="q"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜名称、正文、属性、事件…"
+            aria-label="搜索公开 Wiki"
+            autoFocus
+          />
+          <button type="submit" disabled={loading || !query.trim()}>
+            {loading ? "搜索中…" : "搜索"}
+          </button>
+        </form>
+
+        {error && <p className="site-error" role="alert">{error}</p>}
+
+        {loading && <p className="site-loading">正在搜索…</p>}
+
+        {!loading && !searched && !query.trim() && (
+          <p className="site-empty">
+            输入关键词，搜索公开 Wiki 的标题、正文、属性与事件。
+          </p>
         )}
 
-        {!loading && searched && results.length === 0 && worlds.length === 0 && users.length === 0 && (
-          <div className="empty">
-            <span className="empty-icon"><Search size={22} /></span>
-            <div>
-              <h2>没有找到结果</h2>
-              <p>试试更短的关键词，或换一个世界。</p>
-            </div>
-          </div>
+        {!loading && searched && total === 0 && (
+          <p className="site-empty">
+            没找到「{activeQuery}」。换个说法，或者清掉筛选再试。
+          </p>
         )}
 
-        {!loading && (results.length > 0 || worlds.length > 0 || users.length > 0) && (
+        {!loading && total > 0 && (
           <>
-            {worlds.length > 0 && (
-              <section className="search-worlds" aria-label="匹配的世界">
-                <div className="search-meta">{worlds.length} 个公开世界</div>
-                <div className="search-world-grid">
-                  {worlds.map((world) => (
-                    <a className="search-world" key={world.slug} href={`/w/${world.slug}/wiki`}>
-                      <span className="eyebrow">公开世界 · /{world.slug}</span>
-                      <h2><Highlight text={world.name} query={activeQuery} /></h2>
-                      {world.description && <p><Highlight text={world.description} query={activeQuery} /></p>}
-                      <span className="search-result-path">进入 Wiki →</span>
-                    </a>
-                  ))}
-                </div>
-              </section>
+            {activeQuery && (
+              <p className="site-search-count">
+                「{activeQuery}」找到 {total} 条结果{worldSlug ? ` · 限定世界 ${worldSlug}` : ""}
+              </p>
             )}
-            {users.length > 0 && (
-              <section className="search-users" aria-label="公开创作者">
-                <div className="search-meta">{users.length} 位公开创作者</div>
-                <div className="search-user-grid">
-                  {users.map((user) => (
-                    <a className="search-user" key={user.username} href={`/u/${user.username}`}>
-                      <span className="eyebrow">@{user.username}</span>
-                      <b><Highlight text={user.display_name} query={activeQuery} /></b>
-                      {user.headline && <p><Highlight text={user.headline} query={activeQuery} /></p>}
-                    </a>
-                  ))}
-                </div>
-              </section>
-            )}
-            {results.length > 0 && <div className="search-meta">{results.length} 条公开卡片</div>}
-            {results.length > 0 && <div className="search-results">
-              {results.map((result) => (
-                <a
-                  className="search-result"
-                  key={`${result.world_slug}:${result.card_slug}`}
-                  href={`/w/${result.world_slug}/wiki/${result.card_slug}`}
-                >
-                  <div className="search-result-top">
-                    <span className="eyebrow">{result.world_name}</span>
-                    <ArrowUpRight size={14} />
-                  </div>
-                  <h2><Highlight text={result.title} query={activeQuery} /></h2>
-                  {result.snippet && <p><Highlight text={result.snippet} query={activeQuery} /></p>}
-                  <span className="search-result-path">
-                    /{result.world_slug}/wiki/{result.card_slug}
-                  </span>
+
+            {worldSlug && (
+              <p className="site-search-scope">
+                当前只看 <b>{worldSlug}</b>
+                <a href={`/search${activeQuery ? `?q=${encodeURIComponent(activeQuery)}` : ""}`}>
+                  清掉世界筛选
                 </a>
-              ))}
-            </div>}
+              </p>
+            )}
+
+            {worlds.length > 0 && (
+              <section className="site-section" aria-label="匹配的世界">
+                <h2>公开世界</h2>
+                <div className="site-grid">
+                  {worlds.map((world) => (
+                    <a className="site-tile" key={world.slug} href={`/w/${world.slug}/wiki`}>
+                      <span className="site-tile-kind">公开世界 · /{world.slug}</span>
+                      <span className="site-tile-name">
+                        <Highlight text={world.name} query={activeQuery} />
+                      </span>
+                      {world.description && (
+                        <span className="site-tile-era">
+                          <Highlight text={world.description} query={activeQuery} />
+                        </span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {users.length > 0 && (
+              <section className="site-section" aria-label="公开创作者">
+                <h2>公开创作者</h2>
+                <div className="site-grid">
+                  {users.map((user) => (
+                    <a className="site-tile" key={user.username} href={`/u/${user.username}`}>
+                      <span className="site-tile-kind">@{user.username}</span>
+                      <span className="site-tile-name">
+                        <Highlight text={user.display_name} query={activeQuery} />
+                      </span>
+                      {user.headline && (
+                        <span className="site-tile-era">
+                          <Highlight text={user.headline} query={activeQuery} />
+                        </span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {results.length > 0 && (
+              <section className="site-section" aria-label="公开卡片">
+                <h2>卡片</h2>
+                <ul className="site-hit-list">
+                  {results.map((result) => (
+                    <SearchHit
+                      key={`${result.world_slug}:${result.card_slug}`}
+                      result={result}
+                      query={activeQuery}
+                    />
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <div className="site-list-foot">
+              <span>{results.length > 0 ? `已显示 ${results.length} 张卡片${hasMore ? " · 还有更多" : ""}` : ""}</span>
+              <a href="#">回到顶部</a>
+            </div>
+
             {hasMore && (
-              <div className="search-more">
-                <button type="button" className="btn btn-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
-                  {loadingMore ? <Loader2 size={14} className="spin" /> : null}
-                  {loadingMore ? "加载中…" : "加载更多卡片"}
+              <nav className="site-pager" aria-label="加载更多">
+                <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>
+                  {loadingMore ? "加载中…" : "加载更多"}
                 </button>
-              </div>
+              </nav>
             )}
           </>
         )}
       </main>
-      <SiteFooter />
+
+      <SiteFoot authenticated={Boolean(session?.authenticated)} />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 .tiptap,
 .rich-text {
   color: var(--foreground);
-  font-size: 15px;
+  font-size: var(--text-lg);
   line-height: 1.85;
   max-width: 76ch;
 }
@@ -22,11 +22,11 @@
 .rich-text ul, .rich-text ol { padding-left: 1.35em; margin: 0.55em 0; }
 .tiptap li, .rich-text li { margin: 0.18em 0; }
 .tiptap blockquote,
-.rich-text blockquote { margin: 1em 0; padding: 2px 0 2px 14px; border-left: 2px solid var(--border-strong); color: var(--muted-foreground); }
+.rich-text blockquote { margin: 1em 0; padding: var(--space-1) 0 var(--space-1) var(--space-4); border-left: 2px solid var(--border-strong); color: var(--muted-foreground); }
 .tiptap code,
-.rich-text code { font-family: var(--font-mono); font-size: 0.9em; background: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
+.rich-text code { font-family: var(--font-mono); font-size: 0.9em; background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px var(--space-2); }
 .tiptap pre,
-.rich-text pre { margin: 1em 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); overflow: auto; }
+.rich-text pre { margin: 1em 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); overflow: auto; }
 .tiptap pre code,
 .rich-text pre code { border: 0; background: transparent; padding: 0; }
 .tiptap hr,

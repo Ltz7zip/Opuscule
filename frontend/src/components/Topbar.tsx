@@ -55,12 +55,12 @@ export function Topbar({
             aria-label="打开导航"
             onClick={onToggleSidebar}
           >
-            <Menu size={17} />
+            <Menu size={16} />
           </button>
         )}
 
         <a className="brand" href={isWorkspace ? `/w/${worldSlug ?? "wuhai"}` : "/"}>
-          <span className="brand-mark"><BrandMark size={15} /></span>
+          <span className="brand-mark"><BrandMark size={16} /></span>
           <span className="brand-name">Opuscule</span>
         </a>
 
@@ -101,9 +101,9 @@ export function Topbar({
               {readOnly ? (
                 "只读"
               ) : saveState === "saving" ? (
-                <><Loader2 size={12} className="spin" /> 保存中</>
+                <><Loader2 size={16} className="spin" /> 保存中</>
               ) : saveState === "error" ? (
-                <><AlertCircle size={12} /> 保存失败</>
+                <><AlertCircle size={16} /> 保存失败</>
               ) : (
                 <><span className="status-dot" /> 已保存</>
               )}

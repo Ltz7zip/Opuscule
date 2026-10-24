@@ -111,10 +111,10 @@ export function CreateWorldPage({ session, onLogout }: CreateWorldPageProps) {
       <main id="main-content" tabIndex={-1} className="create-world-shell">
         <header className="create-world-hero">
           <a className="back-link" href="/explore">
-            <ArrowLeft size={13} /> 公开世界
+            <ArrowLeft size={16} /> 公开世界
           </a>
           <span className="eyebrow">
-            <Sparkles size={13} />
+            <Sparkles size={16} />
             新的世界
           </span>
           <h1>给世界一个名字</h1>
@@ -138,7 +138,7 @@ export function CreateWorldPage({ session, onLogout }: CreateWorldPageProps) {
         ) : (
           <section className="panel create-world-card">
             <div className="create-world-card-head">
-              <div className="brand-mark" aria-hidden="true"><Box size={15} /></div>
+              <div className="brand-mark" aria-hidden="true"><Box size={16} /></div>
               <div>
                 <div className="sidebar-title">世界档案</div>
                 <div className="sidebar-sub">公开状态可以在创建后从工作区切换；名称编辑暂未开放。</div>
@@ -186,7 +186,7 @@ export function CreateWorldPage({ session, onLogout }: CreateWorldPageProps) {
 
               <div className="create-world-actions">
                 <button className="btn btn-primary" type="submit" disabled={loading || importing}>
-                  {loading ? <Loader2 size={14} className="spin" /> : <ArrowRight size={14} />}
+                  {loading ? <Loader2 size={16} className="spin" /> : <ArrowRight size={16} />}
                   {loading ? "创建中…" : "创建世界"}
                 </button>
                 <a className="btn btn-secondary" href="/explore">取消</a>
@@ -199,7 +199,7 @@ export function CreateWorldPage({ session, onLogout }: CreateWorldPageProps) {
                 <p>导入 Opuscule 导出的世界；新世界默认私有，最多 10 MB。</p>
               </div>
               <label className={`btn btn-secondary${importing ? " disabled" : ""}`}>
-                {importing ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
+                {importing ? <Loader2 size={16} className="spin" /> : <Upload size={16} />}
                 {importing ? "导入中…" : "选择 ZIP"}
                 <input type="file" accept=".zip,application/zip" onChange={(event) => void importZip(event)} disabled={importing} hidden />
               </label>
@@ -209,7 +209,7 @@ export function CreateWorldPage({ session, onLogout }: CreateWorldPageProps) {
               <div className="import-history">
                 <div className="import-history-head">
                   <b>最近导入</b>
-                  {historyLoading && <Loader2 size={12} className="spin" />}
+                  {historyLoading && <Loader2 size={16} className="spin" />}
                 </div>
                 {history.map((entry) => (
                   <div className="import-history-row" key={entry.world.slug}>
@@ -235,7 +235,7 @@ export function CreateWorldPage({ session, onLogout }: CreateWorldPageProps) {
         )}
 
         <footer className="create-world-foot">
-          <Globe2 size={12} />
+          <Globe2 size={16} />
           世界创建后默认是私有草稿；你可以在这里直接公开，或进入工作区后切换。
         </footer>
       </main>

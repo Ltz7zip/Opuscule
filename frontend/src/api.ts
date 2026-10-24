@@ -1,15 +1,20 @@
 import type {
   CardComment,
   CardDetail,
+  CardRevisionDetail,
+  CardRevisionSummary,
   CollectionNode,
   ImportHistoryEntry,
   InviteInfo,
   MapData,
   MapMarker,
+  TerrainWebResult,
+  TerrainWebStyle,
   NotificationItem,
   ProfileData,
   SearchResponse,
   SessionState,
+  TrashCard,
   TimelineData,
   TimelineEntry,
   TimelineEra,
@@ -118,7 +123,17 @@ export function fetchCard(world: string, id: number): Promise<CardDetail> {
 export function updateCard(
   world: string,
   id: number,
-  payload: { title?: string; icon?: string; cover?: string; body_json?: TiptapDoc },
+  payload: {
+    title?: string;
+    icon?: string;
+    cover?: string;
+    body_json?: TiptapDoc;
+    home_collection?: number | null;
+    is_public?: boolean;
+    type_key?: string;
+    pinned?: boolean;
+    era?: string;
+  },
 ): Promise<CardDetail> {
   return request<CardDetail>(`/worlds/${encodeURIComponent(world)}/cards/${id}/`, {
     method: "PATCH",
@@ -128,7 +143,17 @@ export function updateCard(
 
 export function createCard(
   world: string,
-  payload: { title: string; home_collection: number | null; body_json?: TiptapDoc },
+  payload: {
+    title: string;
+    home_collection: number | null;
+    body_json?: TiptapDoc;
+    type_key?: string;
+    icon?: string;
+    cover?: string;
+    is_public?: boolean;
+    pinned?: boolean;
+    era?: string;
+  },
 ): Promise<CardDetail> {
   return request<CardDetail>(`/worlds/${encodeURIComponent(world)}/cards/`, {
     method: "POST",
@@ -463,6 +488,23 @@ export function updateTimelineEntry(
 }
 
 
+export async function generateTerrainWeb(
+  slug: string,
+  input: {
+    seed?: number;
+    style?: TerrainWebStyle;
+    bake_labels?: boolean;
+    width?: number;
+    height?: number;
+    label_count?: number;
+  },
+): Promise<TerrainWebResult> {
+  return request<TerrainWebResult>(`/worlds/${encodeURIComponent(slug)}/map/terrain-web/`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function uploadWorldMapBackground(
   slug: string,
   file: File,
@@ -594,4 +636,46 @@ export async function markNotificationRead(id: number): Promise<NotificationItem
 
 export async function markAllNotificationsRead(): Promise<void> {
   await request<{ ok: boolean }>("/notifications/read-all/", { method: "POST", body: "{}" });
+}
+
+
+export function deleteCard(world: string, id: number): Promise<void> {
+  return request<null>(`/worlds/${encodeURIComponent(world)}/cards/${id}/`, {
+    method: "DELETE",
+  }).then(() => undefined);
+}
+
+export function fetchCardTrash(world: string): Promise<{ count: number; cards: TrashCard[] }> {
+  return request<{ count: number; cards: TrashCard[] }>(`/worlds/${encodeURIComponent(world)}/cards/trash/`);
+}
+
+export function purgeCard(world: string, id: number): Promise<void> {
+  return request<null>(`/worlds/${encodeURIComponent(world)}/cards/${id}/purge/`, {
+    method: "DELETE",
+  }).then(() => undefined);
+}
+
+export function restoreCard(world: string, id: number): Promise<CardDetail> {
+  return request<CardDetail>(`/worlds/${encodeURIComponent(world)}/cards/${id}/restore/`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function fetchCardRevisions(
+  world: string,
+  id: number,
+): Promise<{ card: { id: number; title: string; revision: number }; versions: CardRevisionSummary[] }> {
+  return request(`/worlds/${encodeURIComponent(world)}/cards/${id}/revisions/`);
+}
+
+export function fetchCardRevision(world: string, id: number, index: number): Promise<CardRevisionDetail> {
+  return request<CardRevisionDetail>(`/worlds/${encodeURIComponent(world)}/cards/${id}/revisions/${index}/`);
+}
+
+export function restoreCardRevision(world: string, id: number, index: number): Promise<CardDetail> {
+  return request<CardDetail>(`/worlds/${encodeURIComponent(world)}/cards/${id}/revisions/${index}/restore/`, {
+    method: "POST",
+    body: "{}",
+  });
 }

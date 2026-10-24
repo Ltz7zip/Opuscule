@@ -1,0 +1,1177 @@
+/* Legacy workspace shell (opuscule 0.8.1): 10px page gutter, 268px floating
+   sidebar, 40px floating topbar, one workspace card. New editor/API stay. */
+
+.ws-app {
+  /* Workspace layer rebased onto the semantic tokens. Both themes resolve
+     through tokens.css, so no [data-theme] override is needed here. */
+  --ws-canvas: var(--background);
+  --ws-soft: var(--card);
+  --ws-raised: var(--muted);
+  --ws-ink: var(--foreground);
+  --ws-body: var(--muted-foreground);
+  --ws-mute: var(--muted-foreground);
+  --ws-line: var(--border);
+  --ws-line-strong: var(--border-strong);
+  --ws-font: var(--font-sans);
+  --ws-mono: var(--font-mono);
+
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  overflow: hidden;
+  background: var(--ws-canvas);
+  color: var(--ws-body);
+  font-family: var(--ws-font);
+  font-size: var(--text-md);
+  line-height: 1.6;
+}
+.ws-app *,
+.ws-app *::before,
+.ws-app *::after { box-sizing: border-box; }
+
+/* --------------------------------------------------------------- sidebar */
+.ws-app .sidebar {
+  width: 268px;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius);
+  background: var(--ws-soft);
+  color: var(--ws-ink);
+}
+.ws-app .sidebar-head { padding: var(--space-2) var(--space-2) var(--space-1); gap: var(--space-2); }
+.ws-app .sidebar-title { color: var(--ws-ink); font-size: var(--text-md); line-height: 20px; font-weight: 500; letter-spacing: -0.01em; }
+.ws-app .sidebar-sub { margin-top: 2px; color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); line-height: 14px; letter-spacing: 0.04em; }
+.ws-app .sidebar-close { width: 28px; height: 28px; min-height: 28px; }
+.ws-app .search {
+  height: 32px;
+  margin: 1px 4px;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: var(--ws-raised);
+}
+.ws-app .search svg { color: var(--ws-mute); }
+.ws-app .search input { min-width: 0; background: transparent; color: var(--ws-ink); font-size: var(--text-sm); }
+.ws-app .search input::placeholder { color: var(--ws-mute); }
+.ws-app .sidebar-section-label {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  color: var(--ws-mute);
+  font-family: var(--ws-mono);
+  font-size: var(--text-xs);
+  line-height: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.ws-app .tree { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 0 var(--space-1); }
+.ws-app .tree::-webkit-scrollbar { width: 8px; }
+.ws-app .tree::-webkit-scrollbar-thumb { background: var(--ws-line-strong); border-radius: var(--radius-sm); }
+.ws-app .tree-row {
+  min-height: 30px;
+  height: 30px;
+  margin: 1px 0;
+  padding: 0 var(--space-2);
+  gap: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-mute);
+  font-size: var(--text-base);
+  line-height: 17.5px;
+  font-weight: 500;
+}
+.ws-app .tree-row:hover { background: var(--muted); color: var(--ws-ink); }
+.ws-app .tree-row.active { background: var(--ws-ink); color: var(--ws-canvas); box-shadow: none; }
+.ws-app .tree-row.active .tree-icon,
+.ws-app .tree-row.active .tree-count { color: var(--ws-canvas); }
+.ws-app .tree-icon { color: currentColor; flex: 0 0 auto; }
+.ws-app .tree-caret { color: var(--ws-mute); flex: 0 0 auto; }
+.ws-app .tree-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-app .tree-count { margin-left: auto; color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); }
+.ws-app .tree-children { margin-left: 7px; padding-left: var(--space-1); border-left: 1px solid var(--muted); }
+.ws-app .tree-empty { display: block; padding: var(--space-2); color: var(--ws-mute); font-size: var(--text-xs); }
+
+.ws-app .sidebar-foot {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 -8px -8px;
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--ws-line);
+  background: var(--ws-soft);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.ws-app .sidebar-foot .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ws-app .sidebar-foot .btn:hover { background: var(--ws-raised); border-color: var(--ws-line); color: var(--ws-ink); }
+.ws-app .sidebar-foot .btn-primary { background: transparent; color: var(--ws-body); }
+.ws-app .sidebar-foot .btn-primary:hover { background: var(--ws-raised); border-color: var(--ws-line); color: var(--ws-ink); }
+.ws-app .sidebar-tools { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-1); }
+.ws-app .sidebar-tools .icon-btn { width: 28px; height: 28px; min-height: 28px; border-radius: var(--radius-sm); color: var(--ws-mute); }
+.ws-app .sidebar-tools .icon-btn:hover { background: var(--ws-raised); color: var(--ws-ink); }
+.ws-app .sidebar-more-menu { border-color: var(--ws-line-strong); border-radius: var(--radius); background: var(--popover); box-shadow: var(--shadow-lg); }
+.ws-app .sidebar-more-menu button,
+.ws-app .sidebar-more-menu a { color: var(--ws-body); font-size: var(--text-sm); }
+.ws-app .sidebar-more-menu button:hover,
+.ws-app .sidebar-more-menu a:hover { background: var(--muted); color: var(--ws-ink); }
+
+/* ----------------------------------------------------------------- main */
+.ws-app .ws-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ws-app .topbar-workspace {
+  position: static;
+  flex: 0 0 auto;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius);
+  background: var(--ws-canvas);
+  backdrop-filter: none;
+}
+.ws-app .topbar-workspace .topbar-inner {
+  height: 100%;
+  padding: 0;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.ws-app .topbar-workspace .brand,
+.ws-app .topbar-workspace .crumbs,
+.ws-app .topbar-workspace .world-switcher { display: none; }
+.ws-app .topbar-workspace .menu-button { display: none; }
+.ws-app .topbar-workspace .topbar-actions { margin-left: auto; gap: var(--space-2); flex-wrap: nowrap; }
+.ws-app .topbar-workspace .status-pill {
+  height: 26px;
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-pill);
+  background: var(--ws-soft);
+  color: var(--ws-mute);
+  font-size: var(--text-xs);
+}
+.ws-app .topbar-workspace .status-dot { background: var(--ws-ink); }
+.ws-app .topbar-workspace .btn {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+.ws-app .topbar-workspace .icon-btn,
+.ws-app .topbar-workspace .theme-toggle { width: 28px; height: 28px; min-height: 28px; border-radius: var(--radius-sm); }
+.ws-app .topbar-workspace .nav-link {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--ws-mute);
+  font-size: var(--text-xs);
+  line-height: 18px;
+}
+.ws-app .topbar-workspace .nav-link:hover { color: var(--ws-ink); background: var(--ws-soft); }
+.ws-app .topbar-workspace .user-chip { height: 28px; padding: 0 var(--space-2) 0 var(--space-1); border: 1px solid var(--ws-line); border-radius: var(--radius-pill); background: var(--ws-soft); font-size: var(--text-xs); }
+.ws-app .topbar-workspace .user-name { display: none; }
+.ws-app .topbar-workspace .user-avatar { width: 22px; height: 22px; }
+
+.ws-app .ws-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--ws-canvas);
+}
+.ws-app .ws-workspace .editor {
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.ws-app .ws-workspace .editor-head { padding: var(--space-6) var(--space-7) var(--space-4) var(--space-8); border-bottom: 1px solid var(--ws-line); }
+.ws-app .ws-workspace .editor-body { padding: var(--space-6) var(--space-7) var(--space-8) var(--space-8); }
+.ws-app .ws-workspace .readonly-banner { margin: 10px 12px 0; }
+.ws-app .ws-workspace > .loading,
+.ws-app .ws-workspace > .error { margin: 18px; }
+.ws-app .ws-workspace > .empty-state { margin: 18px; }
+
+/* Old workspace background has no ambient gradient. */
+.ws-app .ws-workspace,
+.ws-app .ws-workspace .editor,
+.ws-app .ws-workspace .tiptap { background: var(--ws-canvas); }
+
+@media (max-width: 900px) {
+  .ws-app { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
+  .ws-app .sidebar {
+    position: fixed;
+    z-index: 60;
+    top: 10px;
+    left: 10px;
+    bottom: 10px;
+    width: min(300px, calc(100vw - 20px));
+    height: auto;
+    max-height: none;
+    padding-top: var(--space-2);
+    border-radius: var(--radius);
+    transform: translateX(calc(-100% - 20px));
+    transition: transform 0.2s ease;
+    box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  }
+  .ws-app .sidebar.open { transform: translateX(0); }
+  .ws-app .sidebar-close { display: inline-flex; }
+  .ws-app .topbar-workspace .menu-button { display: grid; }
+  .ws-app .topbar-workspace { height: 46px; min-height: 46px; }
+  .ws-app .mobile-scrim { z-index: 55; }
+}
+
+/* Base .sidebar is sticky under the old 82px topbar; the new shell owns the
+   full-height column instead. */
+.ws-app .sidebar {
+  position: relative;
+  top: auto;
+  max-height: none;
+  height: 100%;
+  z-index: 1;
+}
+@media (max-width: 900px) {
+  .ws-app .sidebar { position: fixed; top: 10px; left: 10px; bottom: 10px; height: auto; }
+}
+
+/* ------------------------------------------------- timeline studio shell */
+.studio-app .sidebar.studio-sidebar {
+  gap: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ws-line-strong) transparent;
+}
+.studio-app .studio-sidebar .sidebar-head { flex: 0 0 auto; padding: var(--space-2) var(--space-2) var(--space-3); border-bottom: 1px solid var(--ws-line); }
+.studio-app .studio-sidebar .sidebar-head > div { min-width: 0; }
+.studio-app .studio-sidebar .sidebar-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-head-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-1); }
+.studio-section { padding: var(--space-3) var(--space-2); border-bottom: 1px solid var(--ws-line); }
+.studio-section:last-of-type { border-bottom: 0; }
+.studio-section .sidebar-section-label { padding: 0 0 var(--space-2); }
+.studio-select {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: var(--ws-raised);
+  color: var(--ws-ink);
+  font-size: var(--text-sm);
+}
+.studio-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 30px;
+  margin-top: 6px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.studio-action:hover { border-color: var(--ws-line-strong); color: var(--ws-ink); background: var(--ws-raised); }
+.studio-era-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.studio-era-list button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-mute);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+.studio-era-list button i { width: 7px; height: 7px; border-radius: 0; background: var(--ws-line-strong); }
+.studio-era-list button:hover { color: var(--ws-ink); background: var(--muted); }
+.studio-era-list button.active { color: var(--ws-ink); background: var(--ws-raised); }
+.studio-era-list button.active i { background: var(--ws-ink); }
+.studio-era-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: 8px; }
+.studio-era-form input,
+.studio-era-form select {
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: var(--ws-raised);
+  color: var(--ws-ink);
+  font-size: var(--text-sm);
+}
+.studio-era-numbers { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.studio-era-manage { display: flex; flex-direction: column; gap: var(--space-1); margin-top: 8px; color: var(--ws-mute); font-size: var(--text-xs); }
+.studio-era-manage button { border: 0; background: transparent; color: var(--ws-mute); cursor: pointer; }
+.studio-era-manage button:hover { color: var(--ws-ink); }
+.studio-foot {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-2) var(--space-1);
+  border-top: 1px solid var(--ws-line);
+}
+.studio-foot a { color: var(--ws-mute); font-size: var(--text-xs); }
+.studio-foot a:hover { color: var(--ws-ink); }
+
+.studio-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+}
+.studio-crumb {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: hidden;
+  color: var(--ws-mute);
+  font-family: var(--ws-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.studio-top-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }
+.studio-count { color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); }
+.studio-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: var(--ws-ink);
+  color: var(--ws-canvas);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.studio-primary:hover { background: var(--foreground); }
+.studio-primary:disabled { opacity: 0.5; cursor: default; }
+.studio-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-mute);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  cursor: pointer;
+}
+.studio-link:hover { color: var(--ws-ink); background: var(--ws-soft); }
+.studio-danger { color: var(--destructive); }
+
+.studio-workspace { display: flex; flex-direction: column; overflow: hidden; padding: var(--space-3); }
+.studio-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-3);
+}
+.studio-layout.is-readonly { grid-template-columns: minmax(0, 1fr); }
+.studio-canvas {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius);
+  background: var(--ws-canvas);
+}
+.studio-canvas .timeline-canvas-shell { height: 100%; border: 0; border-radius: var(--radius); background: var(--ws-canvas); }
+.studio-canvas .timeline-canvas-viewport { height: 100%; min-height: 520px; }
+.studio-inspector {
+  position: static;
+  top: auto;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius);
+  background: var(--ws-soft);
+}
+.studio-inspector .timeline-form { gap: var(--space-3); }
+.studio-inspector .eyebrow { color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); letter-spacing: 0.08em; }
+.studio-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.studio-inspector .field > span { color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); letter-spacing: 0.06em; }
+.studio-inspector .field input,
+.studio-inspector .field textarea,
+.studio-inspector .field select {
+  border-color: var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: var(--ws-raised);
+  color: var(--ws-ink);
+  font-size: var(--text-sm);
+}
+.studio-inspector .timeline-form-actions { align-items: center; }
+.studio-workspace > .loading,
+.studio-workspace > .error { margin: 18px; }
+
+@media (max-width: 900px) {
+  .studio-app .studio-sidebar { z-index: 60; }
+  .studio-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .studio-inspector { height: auto; min-height: 360px; }
+  .studio-canvas .timeline-canvas-viewport { min-height: 420px; }
+  .studio-topbar { height: 46px; min-height: 46px; }
+  .studio-count { display: none; }
+}
+
+.ws-app .studio-workspace { padding: var(--space-3); }
+.studio-inspector .timeline-form .field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+.studio-inspector .timeline-form .field input,
+.studio-inspector .timeline-form .field textarea,
+.studio-inspector .timeline-form .field select { width: 100%; }
+.studio-inspector .timeline-form .field textarea { min-height: 72px; }
+.studio-inspector { margin: 0; }
+.studio-inspector .timeline-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.studio-inspector .studio-field-row { width: 100%; }
+
+/* ------------------------------------------------------ map studio shell */
+.studio-layer-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 300px; overflow: auto; }
+.studio-layer-list button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-mute);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.studio-layer-list button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-layer-list button:hover { background: var(--muted); color: var(--ws-ink); }
+.studio-layer-list button.active { background: var(--ws-raised); color: var(--ws-ink); }
+.studio-legend { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-2); color: var(--ws-mute); font-size: var(--text-xs); }
+.studio-legend span { display: flex; align-items: center; gap: var(--space-2); }
+.map-zoom-group,
+.map-mode-group { display: flex; align-items: center; border: 1px solid var(--ws-line); border-radius: var(--radius-sm); overflow: hidden; }
+.map-zoom-group button,
+.map-mode-group button {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-right: 1px solid var(--ws-line);
+  background: transparent;
+  color: var(--ws-mute);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.map-zoom-group button:last-child,
+.map-mode-group button:last-child { border-right: 0; }
+.map-zoom-group button:hover,
+.map-mode-group button:hover { background: var(--ws-raised); color: var(--ws-ink); }
+.map-mode-group button.active { background: var(--ws-ink); color: var(--ws-canvas); }
+.map-zoom-group span { padding: 0 var(--space-2); color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); }
+.map-studio-layout { grid-template-columns: minmax(0, 1fr) 300px; }
+.map-studio-layout.is-readonly { grid-template-columns: minmax(0, 1fr); }
+.map-studio-canvas { display: flex; }
+.map-studio-canvas .map-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--ws-canvas);
+}
+.map-inspector { padding: var(--space-4); }
+.map-inspector .map-form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-3); }
+.map-inspector .map-form .field { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); }
+.map-inspector .map-form .field input,
+.map-inspector .map-form .field select { width: 100%; }
+.map-inspector .map-form .eyebrow { color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); letter-spacing: 0.08em; }
+.map-inspector .map-form h2 { margin: 2px 0 6px; color: var(--ws-ink); font-size: var(--text-xl); line-height: 28px; font-weight: 500; }
+.map-inspector .map-form p { color: var(--ws-mute); font-size: var(--text-sm); }
+.map-inspector .map-form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: 2px; }
+.map-inspector .map-empty { display: flex; flex-direction: column; gap: var(--space-2); }
+.map-inspector .map-empty h2 { margin: 0; color: var(--ws-ink); font-size: var(--text-xl); line-height: 28px; font-weight: 500; }
+.map-inspector .map-empty p { margin: 0; color: var(--ws-mute); font-size: var(--text-sm); line-height: 20px; }
+.map-inspector .map-empty .eyebrow,
+.map-inspector .map-count { color: var(--ws-mute); font-family: var(--ws-mono); font-size: var(--text-xs); letter-spacing: 0.08em; }
+.map-studio-canvas .map-legend { display: none; }
+.map-studio-canvas .map-canvas-empty { color: var(--ws-mute); }
+.map-studio-canvas .map-canvas-empty strong { color: var(--ws-ink); }
+.studio-app .map-canvas-empty { text-align: center; }
+
+@media (max-width: 900px) {
+  .map-studio-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .map-inspector { min-height: 300px; }
+  .map-studio-canvas .map-canvas { min-height: 420px; }
+}
+@media (max-width: 900px) {
+  .ws-app .sidebar { z-index: 60; }
+}
+
+/* ---------------------------------------------- workspace responsive fixes */
+
+/* Keep one primary reading column on narrow laptops: a 320px inspector next
+   to a 380px canvas squeezed timeline cards into each other at 1024. */
+@media (max-width: 900px) {
+  .timeline-page .studio-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    align-content: start;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .timeline-page .studio-inspector { height: auto; min-height: auto; overflow: visible; }
+  /* app.css moves .timeline-form-panel above the canvas at 900. Keep the
+     timeline itself as the first thing a narrow-screen visitor sees. */
+  .timeline-page .timeline-form-panel { order: 0; }
+  .timeline-page .studio-canvas { min-height: 480px; }
+  .timeline-page .studio-canvas .timeline-canvas-viewport { min-height: 480px; }
+}
+
+/* Event rows are spaced 46px apart by the canvas; the card box used to be
+   taller than that, so adjacent rows clipped each other by ~6px. */
+.studio-canvas .timeline-event-card { padding: var(--space-1) var(--space-2); }
+.studio-canvas .timeline-event-title { line-height: 16px; }
+.studio-canvas .timeline-event-card small { margin-top: 1px; line-height: 11px; }
+
+/* Off-canvas drawers: hide the closed drawer from the tab order and from
+   assistive technology, while leaving its slide-out transition intact. */
+@media (max-width: 900px) {
+  .ws-app .sidebar {
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+  .ws-app .sidebar.open {
+    visibility: visible;
+    transition: transform 0.2s ease;
+  }
+  .ws-app .sidebar-close { width: 32px; height: 32px; min-height: 32px; }
+
+  /* Studio headers carry real controls (zoom / mode / create). Let them
+     wrap below the title on a phone instead of hiding the controls. */
+  .ws-app .studio-topbar {
+    height: auto;
+    min-height: 46px;
+    padding: var(--space-2) var(--space-3);
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+  .ws-app .studio-topbar .studio-crumb {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .ws-app .studio-topbar .studio-top-actions {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .ws-app .studio-topbar .menu-button,
+  .ws-app .studio-topbar .icon-btn {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+  .ws-app .studio-topbar .studio-primary,
+  .ws-app .studio-topbar .studio-link { height: 32px; min-height: 32px; }
+  .map-zoom-group,
+  .map-mode-group { display: flex; }
+  .ws-app .map-zoom-group button,
+  .ws-app .map-mode-group button { height: 32px; min-width: 32px; }
+  .ws-app .map-zoom-group span { line-height: 32px; }
+}
+
+/* Focus rings must stay visible inside controls that clip their overflow. */
+.ws-app .map-zoom-group button:focus-visible,
+.ws-app .map-mode-group button:focus-visible { outline-offset: -2px; }
+
+.ws-app .studio-canvas { position: relative; container-type: inline-size; }
+
+/* Between 900 and 1240 the sidebar leaves a ~580px canvas; 21-year-apart
+   cards then touch. Shrink cards only when their canvas is that narrow. */
+@container (max-width: 700px) {
+  .studio-canvas .timeline-event-card { max-width: 104px; }
+}
+
+/* The timeline hint used to sit exactly on top of the era bands and the axis
+   labels. Put it in the empty top-left corner instead, and let the canvas
+   empty state speak for itself. */
+.studio-canvas .timeline-hint {
+  top: 12px;
+  left: 12px;
+  bottom: auto;
+  transform: none;
+  max-width: calc(100% - 152px);
+}
+.studio-canvas .timeline-canvas-shell:has(.timeline-canvas-empty) .timeline-hint,
+.studio-canvas:has(.studio-filter-empty) .timeline-hint { display: none; }
+/* The canvas empty state says the timeline itself is empty; when a filter
+   simply matched nothing, the filter notice is the truthful message. */
+.studio-canvas:has(.studio-filter-empty) .timeline-canvas-empty { display: none; }
+
+.studio-filter-empty {
+  position: absolute;
+  z-index: 9;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  max-width: min(380px, calc(100% - 152px));
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ws-raised);
+  color: var(--ws-body);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  box-shadow: 0 12px 24px -16px rgba(0, 0, 0, 0.7);
+}
+.studio-filter-empty button {
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-ink);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.studio-filter-empty button:hover { border-color: var(--ws-line-strong); background: var(--ws-soft); }
+
+/* Map transforms are only draggable in pan mode; avoid hijacking page scroll
+   while the visitor is placing pins. */
+.ws-app .map-canvas.is-panning { cursor: grab; touch-action: none; }
+.ws-app .map-canvas.is-panning:active { cursor: grabbing; }
+
+.ws-app .studio-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.ws-app .studio-era-manage button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin-left: 2px;
+  border-radius: var(--radius-sm);
+}
+.ws-app .studio-era-manage button:hover { background: var(--ws-raised); }
+.map-inspector .map-empty .studio-primary { align-self: flex-start; margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .studio-app .map-pin {
+    min-height: 30px;
+    max-width: 150px;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+  }
+  .ws-app .studio-primary,
+  .ws-app .studio-link,
+  .ws-app .studio-action {
+    height: auto;
+    min-height: 36px;
+  }
+  .ws-app .topbar-workspace .topbar-inner { gap: var(--space-2); }
+  .ws-app .topbar-workspace .menu-button,
+  .ws-app .topbar-workspace .icon-btn,
+  .ws-app .topbar-workspace .theme-toggle {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+}
+
+/* Keep the studio canvas the first focus of the narrow timeline view. The
+   grid row must not shrink below the canvas, or the canvas clips its own
+   axis and era bands at 1024/768/390. */
+@media (max-width: 900px) {
+  .timeline-page .studio-canvas { min-height: 420px; }
+  .timeline-page .studio-canvas .timeline-canvas-viewport { min-height: 420px; }
+  .map-page .studio-canvas { min-height: 420px; }
+  .map-page .studio-layout {
+    grid-auto-rows: min-content;
+    align-content: start;
+  }
+  .map-page .studio-inspector { height: auto; min-height: auto; overflow: visible; }
+}
+
+/* On a phone the 480px-wide world crams 25-year-apart cards into each other.
+   Give the timeline a stable inner width and let the existing drag-to-pan
+   gesture reveal the rest; the empty state keeps the viewport width. */
+@media (max-width: 640px) {
+  .timeline-page .studio-canvas .timeline-canvas-viewport {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .timeline-page .studio-canvas .timeline-canvas-viewport::-webkit-scrollbar { display: none; }
+  .timeline-page .studio-canvas .timeline-canvas-world:has(.timeline-event) { min-width: 720px; }
+  /* The wider inner world already gives 25-year-apart cards room; let cards
+     use their normal width instead of the narrow-container cap above. */
+  .timeline-page .studio-canvas .timeline-event-card { max-width: 132px; }
+}
+
+/* A failed world load leaves no sidebar; the drawer trigger should go away
+   with it instead of opening an empty scrim. */
+.ws-app:not(:has(.sidebar)) .topbar-workspace .menu-button { display: none !important; }
+
+/* Small-phone polish: keep the workspace header on one row and do not let
+   the timeline help card cover the canvas controls / event cards. */
+.ws-app .topbar-workspace .topbar-actions .btn,
+.ws-app .topbar-workspace .topbar-actions .nav-link { white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .studio-canvas .timeline-hint { display: none; }
+}
+
+@media (max-width: 640px) {
+  .ws-app .topbar-workspace .topbar-actions { gap: var(--space-1); }
+  .ws-app .topbar-workspace .topbar-actions .btn { padding: 0 var(--space-2); }
+  .ws-app .topbar-workspace .topbar-actions > a.nav-link[href="/"] { display: none; }
+  .ws-app .topbar-workspace .topbar-actions > a.nav-link[href^="/u/"] {
+    display: inline-block;
+    max-width: 56px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* The old terminal surfaces also support a light theme. Keep the shell's
+   structural tokens coherent with the TipTap/editor tokens when the user
+   switches theme; otherwise the dark shell renders light-theme text invisible. */
+
+/* ------------------------------------------------------- context menu */
+.ctx-menu {
+  position: fixed;
+  z-index: 90;
+  min-width: 196px;
+  max-width: 300px;
+  max-height: min(70vh, 460px);
+  overflow: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  box-shadow: var(--shadow-xl);
+  animation: ctx-menu-in 120ms ease-out both;
+}
+.ctx-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.ctx-menu button:hover,
+.ctx-menu button:focus-visible {
+  outline: none;
+  background: var(--muted);
+  color: var(--foreground);
+}
+.ctx-menu button.is-danger { color: var(--destructive); }
+.ctx-menu button.is-danger:hover,
+.ctx-menu button.is-danger:focus-visible { background: var(--destructive-subtle); color: var(--destructive); }
+.ctx-menu button:disabled { opacity: 0.45; cursor: not-allowed; }
+.ctx-menu .ctx-icon { display: inline-flex; width: 14px; justify-content: center; color: var(--muted-foreground); }
+.ctx-menu button:hover .ctx-icon,
+.ctx-menu button:focus-visible .ctx-icon { color: currentColor; }
+.ctx-menu hr { height: 1px; margin: 4px 2px; border: 0; background: var(--border); }
+@keyframes ctx-menu-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Row action button: visible on hover/focus, and always on touch/narrow. */
+.tree-item { position: relative; min-width: 0; }
+.tree-item > .tree-row { width: 100%; padding-right: var(--space-7); }
+.tree-more {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-mute);
+  opacity: 0;
+  cursor: pointer;
+}
+.tree-item:hover > .tree-more,
+.tree-item:focus-within > .tree-more { opacity: 1; }
+.tree-more:hover { background: var(--ws-raised); color: var(--ws-ink); }
+@media (hover: none), (max-width: 900px) {
+  .tree-more { opacity: 1; }
+}
+
+/* ------------------------------------------------------ command palette */
+.command-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--space-5) var(--space-6);
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+  backdrop-filter: blur(3px);
+}
+.command-palette {
+  width: min(560px, 100%);
+  max-height: min(620px, 78vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-xl);
+}
+.command-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.command-input-row:focus-within { border-bottom-color: var(--foreground); }
+.command-input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-lg);
+}
+.command-input-row input::placeholder { color: var(--muted-foreground); }
+.command-list { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-2); }
+.command-group {
+  display: block;
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  color: var(--muted-foreground);
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 38px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+.command-item.is-active { background: var(--muted); color: var(--foreground); }
+.command-item small { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-xs); }
+.command-icon { display: inline-flex; width: 16px; justify-content: center; color: var(--muted-foreground); }
+.command-item.is-active .command-icon { color: currentColor; }
+.command-empty { margin: 0; padding: var(--space-6) var(--space-3); color: var(--muted-foreground); font-size: var(--text-sm); text-align: center; }
+.command-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+.command-foot span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.command-input-row kbd,
+.command-foot kbd {
+  padding: var(--space-1) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-xs);
+}
+@media (max-width: 640px) {
+  .command-scrim { padding: 8vh var(--space-3) var(--space-4); }
+  .command-input-row input { font-size: var(--text-lg); }
+  .command-palette { max-height: 76vh; }
+}
+
+.ws-app .sidebar-more-menu kbd {
+  margin-left: auto;
+  color: var(--ws-mute);
+  font-family: var(--ws-mono);
+  font-size: var(--text-xs);
+}
+
+.ws-app .tree-pin { flex: 0 0 auto; margin-left: auto; color: var(--ws-mute); }
+.ws-app .tree-row .tree-count + .tree-pin { margin-left: 4px; }
+
+
+/* =====================================================================
+   Workspace minimalist pass: flat panes, line structure, 44px rows.
+   Loaded after app.css, so these are the final workspace rules.
+   ===================================================================== */
+
+.ws-app { gap: var(--space-2); padding: var(--space-2); }
+.ws-app .sidebar {
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.ws-app .sidebar-head { padding: var(--space-2) var(--space-2) 0; }
+.ws-app .sidebar-title { font-size: var(--text-md); font-weight: 600; }
+.ws-app .sidebar-sub { font-size: var(--text-xs); }
+.ws-app .sidebar-section-label {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+}
+.ws-app .search { height: 36px; margin: var(--space-1); padding: 0 var(--space-3); }
+.ws-app .search input { font-size: var(--text-base); }
+.ws-app .tree-row {
+  min-height: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  font-size: var(--text-md);
+  line-height: 1.4;
+  font-weight: 500;
+}
+.ws-app .tree-row:hover { background: var(--muted); color: var(--foreground); }
+.ws-app .tree-row.active { background: var(--muted); color: var(--foreground); font-weight: 600; }
+.ws-app .tree-row.active .tree-icon,
+.ws-app .tree-row.active .tree-count { color: var(--foreground); }
+.ws-app .tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.ws-app .tree-count { font-size: var(--text-xs); }
+.ws-app .tree-children { margin-left: var(--space-3); padding-left: var(--space-2); border-left: 1px solid var(--border); }
+.ws-app .sidebar-foot {
+  gap: var(--space-1);
+  margin: 0 calc(var(--space-2) * -1) calc(var(--space-2) * -1);
+  padding: var(--space-2);
+  background: var(--card);
+}
+.ws-app .sidebar-foot .btn { min-height: 36px; height: 36px; font-size: var(--text-base); }
+.ws-app .sidebar-foot .btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.ws-app .sidebar-foot .btn-primary:hover { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); filter: brightness(0.94); }
+.ws-app .sidebar-tools .icon-btn { width: 36px; height: 36px; min-height: 36px; }
+
+.ws-app .ws-main { gap: var(--space-2); }
+.ws-app .topbar-workspace {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+.ws-app .topbar-workspace .status-pill { height: 28px; min-height: 28px; font-size: var(--text-xs); }
+.ws-app .topbar-workspace .btn { min-height: 32px; height: 32px; font-size: var(--text-xs); }
+.ws-app .topbar-workspace .icon-btn,
+.ws-app .topbar-workspace .theme-toggle { width: 32px; height: 32px; min-height: 32px; }
+
+.ws-app .ws-workspace { border-radius: var(--radius); background: var(--background); }
+.ws-app .ws-workspace .editor-head { padding: var(--space-6) var(--space-7) var(--space-4) calc(var(--space-8) + var(--space-4)); border-bottom: 1px solid var(--border); }
+.ws-app .ws-workspace .editor-body { padding: var(--space-5) var(--space-7) var(--space-8) calc(var(--space-8) + var(--space-4)); }
+.ws-app .ws-workspace .title-input { font-size: var(--text-2xl); line-height: 1.2; font-weight: 600; }
+.ws-app .ws-workspace .editor-kicker { font-size: var(--text-xs); }
+.ws-app .ws-workspace .editor-meta { font-size: var(--text-xs); }
+.ws-app .ws-workspace .page-icon { width: 32px; height: 32px; font-size: var(--text-xl); }
+.ws-app .ws-workspace .save-bar {
+  padding: var(--space-2) var(--space-7) var(--space-2) calc(var(--space-8) + var(--space-4));
+  border-top: 1px solid var(--border);
+  background: transparent;
+  font-size: var(--text-xs);
+}
+.ws-app .ws-workspace .readonly-banner { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
+
+.ws-app .studio-canvas,
+.ws-app .studio-inspector,
+.ws-app .studio-workspace { border-radius: var(--radius); }
+.ws-app .studio-inspector { padding: var(--space-4); background: var(--card); }
+.ws-app .studio-canvas { background: var(--card); }
+.ws-app .studio-topbar { height: 44px; }
+.ws-app .studio-primary,
+.ws-app .studio-link,
+.ws-app .studio-action { min-height: 32px; height: 32px; }
+.ws-app .studio-link { color: var(--muted-foreground); }
+.ws-app .studio-link:hover { color: var(--foreground); background: var(--muted); }
+.ws-app .studio-filter-empty { border-color: var(--border-strong); background: var(--card); color: var(--muted-foreground); box-shadow: none; }
+.ws-app .timeline-switcher select,
+.ws-app .timeline-era-form input,
+.ws-app .timeline-era-form select { height: 32px; font-size: var(--text-xs); }
+.ws-app .timeline-era { border-radius: var(--radius-sm); }
+
+@media (max-width: 640px) {
+  .ws-app .tree-row { min-height: 48px; height: 48px; }
+  .ws-app .sidebar-foot .btn { min-height: 44px; height: 44px; }
+  .ws-app .sidebar-tools .icon-btn { width: 44px; height: 44px; min-height: 44px; }
+  .ws-app .topbar-workspace .topbar-inner { gap: var(--space-1); }
+  .ws-app .topbar-workspace .topbar-actions { gap: var(--space-1); }
+  .ws-app .topbar-workspace .menu-button,
+  .ws-app .topbar-workspace .icon-btn,
+  .ws-app .topbar-workspace .theme-toggle { width: 44px; height: 44px; min-height: 44px; }
+  .ws-app .topbar-workspace .btn,
+  .ws-app .topbar-workspace .nav-link { min-height: 44px; height: auto; display: inline-flex; align-items: center; }
+  .ws-app .sidebar-close,
+  .ws-app .tree-more { width: 44px; height: 44px; }
+  .ws-app .search { height: 44px; }
+  .ws-app .search input { min-height: 44px; }
+  .ws-app .editor-actions .btn { min-height: 44px; height: 44px; }
+  .ws-app .page-icon,
+  .ws-app .ws-workspace .page-icon { width: 44px; height: 44px; }
+  .ws-app .title-input { min-height: 44px; }
+  .ws-app .editor-block-add,
+  .ws-app .editor-block-handle,
+  .ws-app .editor-drag-grip { width: 44px; height: 44px; }
+  .ws-app .user-chip { min-height: 44px; }
+  .ws-app .topbar-workspace .nav-link[href="/"] { display: none; }
+  .ws-app .studio-primary,
+  .ws-app .studio-link,
+  .ws-app .studio-action { min-height: 44px; height: auto; }
+  .ws-app .tree-more { width: 44px; height: 44px; }
+}
+
+/* Last 2px at 320: tighten the topbar gutter instead of shrinking targets. */
+@media (max-width: 380px) {
+  .ws-app .topbar-workspace { padding: 0 var(--space-1); }
+  .ws-app .topbar-workspace .topbar-inner { gap: var(--space-1); }
+  .ws-app .topbar-workspace .topbar-actions { gap: 0; }
+}
+
+/* Phone controls: the map/timeline chrome is dense, so bump every real
+   control to 44px without enlarging prose links. */
+@media (max-width: 640px) {
+  .ws-app .icon-btn,
+  .ws-app .menu-button { width: 44px; min-width: 44px; height: 44px; }
+  .ws-app .studio-top-actions button,
+  .ws-app .studio-top-actions a,
+  .ws-app .studio-link,
+  .ws-app .studio-primary { min-height: 44px; }
+  .ws-app .studio-top-actions .map-zoom-group button,
+  .ws-app .studio-top-actions .map-mode-group button,
+  .ws-app .timeline-controls button { width: 44px; height: 44px; min-width: 44px; }
+  .ws-app .studio-sidebar button,
+  .ws-app .studio-sidebar select,
+  .ws-app .studio-sidebar input { min-height: 44px; }
+  .ws-app .map-pin-search { height: 44px; min-height: 44px; }
+  .ws-app .map-pin { min-height: 44px; }
+  .ws-app .timeline-era { min-height: 44px; }
+  .ws-app .timeline-event-card { min-height: 44px; }
+  .ws-app .studio-foot a { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* Final phone overrides for rules that out-specify the generic block above. */
+@media (max-width: 640px) {
+  .ws-app.studio-app .studio-topbar .studio-primary,
+  .ws-app.studio-app .studio-topbar .studio-link,
+  .ws-app.studio-app .studio-topbar .menu-button,
+  .ws-app.studio-app .studio-topbar .icon-btn { height: 44px; min-height: 44px; }
+  .ws-app.studio-app .studio-topbar .menu-button,
+  .ws-app.studio-app .studio-topbar .icon-btn { width: 44px; min-width: 44px; }
+  .ws-app.studio-app .studio-topbar .map-zoom-group button,
+  .ws-app.studio-app .studio-topbar .map-mode-group button { width: 44px; height: 44px; min-width: 44px; }
+  .ws-app.studio-app .studio-sidebar button { min-width: 44px; }
+  .ws-app.studio-app .studio-sidebar input,
+  .ws-app.studio-app .studio-sidebar select { min-height: 44px; }
+  .ws-app.timeline-page .timeline-controls button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
+  .ws-app.timeline-page .timeline-era { min-height: 44px; }
+  .ws-app.timeline-page .timeline-event-card { min-height: 44px; }
+  .ws-app.timeline-page .studio-sidebar input,
+  .ws-app.timeline-page .studio-sidebar select { min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+  .ws-app .studio-inspector input,
+  .ws-app .studio-inspector select { min-height: 44px; }
+  .ws-app .studio-foot a { min-width: 44px; justify-content: center; }
+  .ws-app .topbar-workspace .nav-link,
+  .ws-app .topbar-workspace .nav-link-button { min-width: 44px; justify-content: center; }
+}

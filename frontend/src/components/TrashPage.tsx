@@ -55,9 +55,9 @@ export function TrashPage({ session, onLogout }: TrashPageProps) {
       <main id="main-content" tabIndex={-1} className="trash-shell">
         <header className="trash-hero">
           <a className="back-link" href="/explore">
-            <ArrowLeft size={13} /> 返回探索
+            <ArrowLeft size={16} /> 返回探索
           </a>
-          <span className="eyebrow"><Trash2 size={13} /> 回收站</span>
+          <span className="eyebrow"><Trash2 size={16} /> 回收站</span>
           <h1>已删除的世界</h1>
           <p>软删除的世界会留在这里，owner 可以恢复；邀请会失效。</p>
         </header>
@@ -72,7 +72,7 @@ export function TrashPage({ session, onLogout }: TrashPageProps) {
 
         {!loading && !error && worlds.length === 0 && (
           <div className="empty">
-            <span className="empty-icon"><Trash2 size={22} /></span>
+            <span className="empty-icon"><Trash2 size={20} /></span>
             <div>
               <h2>回收站是空的</h2>
               <p>删除的世界会出现在这里。</p>
@@ -98,7 +98,7 @@ export function TrashPage({ session, onLogout }: TrashPageProps) {
                   disabled={busy === world.id}
                   onClick={() => void restore(world)}
                 >
-                  {busy === world.id ? <Loader2 size={14} className="spin" /> : <RotateCcw size={14} />}
+                  {busy === world.id ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
                   {busy === world.id ? "恢复中…" : "恢复"}
                 </button>
               </article>

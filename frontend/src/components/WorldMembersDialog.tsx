@@ -221,14 +221,14 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
             </select>
           </label>
           <button type="submit" className="btn btn-primary" disabled={busy || !username.trim()}>
-            <UserPlus size={14} /> 添加
+            <UserPlus size={16} /> 添加
           </button>
         </form>
 
         <div className="member-list">
           {loading && (
             <div className="loading">
-              <Loader2 size={15} className="spin" /> 正在读取成员…
+              <Loader2 size={16} className="spin" /> 正在读取成员…
             </div>
           )}
           {!loading && members.length === 0 && <p className="member-empty">还没有成员。</p>}
@@ -240,7 +240,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
                 <span>@{member.username}</span>
               </div>
               {member.role === "owner" ? (
-                <span className="member-owner"><Shield size={12} /> owner</span>
+                <span className="member-owner"><Shield size={16} /> owner</span>
               ) : (
                 <>
                   <select
@@ -261,7 +261,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
                     disabled={busy}
                     onClick={() => void remove(member)}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 </>
               )}
@@ -296,7 +296,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
               disabled={busy || !transferTarget}
               onClick={() => void transfer()}
             >
-              <ArrowRightLeft size={14} /> 转移
+              <ArrowRightLeft size={16} /> 转移
             </button>
           </div>
         </div>
@@ -317,7 +317,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
               <option value="editor">editor · 可编辑</option>
             </select>
             <button type="button" className="btn btn-secondary" onClick={() => void createInvite()} disabled={busy}>
-              <Link2 size={14} /> 生成链接
+              <Link2 size={16} /> 生成链接
             </button>
           </div>
 
@@ -342,7 +342,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
                     title="复制链接"
                     onClick={() => void copy(invite)}
                   >
-                    {copied === invite.id ? <Check size={14} /> : <Copy size={14} />}
+                    {copied === invite.id ? <Check size={16} /> : <Copy size={16} />}
                   </button>
                   {!invite.revoked_at && (
                     <button
@@ -353,7 +353,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
                       disabled={busy}
                       onClick={() => void revoke(invite)}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} />
                     </button>
                   )}
                 </div>
@@ -363,7 +363,7 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
         </div>
 
         <p className="member-hint">
-          <Link2 size={12} /> 邀请链接只能使用一次；不会通过邮件发送，请手动复制。
+          <Link2 size={16} /> 邀请链接只能使用一次；不会通过邮件发送，请手动复制。
         </p>
       </section>
     </div>

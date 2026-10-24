@@ -73,6 +73,8 @@ export interface CardSummary {
   is_auxiliary: boolean;
   body_text: string;
   revision: number;
+  pinned: boolean;
+  era: string;
   updated_at: string;
 }
 
@@ -213,7 +215,7 @@ export interface SearchResponse {
 export interface MapMarker {
   id: number;
   label: string;
-  kind: "place" | "event" | "character" | "note";
+  kind: "place" | "city" | "event" | "character" | "note";
   x: number;
   y: number;
   card: number | null;
@@ -227,7 +229,43 @@ export interface MapData {
   world: { slug: string; name: string };
   can_edit: boolean;
   background_url: string | null;
+  terrain_web: TerrainWebMeta | null;
   markers: MapMarker[];
+}
+
+export type TerrainWebStyle = "atlas" | "parchment" | "topographic";
+
+export interface TerrainWebLabel {
+  name: string;
+  x: number;
+  y: number;
+  kind: string;
+}
+
+export interface TerrainWebMeta {
+  seed: number;
+  style: TerrainWebStyle;
+  width: number;
+  height: number;
+  elapsed_ms: number;
+  labels: TerrainWebLabel[];
+  bake_labels: boolean;
+  heightmap?: string;
+  heightmap_width?: number;
+  heightmap_height?: number;
+  sea_level?: number;
+  mesh?: string;
+  mesh_width?: number;
+  mesh_height?: number;
+  texture?: string;
+  texture_width?: number;
+  texture_height?: number;
+  generated_at?: string;
+}
+
+export interface TerrainWebResult extends TerrainWebMeta {
+  background_url: string;
+  prototype: boolean;
 }
 
 
@@ -311,4 +349,36 @@ export interface TimelineData {
   timeline: TimelineSummary | null;
   eras: TimelineEra[];
   entries: TimelineEntry[];
+}
+
+
+export interface TrashCard {
+  id: number;
+  title: string;
+  slug: string;
+  type_key: string;
+  home_collection: number | null;
+  revision: number;
+  deleted_at: string;
+}
+
+export interface CardRevisionSnapshot {
+  title: string;
+  body_json: TiptapDoc;
+  body_text: string;
+  icon: string;
+  cover: string;
+  type_key: string;
+  era: string;
+}
+
+export interface CardRevisionSummary {
+  index: number;
+  summary: string;
+  author_name: string | null;
+  created_at: string;
+}
+
+export interface CardRevisionDetail extends CardRevisionSummary {
+  snapshot: CardRevisionSnapshot;
 }

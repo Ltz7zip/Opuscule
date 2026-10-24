@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, Search } from "lucide-react";
 
 import {
   createCard,
+  createCollection,
   fetchCard,
   fetchWorld,
   updateWorld,
@@ -10,8 +11,14 @@ import {
 } from "../api";
 import type { CardDetail, CardSummary, SessionState, WorldDetail } from "../types";
 import { CardEditor } from "./CardEditor";
+import { CardEraDialog } from "./CardEraDialog";
+import { CommandPalette } from "./CommandPalette";
+import { TrashDialog } from "./TrashDialog";
+import { VersionHistoryDialog } from "./VersionHistoryDialog";
 import { EmptyState } from "./EmptyState";
 import { Sidebar } from "./Sidebar";
+import { promptAction } from "../lib/dialogs";
+import { clearVt, runViewTransition } from "../lib/viewTransition";
 import { useDocumentMeta } from "../lib/meta";
 import { Topbar, type SaveState } from "./Topbar";
 import { WorldAuditDialog } from "./WorldAuditDialog";
@@ -35,6 +42,10 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [versionCard, setVersionCard] = useState<CardDetail | null>(null);
+  const [eraCard, setEraCard] = useState<CardDetail | null>(null);
 
   useDocumentMeta({
     title: world ? `${world.name} · 工作区` : "Opuscule · 工作区",
@@ -44,17 +55,84 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [vtCardSlug, setVtCardSlug] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      setPaletteOpen((value) => !value);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // The workspace sidebar is a mobile drawer. Close it with Escape, move focus
+  // into it when it opens, and return focus to the trigger when it closes.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".ws-app .sidebar .sidebar-close")?.focus();
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKeyDown);
+      previous?.focus({ preventScroll: true });
+    };
+  }, [sidebarOpen]);
+
+  // A drawer left open while resizing to desktop would otherwise keep the
+  // main column inert.
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 900px)");
+    const onChange = () => {
+      if (!query.matches) setSidebarOpen(false);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
   const selectCard = useCallback(
-    async (summary: CardSummary) => {
+    async (summary: CardSummary, options?: { animate?: boolean }) => {
+      const animate = options?.animate ?? true;
       setCardLoading(true);
       setError(null);
       try {
         const detail = await fetchCard(worldSlug, summary.id);
-        setCard(detail);
-        const url = new URL(window.location.href);
-        url.searchParams.set("card", String(detail.id));
-        window.history.replaceState({}, "", url);
+        const source = document.querySelector<HTMLElement>(
+          `.tree-row[data-card-id="${summary.id}"] .tree-icon`,
+        );
+        const clearRows = () => {
+          document
+            .querySelectorAll<HTMLElement>(".tree-row .tree-icon")
+            .forEach((icon) => clearVt(icon));
+        };
+        const commit = () => {
+          if (animate) setVtCardSlug(summary.slug);
+          setCard(detail);
+          const url = new URL(window.location.href);
+          url.searchParams.set("card", String(detail.id));
+          window.history.replaceState({}, "", url);
+        };
+        if (animate) {
+          runViewTransition(
+            commit,
+            () => {
+              clearRows();
+              setVtCardSlug(null);
+            },
+            source,
+          );
+        } else {
+          commit();
+        }
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "卡片加载失败");
       } finally {
@@ -74,7 +152,7 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
         setWorld(nextWorld);
         const queryCard = Number(new URLSearchParams(window.location.search).get("card"));
         const initial = nextWorld.cards.find((item) => item.id === queryCard) ?? nextWorld.cards[0];
-        if (initial) void selectCard(initial);
+        if (initial) void selectCard(initial, { animate: false });
       })
       .catch((cause: ApiError) => {
         if (!cancelled) setError(cause.message ?? "世界加载失败");
@@ -107,11 +185,11 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
     }
   };
 
-  const handleNewCard = async () => {
+  const handleNewCard = async (collectionId?: number | null) => {
     if (!world || !world.can_edit) return;
     setError(null);
     try {
-      const home = world.collections[0]?.id ?? null;
+      const home = collectionId === undefined ? (world.collections[0]?.id ?? null) : collectionId;
       const created = await createCard(worldSlug, { title: "未命名卡片", home_collection: home });
       const nextWorld = await fetchWorld(worldSlug);
       setWorld(nextWorld);
@@ -122,6 +200,93 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
       setSidebarOpen(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "新建卡片失败");
+    }
+  };
+
+  const refreshWorld = async () => {
+    const nextWorld = await fetchWorld(worldSlug);
+    setWorld(nextWorld);
+  };
+
+  const handleNewCollection = async (parentId?: number | null) => {
+    if (!world || !world.can_edit) return;
+    const name = await promptAction({
+      title: parentId ? "新建子集合" : "新建集合",
+      label: "集合名称",
+      placeholder: "例如：势力、地点、事件",
+      defaultValue: "新集合",
+      confirmLabel: "创建",
+    });
+    if (name === null || !name.trim()) return;
+    setError(null);
+    try {
+      await createCollection(worldSlug, { name: name.trim(), parent: parentId ?? null });
+      await refreshWorld();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "新建集合失败");
+    }
+  };
+
+  const handleCardUpdated = (updated: CardSummary) => {
+    setWorld((current) =>
+      current
+        ? {
+            ...current,
+            cards: current.cards.map((item) =>
+              item.id === updated.id
+                ? {
+                    ...item,
+                    title: updated.title,
+                    home_collection: updated.home_collection,
+                    is_public: updated.is_public,
+                    pinned: updated.pinned,
+                    era: updated.era,
+                    icon: updated.icon,
+                    cover: updated.cover,
+                    revision: updated.revision,
+                    updated_at: updated.updated_at,
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+    setCard((current) =>
+      current && current.id === updated.id
+        ? {
+            ...current,
+            title: updated.title,
+            home_collection: updated.home_collection,
+            is_public: updated.is_public,
+            pinned: updated.pinned,
+            era: updated.era,
+            revision: updated.revision,
+            updated_at: updated.updated_at,
+          }
+        : current,
+    );
+  };
+
+  const handleCardDeleted = (id: number) => {
+    setWorld((current) =>
+      current ? { ...current, cards: current.cards.filter((item) => item.id !== id) } : current,
+    );
+    setCard((current) => (current?.id === id ? null : current));
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("card") === String(id)) {
+      url.searchParams.delete("card");
+      window.history.replaceState({}, "", url);
+    }
+  };
+
+  const openCardDialog = async (summary: CardSummary, kind: "versions" | "era") => {
+    setError(null);
+    try {
+      const detail = card?.id === summary.id ? card : await fetchCard(worldSlug, summary.id);
+      if (kind === "versions") setVersionCard(detail);
+      else setEraCard(detail);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "卡片加载失败");
     }
   };
 
@@ -148,52 +313,89 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
   };
 
   return (
-    <div className="app-shell">
-      <Topbar
-        mode="workspace"
-        worldName={world?.name}
-        worldSlug={worldSlug}
-        saveState={saveState}
-        onToggleSidebar={() => setSidebarOpen((value) => !value)}
-        session={session}
-        onLogout={onLogout}
-        readOnly={world ? !world.can_edit : false}
-        action={
-          <>
-            <Suspense fallback={null}><NotificationBell /></Suspense>
-            {world?.role === "owner" ? (
-              <button type="button" className="btn btn-secondary" onClick={() => void togglePublish()} disabled={publishing}>
-                {publishing ? "处理中…" : world.is_public_read ? "取消公开" : "公开 Wiki"}
-              </button>
-            ) : null}
-          </>
-        }
-      />
-
-      <div className="shell">
-        {world && (
-          <Sidebar
-            world={world}
-            selectedCardId={card?.id ?? null}
-            open={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-            onSelectCard={(summary) => void selectCard(summary)}
-            onNewCard={() => void handleNewCard()}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenMembers={() => setMembersOpen(true)}
-            onOpenAudit={() => setAuditOpen(true)}
-            canEdit={world.can_edit}
-            canManage={world.role === "owner"}
-          />
-        )}
+    <div className="ws-app">
+      {world && (
+        <Sidebar
+          world={world}
+          selectedCardId={card?.id ?? null}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onSelectCard={(summary) => void selectCard(summary)}
+          onNewCard={(collectionId) => void handleNewCard(collectionId)}
+          onNewCollection={(parentId) => void handleNewCollection(parentId)}
+          onWorldChanged={refreshWorld}
+          onCardUpdated={handleCardUpdated}
+          onOpenSettings={() => {
+            setSidebarOpen(false);
+            setSettingsOpen(true);
+          }}
+          onOpenMembers={() => {
+            setSidebarOpen(false);
+            setMembersOpen(true);
+          }}
+          onOpenAudit={() => {
+            setSidebarOpen(false);
+            setAuditOpen(true);
+          }}
+          onOpenPalette={() => {
+            setSidebarOpen(false);
+            setPaletteOpen(true);
+          }}
+          onOpenTrash={() => {
+            setSidebarOpen(false);
+            setTrashOpen(true);
+          }}
+          onShowVersions={(summary) => void openCardDialog(summary, "versions")}
+          onSetEra={(summary) => void openCardDialog(summary, "era")}
+          onCardDeleted={handleCardDeleted}
+          onError={setError}
+          canEdit={world.can_edit}
+          canManage={world.role === "owner"}
+        />
+      )}
+      {world && (
         <button
           type="button"
+          tabIndex={-1}
           className={`mobile-scrim${sidebarOpen ? " show" : ""}`}
           aria-label="关闭导航"
           onClick={() => setSidebarOpen(false)}
         />
+      )}
 
-        <main id="main-content" tabIndex={-1} className={`main${world ? "" : " full"}`}>
+      <div className="ws-main" inert={sidebarOpen ? true : undefined}>
+        <Topbar
+          mode="workspace"
+          worldName={world?.name}
+          worldSlug={worldSlug}
+          saveState={saveState}
+          onToggleSidebar={() => setSidebarOpen((value) => !value)}
+          session={session}
+          onLogout={onLogout}
+          readOnly={world ? !world.can_edit : false}
+          action={
+            <>
+              <button
+                type="button"
+                className="icon-btn command-trigger"
+                aria-label="命令面板（⌘K）"
+                aria-keyshortcuts="Meta+K Control+K"
+                title="命令面板（⌘K）"
+                onClick={() => setPaletteOpen(true)}
+              >
+                <Search size={16} />
+              </button>
+              <Suspense fallback={null}><NotificationBell /></Suspense>
+              {world?.role === "owner" ? (
+                <button type="button" className="btn btn-secondary" onClick={() => void togglePublish()} disabled={publishing}>
+                  {publishing ? "处理中…" : world.is_public_read ? "取消公开" : "公开 Wiki"}
+                </button>
+              ) : null}
+            </>
+          }
+        />
+
+        <main id="main-content" tabIndex={-1} className={`ws-workspace${world ? "" : " full"}`}>
           {error && (
             <div className="error" role="alert">
               <AlertTriangle size={16} />
@@ -236,6 +438,7 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
                 onSaved={handleSaved}
                 onStatus={setSaveState}
                 readOnly={!world.can_edit}
+                vtSlug={vtCardSlug}
               />
             </>
           )}
@@ -263,6 +466,78 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
       )}
       {world && world.role === "owner" && auditOpen && (
         <WorldAuditDialog worldSlug={world.slug} onClose={() => setAuditOpen(false)} />
+      )}
+      {world && world.can_edit && trashOpen && (
+        <TrashDialog
+          worldSlug={world.slug}
+          onClose={() => setTrashOpen(false)}
+          onRestored={(restored) => {
+            setTrashOpen(false);
+            handleCardUpdated(restored);
+            void selectCard(restored, { animate: false });
+            void refreshWorld();
+          }}
+        />
+      )}
+      {versionCard && (
+        <VersionHistoryDialog
+          worldSlug={worldSlug}
+          card={versionCard}
+          onClose={() => setVersionCard(null)}
+          onRestored={(updated) => {
+            handleCardUpdated(updated);
+            void refreshWorld();
+          }}
+        />
+      )}
+      {eraCard && (
+        <CardEraDialog
+          worldSlug={worldSlug}
+          card={eraCard}
+          onClose={() => setEraCard(null)}
+          onSaved={(updated) => {
+            handleCardUpdated(updated);
+            void refreshWorld();
+          }}
+        />
+      )}
+      {world && (
+        <CommandPalette
+          open={paletteOpen}
+          world={world}
+          onClose={() => setPaletteOpen(false)}
+          onSelectCard={(summary) => {
+            setPaletteOpen(false);
+            void selectCard(summary);
+          }}
+          onNewCard={() => {
+            setPaletteOpen(false);
+            void handleNewCard();
+          }}
+          onNewCollection={() => {
+            setPaletteOpen(false);
+            void handleNewCollection();
+          }}
+          onOpenWiki={() => window.location.assign(`/w/${worldSlug}/wiki`)}
+          onOpenMap={() => window.location.assign(`/w/${worldSlug}/map`)}
+          onOpenTimeline={() => window.location.assign(`/w/${worldSlug}/timeline`)}
+          onOpenSettings={() => {
+            setPaletteOpen(false);
+            setSettingsOpen(true);
+          }}
+          onOpenMembers={() => {
+            setPaletteOpen(false);
+            setMembersOpen(true);
+          }}
+          onOpenAudit={() => {
+            setPaletteOpen(false);
+            setAuditOpen(true);
+          }}
+          onOpenTrash={() => {
+            setPaletteOpen(false);
+            setTrashOpen(true);
+          }}
+        />
       )}
     </div>
   );

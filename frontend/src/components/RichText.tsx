@@ -1,5 +1,10 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import {
+  runViewTransition,
+  useSharedSource,
+  useVtTarget,
+} from "../lib/viewTransition";
 import type { CardSummary, TiptapDoc, TiptapNode } from "../types";
 
 function safeHref(value: unknown): string | null {
@@ -16,7 +21,113 @@ type RichContext = {
   currentSlug?: string;
   /** Incremented in document order so heading ids match the TOC. */
   headingIndex: number;
+  /** Stable id for the thumbnail -> lightbox shared element. */
+  imageIndex: number;
+  onOpenImage: (target: ImageTarget) => void;
 };
+
+interface ImageTarget {
+  src: string;
+  alt: string;
+  id: string;
+  source: HTMLElement | null;
+  trigger: HTMLElement | null;
+}
+
+/** One published image: the thumbnail is the shared-element source. */
+function ZoomableImage({
+  src,
+  alt,
+  id,
+  onOpen,
+}: {
+  src: string;
+  alt: string;
+  id: string;
+  onOpen: (target: ImageTarget) => void;
+}) {
+  const source = useSharedSource<HTMLElement>("cover", id);
+  return (
+    <button
+      type="button"
+      className="rich-image-open"
+      aria-label={alt ? `查看图片：${alt}` : "查看图片"}
+      onPointerEnter={source.onPointerEnter}
+      onPointerLeave={source.onPointerLeave}
+      onFocus={source.onFocus}
+      onBlur={source.onBlur}
+      onTouchStart={source.onTouchStart}
+      onClick={(event) =>
+        onOpen({
+          src,
+          alt,
+          id,
+          source: source.ref.current,
+          trigger: event.currentTarget,
+        })
+      }
+    >
+      <span ref={source.ref} className="rich-image-leaf">
+        <img src={src} alt={alt} loading="lazy" />
+      </span>
+    </button>
+  );
+}
+
+function Lightbox({
+  image,
+  vtId,
+  onClose,
+}: {
+  image: ImageTarget;
+  vtId: string | null;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const target = useVtTarget("cover", image.id);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        closeRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = overflow;
+      (image.trigger ?? previous)?.focus({ preventScroll: true });
+    };
+  }, [image.trigger, onClose]);
+
+  return (
+    <div className="rich-lightbox" role="dialog" aria-modal="true" aria-label="图片预览" onClick={onClose}>
+      <button
+        type="button"
+        className="rich-lightbox-close"
+        aria-label="关闭图片预览"
+        ref={closeRef}
+        onClick={onClose}
+      >
+        ×
+      </button>
+      <img
+        src={image.src}
+        alt={image.alt}
+        ref={vtId === image.id ? target.ref : undefined}
+        style={vtId === image.id ? target.style : undefined}
+        onClick={(event) => event.stopPropagation()}
+      />
+    </div>
+  );
+}
 
 function linkifyText(text: string, key: string, context: RichContext): ReactNode {
   const targets = context.cards
@@ -98,15 +209,31 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
   if (node.type === "codeBlock") return <pre key={key}><code>{renderChildren(node, context)}</code></pre>;
   if (node.type === "image") {
     const src = safeHref(node.attrs?.src);
-    return src ? <img key={key} src={src} alt={String(node.attrs?.alt ?? "")} /> : null;
+    if (!src) return null;
+    context.imageIndex += 1;
+    return (
+      <ZoomableImage
+        key={key}
+        src={src}
+        alt={String(node.attrs?.alt ?? "")}
+        id={`img-${context.imageIndex}`}
+        onOpen={context.onOpenImage}
+      />
+    );
   }
   if (node.type === "imageBlock") {
     const src = safeHref(node.attrs?.src);
     if (!src) return null;
     const caption = String(node.attrs?.caption ?? "");
+    context.imageIndex += 1;
     return (
       <figure className="rich-image" key={key}>
-        <img src={src} alt={String(node.attrs?.alt ?? "")} />
+        <ZoomableImage
+          src={src}
+          alt={String(node.attrs?.alt ?? "")}
+          id={`img-${context.imageIndex}`}
+          onOpen={context.onOpenImage}
+        />
         {caption && <figcaption>{caption}</figcaption>}
       </figure>
     );
@@ -138,11 +265,19 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
     const images = Array.isArray(node.attrs?.images) ? node.attrs.images : [];
     return (
       <div className="rich-gallery" key={key}>
-        {images.map((image: { src: string; alt?: string }, index: number) => (
-          <figure key={`${image.src}-${index}`}>
-            <img src={image.src} alt={image.alt ?? ""} loading="lazy" />
-          </figure>
-        ))}
+        {images.map((image: { src: string; alt?: string }, index: number) => {
+          context.imageIndex += 1;
+          return (
+            <figure key={`${image.src}-${index}`}>
+              <ZoomableImage
+                src={image.src}
+                alt={image.alt ?? ""}
+                id={`img-${context.imageIndex}`}
+                onOpen={context.onOpenImage}
+              />
+            </figure>
+          );
+        })}
       </div>
     );
   }
@@ -190,7 +325,35 @@ export function RichText({ doc, cards = [], worldSlug = "", currentSlug }: {
   worldSlug?: string;
   currentSlug?: string;
 }) {
+  const [image, setImage] = useState<ImageTarget | null>(null);
+  const [vtId, setVtId] = useState<string | null>(null);
+  const closeImage = useCallback(() => setImage(null), []);
+
   if (!doc || !Array.isArray(doc.content)) return null;
-  const context: RichContext = { cards, worldSlug, currentSlug, headingIndex: 0 };
-  return <div className="rich-text">{doc.content.map((node, index) => renderNode(node, `${index}`, context))}</div>;
+
+  const openImage = (target: ImageTarget) => {
+    runViewTransition(
+      () => {
+        setVtId(target.id);
+        setImage(target);
+      },
+      () => setVtId(null),
+      target.source,
+    );
+  };
+
+  const context: RichContext = {
+    cards,
+    worldSlug,
+    currentSlug,
+    headingIndex: 0,
+    imageIndex: 0,
+    onOpenImage: openImage,
+  };
+  return (
+    <>
+      <div className="rich-text">{doc.content.map((node, index) => renderNode(node, `${index}`, context))}</div>
+      {image && <Lightbox image={image} vtId={vtId} onClose={closeImage} />}
+    </>
+  );
 }

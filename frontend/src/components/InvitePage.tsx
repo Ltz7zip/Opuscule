@@ -71,7 +71,7 @@ export function InvitePage({ token, session, onLogout }: InvitePageProps) {
             <>
               <h1>邀请不可用</h1>
               <p className="invite-copy">{error}</p>
-              <a className="btn btn-primary" href="/explore">返回探索 <ArrowRight size={14} /></a>
+              <a className="btn btn-primary" href="/explore">返回探索 <ArrowRight size={16} /></a>
             </>
           )}
 
@@ -106,7 +106,7 @@ export function InvitePage({ token, session, onLogout }: InvitePageProps) {
                   {error && <div className="form-error" role="alert">{error}</div>}
                   <p>接受后可以在工作区协作；角色由邀请决定。</p>
                   <button type="button" className="btn btn-primary" onClick={() => void accept()} disabled={accepting}>
-                    {accepting ? <Loader2 size={14} className="spin" /> : <ArrowRight size={14} />}
+                    {accepting ? <Loader2 size={16} className="spin" /> : <ArrowRight size={16} />}
                     {accepting ? "加入中…" : "接受邀请"}
                   </button>
                 </div>

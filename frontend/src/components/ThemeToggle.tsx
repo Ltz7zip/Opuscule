@@ -56,8 +56,8 @@ export function ThemeToggle() {
     >
       {/* Both icons render on the server; CSS picks the visible one from
           [data-theme], so hydration never disagrees with the first paint. */}
-      <Sun className="theme-icon theme-icon-sun" size={15} />
-      <Moon className="theme-icon theme-icon-moon" size={15} />
+      <Sun className="theme-icon theme-icon-sun" size={16} />
+      <Moon className="theme-icon theme-icon-moon" size={16} />
     </button>
   );
 }

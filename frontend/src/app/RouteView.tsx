@@ -1,5 +1,4 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Loader2 } from "lucide-react";
 
 import type { Route } from "./routes";
 import type { SessionState } from "../types";
@@ -57,6 +56,9 @@ interface RouteViewProps {
 export function RouteView({ route, session, onLogin, onLogout }: RouteViewProps) {
   let page: ReactNode;
   switch (route.kind) {
+    case "public":
+      page = <PublicHome session={session} onLogout={onLogout} />;
+      break;
     case "explore":
       page = <ExplorePage session={session} onLogout={onLogout} />;
       break;
@@ -111,7 +113,7 @@ export function RouteView({ route, session, onLogin, onLogout }: RouteViewProps)
     <Suspense
       fallback={
         <div className="route-loading">
-          <Loader2 size={16} className="spin" />
+          <span className="route-loading-mark" aria-hidden="true" />
           正在加载页面…
         </div>
       }

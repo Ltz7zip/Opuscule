@@ -103,10 +103,10 @@ export function CommentsPanel({ worldSlug, cardId, quote, anchorId, onCreated, o
             <span className="eyebrow">讨论</span>
             <strong>评论</strong>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭评论"><X size={15} /></button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭评论"><X size={16} /></button>
         </header>
         {quote && <blockquote className="comments-quote">{quote}</blockquote>}
-        {loading && <div className="comments-loading"><Loader2 size={13} className="spin" /> 加载评论…</div>}
+        {loading && <div className="comments-loading"><Loader2 size={16} className="spin" /> 加载评论…</div>}
         {error && <p className="form-hint error-text" role="alert">{error}</p>}
         <div className="comments-list">
           {!loading && comments.length === 0 && <p className="form-hint">还没有评论。选中文字后打开评论，会带上引文。</p>}
@@ -130,9 +130,9 @@ export function CommentsPanel({ worldSlug, cardId, quote, anchorId, onCreated, o
                     <p>{reply.body}</p>
                     <div className="comment-actions">
                       <button type="button" onClick={() => void toggleResolved(reply)}>
-                        <Check size={11} /> {reply.resolved ? "重新打开" : "标记解决"}
+                        <Check size={16} /> {reply.resolved ? "重新打开" : "标记解决"}
                       </button>
-                      <button type="button" onClick={() => void remove(reply)} aria-label="删除回复"><Trash2 size={11} /></button>
+                      <button type="button" onClick={() => void remove(reply)} aria-label="删除回复"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
@@ -147,12 +147,12 @@ export function CommentsPanel({ worldSlug, cardId, quote, anchorId, onCreated, o
                 ) : (
                   <div className="comment-actions">
                     <button type="button" onClick={() => { setReplyTo(comment.id); setReplyBody(""); }}>
-                      <MessageSquare size={11} /> 回复
+                      <MessageSquare size={16} /> 回复
                     </button>
                     <button type="button" onClick={() => void toggleResolved(comment)}>
-                      <Check size={11} /> {comment.resolved ? "重新打开" : "标记解决"}
+                      <Check size={16} /> {comment.resolved ? "重新打开" : "标记解决"}
                     </button>
-                    <button type="button" onClick={() => void remove(comment)} aria-label="删除评论"><Trash2 size={11} /></button>
+                    <button type="button" onClick={() => void remove(comment)} aria-label="删除评论"><Trash2 size={16} /></button>
                   </div>
                 )}
               </article>
@@ -168,7 +168,7 @@ export function CommentsPanel({ worldSlug, cardId, quote, anchorId, onCreated, o
             placeholder={quote ? "针对这段引文写评论…" : "写一条卡片评论…"}
           />
           <button type="submit" className="btn btn-primary" disabled={saving || !body.trim()}>
-            {saving ? <Loader2 size={13} className="spin" /> : <Send size={13} />} 发布
+            {saving ? <Loader2 size={16} className="spin" /> : <Send size={16} />} 发布
           </button>
         </form>
       </aside>

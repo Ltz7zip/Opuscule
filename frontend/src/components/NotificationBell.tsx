@@ -57,11 +57,11 @@ export function NotificationBell() {
           <div className="notification-head">
             <strong>通知</strong>
             <div>
-              <button type="button" onClick={() => void readAll()} aria-label="全部标记已读"><CheckCheck size={13} /></button>
-              <button type="button" onClick={() => setOpen(false)} aria-label="关闭通知"><X size={13} /></button>
+              <button type="button" onClick={() => void readAll()} aria-label="全部标记已读"><CheckCheck size={16} /></button>
+              <button type="button" onClick={() => setOpen(false)} aria-label="关闭通知"><X size={16} /></button>
             </div>
           </div>
-          {loading && <div className="notification-empty"><Loader2 size={13} className="spin" /> 加载中…</div>}
+          {loading && <div className="notification-empty"><Loader2 size={16} className="spin" /> 加载中…</div>}
           {error && <div className="notification-empty error-text">{error}</div>}
           {!loading && items.length === 0 && <div className="notification-empty">还没有通知。</div>}
           <div className="notification-list">

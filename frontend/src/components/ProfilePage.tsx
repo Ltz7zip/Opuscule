@@ -12,10 +12,11 @@ import {
 
 import { fetchProfile, updateMyProfile } from "../api";
 import { useDocumentMeta } from "../lib/meta";
-import type { ProfileData, SessionState } from "../types";
+import { useSharedSource } from "../lib/viewTransition";
+import type { ProfileData, ProfileWorld, SessionState } from "../types";
 import { ChangePasswordPanel } from "./ChangePasswordPanel";
-import { Topbar } from "./Topbar";
-import { SiteFooter } from "./SiteFooter";
+import { SiteFoot } from "./SiteFoot";
+import { SiteHeader } from "./SiteHeader";
 
 const typeLabels: Record<string, string> = {
   character: "角色",
@@ -58,6 +59,28 @@ function ProfileLink({ href, children }: { href: string; children: React.ReactNo
   return (
     <a className="profile-link" href={href}>
       {children}
+    </a>
+  );
+}
+
+function WorldRow({ world }: { world: ProfileWorld }) {
+  const source = useSharedSource("icon", world.slug);
+  return (
+    <a
+      className="profile-world-row"
+      href={`/w/${world.slug}/wiki`}
+      onPointerEnter={source.onPointerEnter}
+      onPointerLeave={source.onPointerLeave}
+      onFocus={source.onFocus}
+      onBlur={source.onBlur}
+      onTouchStart={source.onTouchStart}
+    >
+      <span className="profile-world-initial" ref={source.ref} aria-hidden="true">
+        {world.name.trim().slice(0, 1)}
+      </span>
+      <span className="profile-world-name">{world.name}</span>
+      <span className="profile-world-count">{world.card_count} 张卡片</span>
+      <ArrowUpRight size={16} />
     </a>
   );
 }
@@ -138,14 +161,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
 
   return (
     <div className="app-shell profile-page">
-      <Topbar
-        mode="public"
-        publicLabel="个人主页"
-        worldName={profile?.name}
-        worldSlug={profile?.pinned_worlds[0]?.slug ?? profile?.worlds[0]?.slug}
-        session={session}
-        onLogout={onLogout}
-      />
+      <SiteHeader session={session} onLogout={onLogout} />
 
       <main id="main-content" tabIndex={-1} className="profile-shell">
         {loading && (
@@ -172,7 +188,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
               </div>
               <div className="profile-identity">
                 <div className="eyebrow">
-                  <Globe2 size={13} />
+                  <Globe2 size={16} />
                   个人主页 · @{profile.username}
                 </div>
                 <h1>{profile.name}</h1>
@@ -180,24 +196,24 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
                 <div className="profile-meta">
                   {profile.location && (
                     <span>
-                      <MapPin size={12} /> {profile.location}
+                      <MapPin size={16} /> {profile.location}
                     </span>
                   )}
                   {profile.website && (
                     <ProfileLink href={profile.website}>
-                      <Globe2 size={12} /> {profile.website}
+                      <Globe2 size={16} /> {profile.website}
                     </ProfileLink>
                   )}
                   {profile.links.map((link) => (
                     <ProfileLink key={`${link.label}-${link.url}`} href={link.url}>
-                      {link.label} <ArrowUpRight size={11} />
+                      {link.label} <ArrowUpRight size={16} />
                     </ProfileLink>
                   ))}
                 </div>
                 <div className="profile-actions">
                   {profile.is_owner && (
                     <button type="button" className="btn btn-primary" onClick={() => setEditing((value) => !value)}>
-                      {editing ? <X size={14} /> : <PencilLine size={14} />}
+                      {editing ? <X size={16} /> : <PencilLine size={16} />}
                       {editing ? "取消编辑" : "编辑资料"}
                     </button>
                   )}
@@ -323,7 +339,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
 
                 <div className="profile-edit-actions">
                   <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving}>
-                    {saving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+                    {saving ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
                     {saving ? "保存中…" : "保存资料"}
                   </button>
                   <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>
@@ -347,7 +363,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
                       <span className="type">{world.kind === "private" ? "私人世界" : "共建世界"}</span>
                       <h3>{world.name}</h3>
                       <p>{world.card_count} 张公开卡片</p>
-                      <span className="arrow">进入 <ArrowUpRight size={12} /></span>
+                      <span className="arrow">进入 <ArrowUpRight size={16} /></span>
                     </a>
                   ))}
                 </div>
@@ -374,7 +390,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
                         <h3>{card.title}</h3>
                         <p>{card.excerpt || "打开工作区阅读。"}</p>
                       </div>
-                      <ArrowUpRight size={14} />
+                      <ArrowUpRight size={16} />
                     </a>
                   ))}
                 </div>
@@ -388,11 +404,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
               </div>
               <div className="profile-world-list">
                 {profile.worlds.map((world) => (
-                  <a className="profile-world-row" key={world.id} href={`/w/${world.slug}/wiki`}>
-                    <span>{world.name}</span>
-                    <span>{world.card_count} 张卡片</span>
-                    <ArrowUpRight size={13} />
-                  </a>
+                  <WorldRow key={world.id} world={world} />
                 ))}
               </div>
                 </section>
@@ -401,7 +413,7 @@ export function ProfilePage({ username, session, onLogout, initialProfile }: Pro
           </>
         )}
       </main>
-      <SiteFooter note="个人主页" />
+      <SiteFoot authenticated={Boolean(session?.authenticated)} />
     </div>
   );
 }

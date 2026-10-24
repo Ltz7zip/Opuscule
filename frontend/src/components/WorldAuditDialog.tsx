@@ -102,7 +102,7 @@ export function WorldAuditDialog({ worldSlug, onClose }: WorldAuditDialogProps) 
           </div>
           <div className="dialog-head-actions">
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => void download()} disabled={exporting}>
-              {exporting ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
+              {exporting ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
               {exporting ? "导出中…" : "导出 CSV"}
             </button>
             <button type="button" className="icon-btn" aria-label="关闭活动记录" onClick={onClose}>
@@ -132,7 +132,7 @@ export function WorldAuditDialog({ worldSlug, onClose }: WorldAuditDialogProps) 
 
         {loading && (
           <div className="loading">
-            <Loader2 size={15} className="spin" /> 正在读取活动记录…
+            <Loader2 size={16} className="spin" /> 正在读取活动记录…
           </div>
         )}
         {error && <div className="form-error" role="alert">{error}</div>}
@@ -143,7 +143,7 @@ export function WorldAuditDialog({ worldSlug, onClose }: WorldAuditDialogProps) 
         <div className="audit-list">
           {visible.map((event) => (
             <div className="audit-row" key={event.id}>
-              <span className="audit-icon"><History size={13} /></span>
+              <span className="audit-icon"><History size={16} /></span>
               <div>
                 <b>{event.action_label}</b>
                 <span>{detail(event)}</span>

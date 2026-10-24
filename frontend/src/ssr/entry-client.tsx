@@ -6,6 +6,8 @@ import { PublicHome } from "../components/PublicHome";
 import { WikiPage } from "../components/WikiPage";
 import type { CardDetail, ProfileData, WorldDetail, WorldSummary } from "../types";
 import "../styles/app.css";
+import "../styles/auth.css";
+import "../styles/legacy-workspace.css";
 
 type InitialData =
   | {

@@ -137,7 +137,7 @@ export function WorldSettingsDialog({ world, onClose, onSaved, onDeleted }: Worl
           </label>
           <div className="dialog-actions">
             <button type="submit" className="btn btn-primary" disabled={saving || deleting}>
-              {saving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+              {saving ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
               {saving ? "保存中…" : "保存设置"}
             </button>
             <button type="button" className="btn btn-secondary" onClick={onClose}>
@@ -151,7 +151,7 @@ export function WorldSettingsDialog({ world, onClose, onSaved, onDeleted }: Worl
               <p>下载 ZIP：world.json、README.md 与 wiki/*.md；包含集合、卡片与地图标记。</p>
             </div>
             <button type="button" className="btn btn-secondary" onClick={() => void download()} disabled={exporting || saving || deleting}>
-              {exporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+              {exporting ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
               {exporting ? "导出中…" : "导出 ZIP"}
             </button>
           </div>

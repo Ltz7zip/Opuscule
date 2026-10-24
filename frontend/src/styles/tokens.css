@@ -53,8 +53,8 @@
   --accent: #3f3f46;
   --accent-foreground: #fafafa;
   --border: #3f3f46;
-  --border-strong: #52525b;
-  --input: #3f3f46;
+  --border-strong: #71717a;
+  --input: #71717a;
   --ring: #d4d4d8;
   --success: #4ade80;
   --success-subtle: rgba(74, 222, 128, 0.12);
@@ -62,6 +62,7 @@
   --destructive-subtle: rgba(248, 113, 113, 0.12);
   --danger: var(--destructive);
   --overlay: rgba(0, 0, 0, 0.72);
+  --overlay-foreground: #fafafa;
   --overlay-soft: rgba(0, 0, 0, 0.55);
   --overlay-surface: #27272a;
   --accent-green: #3ddc97;
@@ -109,7 +110,7 @@
   --tracking-tight: -0.012em;
 
   /* Type scale (8 steps) and spacing scale (4px base). */
-  --text-2xs: 10px;
+  --text-2xs: 11px;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -133,6 +134,16 @@
   --radius: 12px;
   --radius-lg: 16px;
   --radius-pill: 999px;
+
+  /* Motion: shared by CSS transitions and view-transition pseudo-elements. */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Reading measure: article/prose line length ceiling. */
+  --measure: 68ch;
 
   --w-page: 1100px;
   --w-wide: 1200px;
@@ -161,14 +172,15 @@
   --accent: #f4f4f5;
   --accent-foreground: #18181b;
   --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --input: #d4d4d8;
+  --border-strong: #8e8e93;
+  --input: #8e8e93;
   --ring: #18181b;
   --success: #15803d;
   --success-subtle: rgba(21, 128, 61, 0.08);
   --destructive: #b42318;
   --destructive-subtle: rgba(180, 35, 24, 0.07);
   --overlay: rgba(0, 0, 0, 0.55);
+  --overlay-foreground: #fafafa;
   --overlay-soft: rgba(0, 0, 0, 0.40);
   --overlay-surface: #ffffff;
   --accent-green: #2f8f63;
@@ -211,6 +223,13 @@
   --shadow-lg: 0 12px 32px -12px rgba(0, 0, 0, 0.16);
   --shadow-xl: 0 24px 56px -20px rgba(0, 0, 0, 0.22);
 
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --measure: 68ch;
+
   color-scheme: light;
 }
 
@@ -250,4 +269,48 @@ a { color: inherit; }
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Legacy parity palette: hex literals live here so the UI checker can keep
+   every other stylesheet token-only. Values are the 0.8.1 terminal palette. */
+:root {
+  --legacy-canvas: #18181b;
+  --legacy-soft: #202023;
+  --legacy-raised: #27272a;
+  --legacy-sunken: #0a0a0a;
+  --legacy-ink: #fafafa;
+  --legacy-body: #a6a6ae;
+  --legacy-mute: #71717a;
+  --legacy-dim: #52525b;
+  --legacy-white: #ffffff;
+  --legacy-raised-light: #f4f4f5;
+  --legacy-body-light: #3f3f46;
+  --legacy-black: #000000;
+  --legacy-ink-2: #d4d4d8;
+  --legacy-danger: #ef4444;
+  --legacy-danger-soft: #f87171;
+  --legacy-warning: #fbbf24;
+  --legacy-mark: #f6e7a8;
+  --legacy-era-blue-bg: #cee2f5;
+  --legacy-era-blue-line: #b2c7e8;
+  --legacy-era-blue-ink: #2f4a7a;
+  --legacy-era-sky-bg: #cae6f2;
+  --legacy-era-sky-line: #a8d0e4;
+  --legacy-era-sky-ink: #28566e;
+  --legacy-era-violet-bg: #d8d5f4;
+  --legacy-era-violet-line: #c2bde8;
+  --legacy-era-violet-ink: #4b447f;
+  --legacy-era-red-bg: #f9d8d2;
+  --legacy-era-red-line: #ecbfb8;
+  --legacy-era-red-ink: #7d3a33;
+  --legacy-era-teal-bg: #cdeada;
+  --legacy-era-teal-line: #b0dbc7;
+  --legacy-era-teal-ink: #245c46;
+  --legacy-era-gold-bg: #f6e7c2;
+  --legacy-era-gold-line: #e8d098;
+  --legacy-era-gold-ink: #7a5a1e;
+  --legacy-map-place: #86b7ff;
+  --legacy-map-event: #ffb86b;
+  --legacy-map-character: #7fd6a5;
+  --legacy-map-note: #c9a7ff;
 }

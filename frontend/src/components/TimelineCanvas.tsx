@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Maximize2, Minus, Plus } from "lucide-react";
 
 import type { TimelineEntry, TimelineEra } from "../types";
+import { vt, vtClassRef } from "../lib/viewTransition";
 
 interface TimelineCanvasProps {
   entries: TimelineEntry[];
@@ -11,6 +12,7 @@ interface TimelineCanvasProps {
   onSelect: (entry: TimelineEntry) => void;
   onPickYear: (year: number) => void;
   onEraClick: (era: string) => void;
+  onContextMenu?: (entry: TimelineEntry, x: number, y: number) => void;
 }
 
 const ERA_COLORS = ["blue", "green", "gold", "red", "violet", "teal", "sky"];
@@ -46,6 +48,7 @@ export function TimelineCanvas({
   onSelect,
   onPickYear,
   onEraClick,
+  onContextMenu,
 }: TimelineCanvasProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState(0);
@@ -185,14 +188,14 @@ export function TimelineCanvas({
     <div className="timeline-canvas-shell">
       <div className="timeline-controls" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" aria-label="缩小时间线" onClick={() => zoomTo(zoom - 0.5)} disabled={zoom <= 1}>
-          <Minus size={14} />
+          <Minus size={16} />
         </button>
         <span>{zoom.toFixed(1)}×</span>
         <button type="button" aria-label="放大时间线" onClick={() => zoomTo(zoom + 0.5)} disabled={zoom >= 3}>
-          <Plus size={14} />
+          <Plus size={16} />
         </button>
         <button type="button" aria-label="适应时间线" onClick={() => { setZoom(1); setPan(0); }}>
-          <Maximize2 size={13} />
+          <Maximize2 size={16} />
         </button>
       </div>
 
@@ -264,6 +267,12 @@ export function TimelineCanvas({
                   type="button"
                   className="timeline-event-card"
                   onClick={(event) => { event.stopPropagation(); onSelect(entry); }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    onContextMenu?.(entry, event.clientX || rect.left, event.clientY || rect.bottom);
+                  }}
                   aria-label={`${entry.title}，${entry.year}${entry.end_year ? ` 至 ${entry.end_year}` : ""}`}
                 >
                   <span className="timeline-event-title">
@@ -275,7 +284,12 @@ export function TimelineCanvas({
                   {entry.era && <small>{entry.era}</small>}
                 </button>
                 <i className="timeline-event-stem" aria-hidden="true" />
-                <i className="timeline-event-dot" aria-hidden="true" />
+                <i
+                  className="timeline-event-dot"
+                  ref={vtClassRef("icon", selectedId === entry.id && Boolean(entry.card_slug))}
+                  style={selectedId === entry.id && entry.card_slug ? vt("icon", entry.card_slug) : undefined}
+                  aria-hidden="true"
+                />
                 {rangeWidth > 0 && (
                   <i className="timeline-event-range" style={{ width: `${rangeWidth}%` }} aria-hidden="true" />
                 )}
@@ -296,7 +310,7 @@ export function TimelineCanvas({
               aria-label={`在 ${hover.year} 年新建事件`}
               onClick={(event) => { event.stopPropagation(); onPickYear(hover.year); }}
             >
-              <Plus size={11} />
+              <Plus size={16} />
             </button>
           )}
 

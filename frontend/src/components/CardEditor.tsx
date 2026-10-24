@@ -10,7 +10,10 @@ import {
   Bold,
   Bookmark,
   Check,
+  ClipboardPaste,
   Code2,
+  Copy,
+  Eraser,
   Heading1,
   Heading2,
   Heading3,
@@ -23,6 +26,7 @@ import {
   MessageSquareQuote,
   Minus,
   Pilcrow,
+  Scissors,
   Plus,
   Quote,
   Save,
@@ -33,6 +37,8 @@ import {
 
 import { listCardImages, updateCard, uploadCardImage } from "../api";
 import { promptAction } from "../lib/dialogs";
+import { useVtTarget } from "../lib/viewTransition";
+import { ContextMenu, type ContextMenuEntry, type ContextMenuModel } from "./ContextMenu";
 import { createCardMentionSuggestion } from "../editor/mention";
 import { CardLinks } from "../editor/cardLinks";
 import { MentionAuto } from "../editor/mentionAuto";
@@ -94,9 +100,12 @@ interface CardEditorProps {
   onSaved: (card: CardDetail) => void;
   onStatus: (state: SaveState) => void;
   readOnly: boolean;
+  /** Transient target name for the tree-row -> editor-header morph. */
+  vtSlug?: string | null;
 }
 
-export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly }: CardEditorProps) {
+export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly, vtSlug }: CardEditorProps) {
+  const pageIcon = useVtTarget("icon", vtSlug ?? "");
   const [title, setTitle] = useState(card.title);
   const [icon, setIcon] = useState(card.icon ?? "");
   const [cover, setCover] = useState(card.cover ?? "");
@@ -114,9 +123,11 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuModel | null>(null);
   const [commentQuote, setCommentQuote] = useState("");
   const [commentAnchorId, setCommentAnchorId] = useState("");
   const commentRange = useRef<{ from: number; to: number } | null>(null);
+  const contextRange = useRef<{ from: number; to: number } | null>(null);
   const [blockAdd, setBlockAdd] = useState<{ left: number; top: number } | null>(null);
   const pendingRange = useRef<{ from: number; to: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +143,78 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
     setSlash(null);
     setBubble(null);
   }, []);
+
+  const restoreContextSelection = (range: { from: number; to: number }) => {
+    editor?.chain().focus().setTextSelection(range).run();
+  };
+
+  const copySelection = async (range: { from: number; to: number }) => {
+    if (!editor) return;
+    const text = editor.state.doc.textBetween(range.from, range.to, "\n");
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+  };
+
+  const openEditorMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (readOnly || !editor) return;
+    const target = event.target as HTMLElement;
+    if (!target.closest(".tiptap")) return;
+    // Keep native link/image actions (open in new tab, save image) available.
+    if (target.closest("a, img, video")) return;
+    event.preventDefault();
+    const { from, to } = editor.state.selection;
+    const pos = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+    const range = pos !== undefined && pos !== null && (pos < from || pos > to)
+      ? { from: pos, to: pos }
+      : { from, to };
+    if (range.from !== from || range.to !== to) editor.commands.setTextSelection(range);
+    contextRange.current = range;
+    const hasSelection = range.from !== range.to;
+    const entries: ContextMenuEntry[] = [
+      { label: "剪切", icon: <Scissors size={16} />, disabled: !hasSelection, run: async () => {
+        await copySelection(range);
+        restoreContextSelection(range);
+        editor.chain().focus().deleteSelection().run();
+      } },
+      { label: "复制", icon: <Copy size={16} />, disabled: !hasSelection, run: () => copySelection(range) },
+      { label: "粘贴", icon: <ClipboardPaste size={16} />, run: async () => {
+        const text = await navigator.clipboard.readText();
+        if (!text) return;
+        editor.chain().focus().setTextSelection(range.to).insertContent(text).run();
+      } },
+      { separator: true },
+      { label: "加粗", icon: <Bold size={16} />, run: () => { restoreContextSelection(range); editor.chain().focus().toggleBold().run(); } },
+      { label: "斜体", icon: <Italic size={16} />, run: () => { restoreContextSelection(range); editor.chain().focus().toggleItalic().run(); } },
+      { label: "下划线", icon: <UnderlineIcon size={16} />, run: () => { restoreContextSelection(range); editor.chain().focus().toggleUnderline().run(); } },
+      { label: "删除线", icon: <Strikethrough size={16} />, run: () => { restoreContextSelection(range); editor.chain().focus().toggleStrike().run(); } },
+      { label: "行内代码", icon: <Code2 size={16} />, run: () => { restoreContextSelection(range); editor.chain().focus().toggleCode().run(); } },
+      { separator: true },
+      { label: "插入链接…", icon: <Link2 size={16} />, run: async () => {
+        const value = await promptAction({
+          title: "插入链接",
+          label: "链接地址",
+          hint: "以 http(s):// 或 / 开头。",
+          confirmLabel: "插入",
+        });
+        if (!value) return;
+        const href = safeHref(value);
+        if (!href) { setEditorError("链接地址必须以 http(s):// 或 / 开头"); return; }
+        restoreContextSelection(range);
+        editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+      } },
+      { label: "添加评论…", icon: <MessageSquareQuote size={16} />, disabled: !hasSelection, run: () => {
+        contextRange.current = range;
+        commentRange.current = range;
+        setCommentQuote(editor.state.doc.textBetween(range.from, range.to, " ").slice(0, 300));
+        setCommentAnchorId(crypto.randomUUID());
+        setCommentsOpen(true);
+      } },
+      { separator: true },
+      { label: "全选", icon: <Check size={16} />, run: () => editor.chain().focus().selectAll().run() },
+      { label: "清除格式", icon: <Eraser size={16} />, run: () => { restoreContextSelection(range); editor.chain().focus().unsetAllMarks().run(); } },
+    ];
+    setContextMenu({ x: event.clientX, y: event.clientY, entries });
+  };
 
   const updateSlash = useCallback((current: Editor) => {
     if (readOnly || !current.isEditable) {
@@ -495,7 +578,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "文本",
         hint: "普通段落",
         keywords: "text paragraph",
-        icon: <Pilcrow size={15} />,
+        icon: <Pilcrow size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).setParagraph().run(),
       },
       {
@@ -503,7 +586,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "一级标题",
         hint: "大标题",
         keywords: "heading h1 title",
-        icon: <Heading1 size={15} />,
+        icon: <Heading1 size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).setHeading({ level: 1 }).run(),
       },
       {
@@ -511,7 +594,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "二级标题",
         hint: "章节标题",
         keywords: "heading h2",
-        icon: <Heading2 size={15} />,
+        icon: <Heading2 size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).setHeading({ level: 2 }).run(),
       },
       {
@@ -519,7 +602,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "三级标题",
         hint: "小节标题",
         keywords: "heading h3",
-        icon: <Heading3 size={15} />,
+        icon: <Heading3 size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).setHeading({ level: 3 }).run(),
       },
       {
@@ -527,7 +610,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "无序列表",
         hint: "圆点列表",
         keywords: "bullet list",
-        icon: <List size={15} />,
+        icon: <List size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).toggleBulletList().run(),
       },
       {
@@ -535,7 +618,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "有序列表",
         hint: "编号列表",
         keywords: "ordered numbered list",
-        icon: <ListOrdered size={15} />,
+        icon: <ListOrdered size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).toggleOrderedList().run(),
       },
       {
@@ -554,7 +637,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "引用",
         hint: "摘录一段话",
         keywords: "quote blockquote",
-        icon: <Quote size={15} />,
+        icon: <Quote size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).toggleBlockquote().run(),
       },
       {
@@ -562,7 +645,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "提示框",
         hint: "规则或需要记住的事",
         keywords: "callout note tip",
-        icon: <MessageSquareQuote size={15} />,
+        icon: <MessageSquareQuote size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).insertContent({
           type: "callout",
           content: [{ type: "paragraph" }],
@@ -573,7 +656,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "代码块",
         hint: "等宽文本",
         keywords: "code block",
-        icon: <Code2 size={15} />,
+        icon: <Code2 size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).setCodeBlock().run(),
       },
       {
@@ -581,7 +664,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "分隔线",
         hint: "水平分隔",
         keywords: "divider rule line",
-        icon: <Minus size={15} />,
+        icon: <Minus size={16} />,
         action: (range: { from: number; to: number }) => editor?.chain().focus().deleteRange(range).setHorizontalRule().run(),
       },
       {
@@ -629,7 +712,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "上传图片",
         hint: "PNG/JPEG/WebP，≤4 MB",
         keywords: "image upload picture photo img",
-        icon: <ImageIcon size={15} />,
+        icon: <ImageIcon size={16} />,
         action: openImagePicker,
       },
       {
@@ -637,7 +720,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "媒体库",
         hint: "从已上传图片中选择",
         keywords: "media library images",
-        icon: <ImageIcon size={15} />,
+        icon: <ImageIcon size={16} />,
         action: (range: { from: number; to: number }) => { void openMediaLibrary(range); },
       },
       {
@@ -645,7 +728,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "图片轮播",
         hint: "多张图片横向轮播",
         keywords: "gallery carousel images",
-        icon: <ImageIcon size={15} />,
+        icon: <ImageIcon size={16} />,
         action: async (range: { from: number; to: number }) => {
           const value = await promptAction({
             title: "插入图片轮播",
@@ -665,7 +748,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "网络图片",
         hint: "输入一个图片地址",
         keywords: "image url picture photo",
-        icon: <Link2 size={15} />,
+        icon: <Link2 size={16} />,
         action: insertImageUrl,
       },
       {
@@ -673,7 +756,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "书签",
         hint: "把网址摆成卡片",
         keywords: "bookmark link url",
-        icon: <Bookmark size={15} />,
+        icon: <Bookmark size={16} />,
         action: insertBookmark,
       },
       {
@@ -681,7 +764,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         label: "嵌入卡片",
         hint: "引用这个世界的另一张卡",
         keywords: "card embed link",
-        icon: <Link2 size={15} />,
+        icon: <Link2 size={16} />,
         action: openCardPicker,
       },
     ];
@@ -695,7 +778,13 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
     <section className="panel editor" aria-label="卡片编辑器">
       {cover && <div className="page-cover" style={{ backgroundImage: `url("${cover}")` }} role="img" aria-label="页面封面" />}
       <header className="editor-head">
-        <button type="button" className="page-icon" aria-label="设置页面图标" onClick={async () => {
+        <button
+          type="button"
+          className="page-icon"
+          aria-label="设置页面图标"
+          ref={vtSlug ? pageIcon.ref : undefined}
+          style={vtSlug ? pageIcon.style : undefined}
+          onClick={async () => {
           const value = await promptAction({
             title: "页面图标",
             label: "图标",
@@ -710,6 +799,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         }}>{icon || "＋"}</button>
         <div className="editor-kicker">
           <span className="chip">{typeLabel}</span>
+          {card.era && <span className="chip chip-era">纪元 · {card.era}</span>}
           <span>{card.slug}</span>
         </div>
         <input
@@ -759,7 +849,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
                   setCommentsOpen(true);
                 }}
               >
-                <MessageSquareQuote size={13} /> 评论
+                <MessageSquareQuote size={16} /> 评论
               </button>
               <button
                 type="button"
@@ -767,7 +857,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
                 onClick={() => void save()}
                 disabled={status === "saving"}
               >
-                {status === "saving" ? <Loader2 size={14} className="spin" /> : status === "saved" ? <Check size={14} /> : <Save size={14} />}
+                {status === "saving" ? <Loader2 size={16} className="spin" /> : status === "saved" ? <Check size={16} /> : <Save size={16} />}
                 保存
               </button>
             </span>
@@ -778,6 +868,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
       <div
         className="editor-body"
         onClick={() => !readOnly && editor?.commands.focus()}
+        onContextMenu={openEditorMenu}
       >
         {blockAdd && !readOnly && (
           <>
@@ -789,7 +880,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
               onMouseDown={(event) => event.preventDefault()}
               onClick={insertBlockAfter}
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </button>
           </>
         )}
@@ -825,11 +916,11 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         )}
         {bubble && !readOnly && (
           <div className="editor-bubble" style={{ left: bubble.left, top: bubble.top }} onMouseDown={(event) => event.preventDefault()}>
-            <button type="button" className={editor?.isActive("bold") ? "active" : ""} aria-label="加粗" onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></button>
-            <button type="button" className={editor?.isActive("italic") ? "active" : ""} aria-label="斜体" onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></button>
-            <button type="button" className={editor?.isActive("strike") ? "active" : ""} aria-label="删除线" onClick={() => editor?.chain().focus().toggleStrike().run()}><Strikethrough size={14} /></button>
-            <button type="button" className={editor?.isActive("code") ? "active" : ""} aria-label="行内代码" onClick={() => editor?.chain().focus().toggleCode().run()}><Code2 size={14} /></button>
-            <button type="button" className={editor?.isActive("underline") ? "active" : ""} aria-label="下划线" onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={14} /></button>
+            <button type="button" className={editor?.isActive("bold") ? "active" : ""} aria-label="加粗" onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={16} /></button>
+            <button type="button" className={editor?.isActive("italic") ? "active" : ""} aria-label="斜体" onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={16} /></button>
+            <button type="button" className={editor?.isActive("strike") ? "active" : ""} aria-label="删除线" onClick={() => editor?.chain().focus().toggleStrike().run()}><Strikethrough size={16} /></button>
+            <button type="button" className={editor?.isActive("code") ? "active" : ""} aria-label="行内代码" onClick={() => editor?.chain().focus().toggleCode().run()}><Code2 size={16} /></button>
+            <button type="button" className={editor?.isActive("underline") ? "active" : ""} aria-label="下划线" onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={16} /></button>
             <button type="button" className={editor?.isActive("link") ? "active" : ""} aria-label="链接" onClick={async () => {
               const value = await promptAction({
                 title: "插入链接",
@@ -841,13 +932,13 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
               const href = safeHref(value);
               if (!href) { setEditorError("链接地址必须以 http(s):// 或 / 开头"); return; }
               editor?.chain().focus().extendMarkRange("link").setLink({ href }).run();
-            }}><Link2 size={14} /></button>
+            }}><Link2 size={16} /></button>
             <span className="editor-bubble-sep" />
             <button type="button" className={editor?.isActive("heading", { level: 1 }) ? "active" : ""} aria-label="一级标题" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}>H1</button>
             <button type="button" className={editor?.isActive("heading", { level: 2 }) ? "active" : ""} aria-label="二级标题" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>H2</button>
-            <button type="button" className={editor?.isActive("bulletList") ? "active" : ""} aria-label="无序列表" onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={14} /></button>
-            <button type="button" className={editor?.isActive("orderedList") ? "active" : ""} aria-label="有序列表" onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered size={14} /></button>
-            <button type="button" aria-label="引用" onClick={() => editor?.chain().focus().toggleBlockquote().run()}><Quote size={14} /></button>
+            <button type="button" className={editor?.isActive("bulletList") ? "active" : ""} aria-label="无序列表" onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={16} /></button>
+            <button type="button" className={editor?.isActive("orderedList") ? "active" : ""} aria-label="有序列表" onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered size={16} /></button>
+            <button type="button" aria-label="引用" onClick={() => editor?.chain().focus().toggleBlockquote().run()}><Quote size={16} /></button>
             <span className="editor-bubble-sep" />
             <button type="button" aria-label="缩进块" onClick={() => editor?.chain().focus().wrapIn("nestedBlock").run()}>→</button>
             <button type="button" aria-label="取消缩进" onClick={() => editor?.chain().focus().lift("nestedBlock").run()}>←</button>
@@ -856,7 +947,7 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         {editorError && <div className="editor-error" role="alert">{editorError}</div>}
         {slash && !readOnly && (
           <div className="editor-slash" style={{ left: slash.left, top: slash.top }} onMouseDown={(event) => event.preventDefault()}>
-            <div className="editor-slash-head">插入块 <button type="button" aria-label="关闭插入菜单" onClick={() => setSlash(null)}><X size={12} /></button></div>
+            <div className="editor-slash-head">插入块 <button type="button" aria-label="关闭插入菜单" onClick={() => setSlash(null)}><X size={16} /></button></div>
             <div className="editor-slash-list">
               {slashItems.length === 0 && <div className="editor-slash-empty">没有匹配的块</div>}
               {slashItems.map((item) => (
@@ -870,11 +961,13 @@ export function CardEditor({ worldSlug, card, cards, onSaved, onStatus, readOnly
         )}
       </div>
 
+      <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} onError={setEditorError} />
+
       {cardPicker && (
         <div className="editor-card-picker" role="dialog" aria-label="选择嵌入卡片">
           <div className="editor-card-picker-head">
             <b>嵌入卡片</b>
-            <button type="button" className="icon-btn" aria-label="关闭卡片选择" onClick={() => setCardPicker(false)}><X size={14} /></button>
+            <button type="button" className="icon-btn" aria-label="关闭卡片选择" onClick={() => setCardPicker(false)}><X size={16} /></button>
           </div>
           <div className="editor-card-picker-list">
             {cards.map((item) => (
