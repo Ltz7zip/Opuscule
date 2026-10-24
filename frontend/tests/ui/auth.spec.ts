@@ -333,6 +333,16 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(contextMenu).toBeHidden();
 });
 
+test("motion opt-in overrides reduced motion for this site", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?motion=force", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("html")).toHaveClass(/motion-force/);
+  const hero = page.locator(".site-hero-main > *").first();
+  await expect(hero).toHaveCSS("animation-name", "enter-rise");
+  await expect(hero).toHaveCSS("animation-duration", "0.7s");
+  await expect(page.locator(".pointer-glow")).toHaveCount(1);
+});
+
 test("320px touch targets", async ({ page, context }) => {
   await page.setViewportSize({ width: 320, height: 900 });
   await context.addCookies([LIGHT_COOKIE]);

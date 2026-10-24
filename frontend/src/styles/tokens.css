@@ -139,6 +139,9 @@
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
+  --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+  --pointer-x: 50%;
+  --pointer-y: 38%;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
 

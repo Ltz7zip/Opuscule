@@ -5,6 +5,7 @@ import { ProfilePage } from "../components/ProfilePage";
 import { PublicHome } from "../components/PublicHome";
 import { WikiPage } from "../components/WikiPage";
 import type { CardDetail, ProfileData, WorldDetail, WorldSummary } from "../types";
+import { bootMotionChrome } from "../lib/motionChrome";
 import "../styles/app.css";
 import "../styles/auth.css";
 import "../styles/legacy-workspace.css";
@@ -30,6 +31,8 @@ declare global {
 
 const data = window.__INITIAL__;
 const root = document.getElementById("root");
+
+bootMotionChrome();
 
 if (data && root) {
   if ((document as Document & { startViewTransition?: unknown }).startViewTransition === undefined) {

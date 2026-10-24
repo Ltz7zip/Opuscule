@@ -21,7 +21,7 @@
 ::view-transition-group(*.cover),
 ::view-transition-group(*.icon),
 ::view-transition-group(*.avatar) {
-  animation-duration: 260ms;
+  animation-duration: 280ms;
   animation-timing-function: var(--ease-out);
 }
 ::view-transition-old(*.cover),
@@ -30,7 +30,7 @@
 ::view-transition-new(*.icon),
 ::view-transition-old(*.avatar),
 ::view-transition-new(*.avatar) {
-  animation-duration: 220ms;
+  animation-duration: 240ms;
   animation-delay: 0ms;
   animation-timing-function: linear;
 }
@@ -46,10 +46,10 @@
 
 /* Root: duration only. The UA default old/new animation is a simultaneous,
    additive cross-fade; keeping it avoids a background dip. */
-::view-transition-group(root) { animation-duration: 220ms; }
+::view-transition-group(root) { animation-duration: 280ms; }
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 220ms;
+  animation-duration: 280ms;
   animation-delay: 0ms;
   animation-timing-function: linear;
 }
