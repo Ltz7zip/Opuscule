@@ -13,6 +13,7 @@ interface TimelineCanvasProps {
   onPickYear: (year: number) => void;
   onEraClick: (era: string) => void;
   onContextMenu?: (entry: TimelineEntry, x: number, y: number) => void;
+  onCanvasContextMenu?: (x: number, y: number) => void;
 }
 
 const ERA_COLORS = ["blue", "green", "gold", "red", "violet", "teal", "sky"];
@@ -49,6 +50,7 @@ export function TimelineCanvas({
   onPickYear,
   onEraClick,
   onContextMenu,
+  onCanvasContextMenu,
 }: TimelineCanvasProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState(0);
@@ -215,6 +217,11 @@ export function TimelineCanvas({
         onPointerCancel={onPointerUp}
         onPointerLeave={() => setHover(null)}
         onClick={onViewportClick}
+        onContextMenu={(event) => {
+          if ((event.target as HTMLElement).closest("button, a, input, textarea")) return;
+          event.preventDefault();
+          onCanvasContextMenu?.(event.clientX, event.clientY);
+        }}
       >
         <div className="timeline-canvas-world" style={{ transform: `translateX(${pan}px) scale(${zoom})` }}>
           <div className="timeline-axis" ref={axisRef} aria-hidden="true" />

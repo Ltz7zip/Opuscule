@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Box, Crosshair, ExternalLink, ImagePlus, Loader2, MapPin, Menu, Mountain, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowLeft, Box, Crosshair, Download, ExternalLink, ImagePlus, Link2, Loader2, MapPin, Menu, Mountain, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 
 import {
   createMapMarker,
@@ -718,6 +718,29 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
     setMenu({ x, y, entries });
   };
 
+  const copyMapLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      const helper = document.createElement("textarea");
+      helper.value = window.location.href;
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.append(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
+    }
+  };
+
+  const downloadMapImage = () => {
+    if (!map?.background_url) return;
+    const anchor = document.createElement("a");
+    anchor.href = map.background_url;
+    anchor.download = `${worldSlug}-map`;
+    anchor.click();
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>, marker: MapMarker) => {
     if (!canEdit || event.button !== 0) return;
     event.stopPropagation();
@@ -1033,22 +1056,31 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                   className={`map-canvas${canEdit ? " editable" : ""}${mode === "pan" ? " is-panning" : ""}${isTerrain ? " terrain" : ""}`}
                   onClick={onCanvasClick}
                   onContextMenu={(event) => {
-                    if (!canEdit) return;
                     event.preventDefault();
                     const point = mapPoint(event.clientX, event.clientY);
-                    setMenu({
-                      x: event.clientX,
-                      y: event.clientY,
-                      entries: [
+                    const entries: ContextMenuEntry[] = [];
+                    if (canEdit) {
+                      entries.push(
                         { label: "在此添加标记", icon: <Plus size={16} />, run: () => beginDraft(point) },
                         { separator: true },
-                        {
-                          label: "重置视图",
-                          icon: <RotateCcw size={16} />,
-                          run: () => { changeZoom(1); setPan({ x: 0, y: 0 }); },
-                        },
-                      ],
-                    });
+                      );
+                    }
+                    entries.push(
+                      { label: "复制地图链接", icon: <Link2 size={16} />, run: () => void copyMapLink() },
+                      { label: "打开世界 Wiki", icon: <ExternalLink size={16} />, run: () => { window.location.href = `/w/${worldSlug}/wiki`; } },
+                    );
+                    if (map.background_url) {
+                      entries.push({ label: "下载地图背景", icon: <Download size={16} />, run: downloadMapImage });
+                    }
+                    entries.push(
+                      { separator: true },
+                      {
+                        label: "重置视图",
+                        icon: <RotateCcw size={16} />,
+                        run: () => { changeZoom(1); setPan({ x: 0, y: 0 }); },
+                      },
+                    );
+                    setMenu({ x: event.clientX, y: event.clientY, entries });
                   }}
                   onPointerDown={onCanvasPointerDown}
                   onPointerMove={onCanvasPointerMove}

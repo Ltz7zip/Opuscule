@@ -375,3 +375,45 @@ input[type="file"]::file-selector-button:hover { border-color: var(--foreground)
 .timeline-event-card.era-gold { border-left-color: var(--era-3-line); }
 .timeline-event-card.era-violet { border-left-color: var(--era-4-line); }
 .timeline-event-card:hover { box-shadow: var(--shadow-md); }
+
+/* Browser-owned surfaces that can still follow the token palette. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@supports (scrollbar-width: thin) {
+  * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); background-clip: content-box; }
+
+/* Details toggles were the last native disclosure triangles. */
+.rich-toggle summary,
+.tiptap-toggle summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.rich-toggle summary::-webkit-details-marker,
+.tiptap-toggle summary::-webkit-details-marker { display: none; }
+.rich-toggle summary::before,
+.tiptap-toggle summary::before {
+  content: "▸";
+  display: inline-block;
+  transition: transform .15s var(--ease-out);
+}
+.rich-toggle[open] > summary::before,
+.tiptap-toggle[open] > summary::before { transform: rotate(90deg); }
+
+dialog::backdrop {
+  background: color-mix(in srgb, var(--background) 68%, transparent);
+  backdrop-filter: blur(2px);
+}

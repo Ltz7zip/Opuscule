@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Clock, ExternalLink, Loader2, Menu, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Clock, ExternalLink, Link2, Loader2, Menu, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { createEra, createTimeline, createTimelineEntry, deleteEra, deleteTimelineEntry, fetchWorld, fetchWorldTimeline, updateTimelineEntry } from "../api";
 import { useDocumentMeta } from "../lib/meta";
@@ -141,6 +141,21 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
       // leaving it on an event card that may now be off-screen.
       inspector?.querySelector<HTMLInputElement>("#timeline-year")?.focus({ preventScroll: true });
     });
+  };
+
+  const copyTimelineLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      const helper = document.createElement("textarea");
+      helper.value = window.location.href;
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.append(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
+    }
   };
 
   const startEdit = (entry: TimelineEntry) => {
@@ -559,6 +574,19 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
                     setSidebarOpen(false);
                   }}
                   onContextMenu={openEntryMenu}
+                  onCanvasContextMenu={(x, y) => {
+                    setMenu({
+                      x,
+                      y,
+                      entries: [
+                        { label: "新建时间点", icon: <Plus size={16} />, run: () => { setEditingId(null); setTitle(""); setDescription(""); setCardId(""); document.querySelector<HTMLInputElement>(".timeline-form input")?.focus(); } },
+                        { separator: true },
+                        { label: "复制时间线链接", icon: <Link2 size={16} />, run: () => void copyTimelineLink() },
+                        { label: "打开世界 Wiki", icon: <ExternalLink size={16} />, run: () => { window.location.href = `/w/${worldSlug}/wiki`; } },
+                        { label: "重置画布", icon: <Clock size={16} />, run: () => { document.querySelector<HTMLButtonElement>('button[aria-label="适应时间线"]')?.click(); } },
+                      ],
+                    });
+                  }}
                   onPickYear={(nextYear) => {
                     setYear(String(nextYear));
                     setEditingId(null);

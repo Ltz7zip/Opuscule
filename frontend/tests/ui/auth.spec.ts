@@ -287,6 +287,13 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await second.click();
   await expect(trigger).toContainText("航海志");
 
+  await page.locator(".timeline-canvas-viewport").click({ button: "right", position: { x: 520, y: 410 } });
+  const timelineMenu = page.locator(".ctx-menu");
+  await expect(timelineMenu).toBeVisible();
+  await expect(timelineMenu).toContainText("新建时间点");
+  await expect(timelineMenu).toContainText("复制时间线链接");
+  await page.keyboard.press("Escape");
+
   await page.goto(`/w/${world.slug}?card=${overviewId}`, { waitUntil: "domcontentloaded" });
   await page.locator(".tree-row").first().waitFor({ timeout: 20_000 });
   await expect(page.locator(".sidebar").first()).toHaveScreenshot("workspace-sidebar-dark-auth.png");
@@ -314,6 +321,16 @@ test("custom controls: timeline select, single-border search, checkbox", async (
     return { width: Math.round(box.width), height: Math.round(box.height) };
   });
   expect(size).toEqual({ width: 16, height: 16 });
+
+  await page.goto("/w/wuhai/map", { waitUntil: "domcontentloaded" });
+  await page.locator(".map-canvas").waitFor({ timeout: 20_000 });
+  await page.locator(".map-canvas").click({ button: "right", position: { x: 320, y: 220 } });
+  const contextMenu = page.locator(".ctx-menu");
+  await expect(contextMenu).toBeVisible();
+  await expect(contextMenu).toContainText("复制地图链接");
+  await expect(contextMenu).toContainText("下载地图背景");
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toBeHidden();
 });
 
 test("320px touch targets", async ({ page, context }) => {
