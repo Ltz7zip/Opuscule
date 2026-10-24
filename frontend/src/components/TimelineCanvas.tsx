@@ -265,7 +265,7 @@ export function TimelineCanvas({
               >
                 <button
                   type="button"
-                  className="timeline-event-card"
+                  className={`timeline-event-card${(() => { const color = eras?.find((item) => item.name === entry.era)?.color; return color ? ` era-${color}` : ""; })()}`}
                   onClick={(event) => { event.stopPropagation(); onSelect(entry); }}
                   onContextMenu={(event) => {
                     event.preventDefault();

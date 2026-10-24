@@ -8,6 +8,7 @@ import type { CardDetail, ProfileData, WorldDetail, WorldSummary } from "../type
 import "../styles/app.css";
 import "../styles/auth.css";
 import "../styles/legacy-workspace.css";
+import "../styles/controls.css";
 
 type InitialData =
   | {
@@ -31,6 +32,10 @@ const data = window.__INITIAL__;
 const root = document.getElementById("root");
 
 if (data && root) {
+  if ((document as Document & { startViewTransition?: unknown }).startViewTransition === undefined) {
+    document.documentElement.dataset.motion = "css";
+  }
+
   hydrateRoot(
     root,
     data.kind === "wiki" ? (

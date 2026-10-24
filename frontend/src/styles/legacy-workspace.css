@@ -166,7 +166,7 @@
   align-items: center;
 }
 .ws-app .topbar-workspace .brand,
-.ws-app .topbar-workspace .crumbs,
+
 .ws-app .topbar-workspace .world-switcher { display: none; }
 .ws-app .topbar-workspace .menu-button { display: none; }
 .ws-app .topbar-workspace .topbar-actions { margin-left: auto; gap: var(--space-2); flex-wrap: nowrap; }

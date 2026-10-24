@@ -61,7 +61,16 @@ export function runViewTransition(
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!("startViewTransition" in document) || reduce || document.hidden) {
     clearVt(source);
-    commit();
+    if (!reduce && !document.hidden) {
+      const root = document.documentElement;
+      root.classList.remove("vt-fallback");
+      void root.offsetWidth;
+      root.classList.add("vt-fallback");
+      commit();
+      window.setTimeout(() => root.classList.remove("vt-fallback"), 260);
+    } else {
+      commit();
+    }
     onDone?.();
     return;
   }

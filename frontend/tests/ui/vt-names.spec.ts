@@ -210,17 +210,17 @@ test("root and shared fades start together (no 40ms dip)", async ({ page, contex
   await page.locator(".site-tile").first().hover();
   await page.locator(".site-tile").first().click();
   await page.waitForURL("**/wiki");
-  await page.waitForTimeout(400);
+  await expect.poll(async () => page.evaluate(() => window.__vtProbe?.reveal ?? false), { timeout: 3000 }).toBe(true);
   const probe = await page.evaluate(() => window.__vtProbe);
   expect(probe.reveal).toBe(true);
   const rootOld = probe.animations.find((item) => item.pseudo === "::view-transition-old(root)" && item.name.includes("fade-out"));
   const rootNew = probe.animations.find((item) => item.pseudo === "::view-transition-new(root)" && item.name.includes("fade-in"));
   const coverOld = probe.animations.find((item) => item.pseudo === "::view-transition-old(vt-cover-wuhai)" && item.name.includes("fade-out"));
   const coverNew = probe.animations.find((item) => item.pseudo === "::view-transition-new(vt-cover-wuhai)" && item.name.includes("fade-in"));
-  expect(rootOld).toMatchObject({ duration: 140, delay: 0 });
-  expect(rootNew).toMatchObject({ duration: 140, delay: 0 });
-  expect(coverOld).toMatchObject({ duration: 160, delay: 0 });
-  expect(coverNew).toMatchObject({ duration: 160, delay: 0 });
+  expect(rootOld).toMatchObject({ duration: 220, delay: 0 });
+  expect(rootNew).toMatchObject({ duration: 220, delay: 0 });
+  expect(coverOld).toMatchObject({ duration: 220, delay: 0 });
+  expect(coverNew).toMatchObject({ duration: 220, delay: 0 });
   expect(Number(probe.mid.rootOld)).toBeGreaterThan(0.1);
   expect(Number(probe.mid.rootNew)).toBeGreaterThan(0.1);
   expect(Number(probe.mid.coverOld)).toBeGreaterThan(0.1);
@@ -228,3 +228,4 @@ test("root and shared fades start together (no 40ms dip)", async ({ page, contex
   expect(probe.mid.rootBlend).toBe("plus-lighter");
   expect(probe.mid.coverBlend).toBe("plus-lighter");
 });
+

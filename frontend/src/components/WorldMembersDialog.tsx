@@ -13,6 +13,7 @@ import {
 } from "../api";
 import type { WorldInvite, WorldMember } from "../types";
 import { confirmAction } from "../lib/dialogs";
+import { SelectMenu } from "./SelectMenu";
 
 interface WorldMembersDialogProps {
   worldSlug: string;
@@ -211,14 +212,16 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
           </label>
           <label className="field member-role-field">
             <span>角色</span>
-            <select
-              name="role"
+            <SelectMenu
+              compact
               value={role}
-              onChange={(event) => setRole(event.target.value as "editor" | "viewer")}
-            >
-              <option value="viewer">viewer · 只读</option>
-              <option value="editor">editor · 可编辑</option>
-            </select>
+              onChange={(value) => setRole(value as "editor" | "viewer")}
+              ariaLabel="成员角色"
+              options={[
+                { value: "viewer", label: "viewer · 只读" },
+                { value: "editor", label: "editor · 可编辑" },
+              ]}
+            />
           </label>
           <button type="submit" className="btn btn-primary" disabled={busy || !username.trim()}>
             <UserPlus size={16} /> 添加
@@ -243,16 +246,18 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
                 <span className="member-owner"><Shield size={16} /> owner</span>
               ) : (
                 <>
-                  <select
+                  <SelectMenu
+                    compact
                     className="member-role"
-                    aria-label={`修改 ${member.username} 的角色`}
+                    ariaLabel={`修改 ${member.username} 的角色`}
                     value={member.role}
                     disabled={busy}
-                    onChange={(event) => void changeRole(member, event.target.value as "editor" | "viewer")}
-                  >
-                    <option value="viewer">viewer</option>
-                    <option value="editor">editor</option>
-                  </select>
+                    onChange={(value) => void changeRole(member, value as "editor" | "viewer")}
+                    options={[
+                      { value: "viewer", label: "viewer" },
+                      { value: "editor", label: "editor" },
+                    ]}
+                  />
                   <button
                     type="button"
                     className="icon-btn"
@@ -275,21 +280,20 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
               <div className="sidebar-title">转移所有权</div>
               <div className="sidebar-sub">转移后你会变成 editor；只能转给现有成员。</div>
             </div>
-            <select
+            <SelectMenu
+              compact
               className="member-role"
-              aria-label="选择新 owner"
+              ariaLabel="选择新 owner"
               value={transferTarget}
-              onChange={(event) => setTransferTarget(event.target.value)}
-            >
-              <option value="">选择成员…</option>
-              {members
-                .filter((member) => member.role !== "owner")
-                .map((member) => (
-                  <option key={member.id} value={member.username}>
-                    {member.display_name} · {member.role}
-                  </option>
-                ))}
-            </select>
+              onChange={setTransferTarget}
+              options={[
+                { value: "", label: "选择成员…" },
+                ...members.filter((member) => member.role !== "owner").map((member) => ({
+                  value: member.username,
+                  label: `${member.display_name} · ${member.role}`,
+                })),
+              ]}
+            />
             <button
               type="button"
               className="btn btn-secondary"
@@ -307,15 +311,17 @@ export function WorldMembersDialog({ worldSlug, onClose }: WorldMembersDialogPro
               <div className="sidebar-title">邀请链接</div>
               <div className="sidebar-sub">一次性、7 天有效；对方登录/注册后接受。</div>
             </div>
-            <select
+            <SelectMenu
+              compact
               className="member-role"
-              aria-label="邀请角色"
+              ariaLabel="邀请角色"
               value={inviteRole}
-              onChange={(event) => setInviteRole(event.target.value as "editor" | "viewer")}
-            >
-              <option value="viewer">viewer · 只读</option>
-              <option value="editor">editor · 可编辑</option>
-            </select>
+              onChange={(value) => setInviteRole(value as "editor" | "viewer")}
+              options={[
+                { value: "viewer", label: "viewer · 只读" },
+                { value: "editor", label: "editor · 可编辑" },
+              ]}
+            />
             <button type="button" className="btn btn-secondary" onClick={() => void createInvite()} disabled={busy}>
               <Link2 size={16} /> 生成链接
             </button>

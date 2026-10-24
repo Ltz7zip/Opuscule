@@ -57,6 +57,7 @@ function htmlShell({ title, description, canonical, body, initial, ssr, theme = 
   <link rel="stylesheet" href="/src/styles/app.css?direct">
   <link rel="stylesheet" href="/src/styles/auth.css?direct">
   <link rel="stylesheet" href="/src/styles/legacy-workspace.css?direct">
+  <link rel="stylesheet" href="/src/styles/controls.css?direct">
 </head>
 <body>
   <div id="root">${body}</div>

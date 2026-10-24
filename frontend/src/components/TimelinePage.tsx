@@ -6,6 +6,7 @@ import { useDocumentMeta } from "../lib/meta";
 import { confirmAction, promptAction } from "../lib/dialogs";
 import type { SessionState, TimelineData, TimelineEntry, WorldDetail } from "../types";
 import { ContextMenu, type ContextMenuEntry, type ContextMenuModel } from "./ContextMenu";
+import { SelectMenu } from "./SelectMenu";
 import { TimelineCanvas } from "./TimelineCanvas";
 
 interface TimelinePageProps {
@@ -13,6 +14,13 @@ interface TimelinePageProps {
   session: SessionState | null;
   onLogout: () => void;
 }
+
+const ERA_DOT: Record<string, string> = {
+  blue: "var(--era-1-line)",
+  green: "var(--success)",
+  gold: "var(--era-3-line)",
+  violet: "var(--era-4-line)",
+};
 
 export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps) {
   const [world, setWorld] = useState<WorldDetail | null>(null);
@@ -340,6 +348,17 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
   const visibleEntries = (timeline?.entries ?? []).filter(
     (entry) => eraFilter === "all" || entry.era === eraFilter,
   );
+  const eraMeta = useMemo(
+    () => new Map((timeline?.eras ?? []).map((item) => [item.name, item])),
+    [timeline],
+  );
+  const eraCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of timeline?.entries ?? []) {
+      if (entry.era) counts.set(entry.era, (counts.get(entry.era) ?? 0) + 1);
+    }
+    return counts;
+  }, [timeline]);
 
   return (
     <div className="ws-app studio-app timeline-page">
@@ -363,17 +382,18 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
           <>
             <div className="studio-section">
               <div className="sidebar-section-label">时间线</div>
-              <select
-                className="studio-select"
+              <SelectMenu
                 value={timeline.timeline?.slug ?? ""}
-                onChange={(event) => void switchTimeline(event.target.value)}
+                options={timeline.timelines.map((item) => ({
+                  value: item.slug,
+                  label: item.name,
+                  hint: `${item.entry_count} 个时间点`,
+                  color: item.color,
+                }))}
+                onChange={(value) => void switchTimeline(value)}
+                ariaLabel="切换时间线"
                 disabled={switchingTimeline}
-                aria-label="切换时间线"
-              >
-                {timeline.timelines.map((item) => (
-                  <option key={item.id} value={item.slug}>{item.name}</option>
-                ))}
-              </select>
+              />
               {canEdit && (
                 <button type="button" className="studio-action" onClick={() => void addTimeline()} disabled={switchingTimeline}>
                   <Plus size={16} /> 新时间线
@@ -394,22 +414,29 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
                       setSidebarOpen(false);
                     }}
                   >
-                    <i /> 全部纪元
+                    <i className="era-dot" style={{ background: "var(--muted-foreground)" }} />
+                    <span>全部纪元</span>
+                    <span className="era-count">{timeline?.entries.length ?? 0}</span>
                   </button>
-                  {eras.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={eraFilter === item ? "active" : ""}
-                      aria-pressed={eraFilter === item}
-                      onClick={() => {
-                        setEraFilter(item);
-                        setSidebarOpen(false);
-                      }}
-                    >
-                      <i /> {item}
-                    </button>
-                  ))}
+                  {eras.map((item) => {
+                    const meta = eraMeta.get(item);
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        className={eraFilter === item ? "active" : ""}
+                        aria-pressed={eraFilter === item}
+                        onClick={() => {
+                          setEraFilter(item);
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        <i className="era-dot" style={{ background: ERA_DOT[meta?.color ?? ""] ?? "var(--muted-foreground)" }} />
+                        <span>{item}</span>
+                        <span className="era-count">{eraCounts.get(item) ?? 0}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -427,12 +454,18 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
                         <input required type="number" value={eraStart} onChange={(event) => setEraStart(event.target.value)} placeholder="起" />
                         <input required type="number" value={eraEnd} onChange={(event) => setEraEnd(event.target.value)} placeholder="止" />
                       </div>
-                      <select value={eraColor} onChange={(event) => setEraColor(event.target.value)}>
-                        <option value="blue">蓝</option>
-                        <option value="green">绿</option>
-                        <option value="gold">金</option>
-                        <option value="violet">紫</option>
-                      </select>
+                      <SelectMenu
+                        compact
+                        value={eraColor}
+                        onChange={setEraColor}
+                        ariaLabel="纪元颜色"
+                        options={[
+                          { value: "blue", label: "蓝", color: "blue" },
+                          { value: "green", label: "绿", color: "green" },
+                          { value: "gold", label: "金", color: "gold" },
+                          { value: "violet", label: "紫", color: "violet" },
+                        ]}
+                      />
                       <button type="submit" className="studio-action" disabled={eraSaving}>{eraSaving ? "…" : "添加纪元"}</button>
                     </form>
                     {timeline.eras.length > 0 && (
@@ -572,12 +605,13 @@ export function TimelinePage({ worldSlug, session, onLogout }: TimelinePageProps
                     </label>
                     <label className="field">
                       <span>关联卡片 / 可选</span>
-                      <select value={cardId} onChange={(event) => setCardId(event.target.value)}>
-                        <option value="">不关联</option>
-                        {cards.map((card) => (
-                          <option key={card.id} value={card.id}>{card.title}</option>
-                        ))}
-                      </select>
+                      <SelectMenu
+                        compact
+                        value={cardId}
+                        onChange={setCardId}
+                        ariaLabel="关联卡片"
+                        options={[{ value: "", label: "不关联" }, ...cards.map((card) => ({ value: String(card.id), label: card.title }))]}
+                      />
                     </label>
                     <div className="timeline-form-actions">
                       <button type="submit" className="studio-primary" disabled={saving || !title.trim() || year === "" || invalidRange}>

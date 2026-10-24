@@ -129,6 +129,16 @@ test("workspace tree icon -> editor page icon", async ({ page }) => {
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.goto(`/w/${world.slug}?card=${overviewId}`, { waitUntil: "domcontentloaded" });
   await page.locator(".tree-row").first().waitFor({ timeout: 20_000 });
+  await page.evaluate(() => {
+    const target = window as typeof window & { __vtCalls?: number };
+    target.__vtCalls = 0;
+    const original = document.startViewTransition?.bind(document);
+    if (!original) return;
+    document.startViewTransition = (callback: ViewTransitionUpdateCallback) => {
+      target.__vtCalls = (target.__vtCalls ?? 0) + 1;
+      return original(callback);
+    };
+  });
   const row = page.locator(".tree-row", { hasText: "R2 Pin" }).first();
   await row.hover();
   const source = await row.locator(".tree-icon").evaluate((node) => ({
@@ -141,6 +151,7 @@ test("workspace tree icon -> editor page icon", async ({ page }) => {
   await row.click();
   await page.waitForURL(`**card=${pin.id}`);
   await expect.poll(async () => readName(page, ".page-icon"), { timeout: 1500 }).toEqual(source);
+  expect(await page.evaluate(() => (window as typeof window & { __vtCalls?: number }).__vtCalls ?? 0)).toBeGreaterThan(0);
   await page.waitForTimeout(400);
   expect(errors).toEqual([]);
 });
@@ -210,44 +221,99 @@ test("light matrix: login, register, workspace, map, SSR wiki", async ({ page, c
   await context.addCookies([LIGHT_COOKIE]);
   await page.addInitScript(() => localStorage.setItem("opuscule-theme", "light"));
 
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.locator(".auth-shell").waitFor({ timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(200);
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`auth-login-light-${testInfo.project.name}.png`, { maxDiffPixelRatio: 0 });
 
   await page.goto("/register", { waitUntil: "domcontentloaded" });
   await page.locator(".auth-shell").waitFor({ timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(200);
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`auth-register-light-${testInfo.project.name}.png`, { maxDiffPixelRatio: 0 });
 
   await page.goto(`/w/${world.slug}?card=${overviewId}`, { waitUntil: "domcontentloaded" });
   await page.locator(".tree-row").first().waitFor({ timeout: 20_000 });
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`workspace-light-${testInfo.project.name}.png`, { fullPage: false, maxDiffPixelRatio: 0 });
 
   await page.goto(`/w/${world.slug}/map`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1800);
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`map-light-${testInfo.project.name}.png`, { fullPage: false, maxDiffPixelRatio: 0 });
 
   await page.goto("/w/wuhai/wiki", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => document.fonts.ready);
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`ssr-wiki-light-${testInfo.project.name}.png`, { maxDiffPixelRatio: 0 });
 });
 
 test("auth dark: login and register", async ({ page, context }, testInfo) => {
   await context.addCookies([{ name: "opuscule-theme", value: "dark", url: "http://127.0.0.1:5174" }]);
   await page.addInitScript(() => localStorage.setItem("opuscule-theme", "dark"));
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.locator(".auth-shell").waitFor({ timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(200);
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`auth-login-dark-${testInfo.project.name}.png`, { maxDiffPixelRatio: 0 });
   await page.goto("/register", { waitUntil: "domcontentloaded" });
   await page.locator(".auth-shell").waitFor({ timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(200);
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot(`auth-register-dark-${testInfo.project.name}.png`, { maxDiffPixelRatio: 0 });
+});
+
+test("custom controls: timeline select, single-border search, checkbox", async ({ page }) => {
+  await page.goto("/w/wuhai/timeline", { waitUntil: "domcontentloaded" });
+  await page.locator(".timeline-canvas-shell").waitFor({ timeout: 20_000 });
+  await expect(page.locator(".timeline-page .sidebar")).toHaveScreenshot("timeline-sidebar-dark-auth.png");
+  const trigger = page.locator(".select-menu-trigger").first();
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
+  const listbox = page.locator(".select-menu-pop");
+  await expect(listbox).toBeVisible();
+  await expect(listbox).toHaveAttribute("role", "listbox");
+  await expect(listbox.locator("[role=option]")).toHaveCount(2);
+  await expect(listbox).toHaveCSS("animation-name", "select-in");
+  const second = listbox.locator("[role=option]").nth(1);
+  await second.click();
+  await expect(trigger).toContainText("航海志");
+
+  await page.goto(`/w/${world.slug}?card=${overviewId}`, { waitUntil: "domcontentloaded" });
+  await page.locator(".tree-row").first().waitFor({ timeout: 20_000 });
+  await expect(page.locator(".sidebar").first()).toHaveScreenshot("workspace-sidebar-dark-auth.png");
+  const search = page.locator(".search").first();
+  const input = search.locator("input");
+  await expect(search).toHaveCSS("height", "44px");
+  await expect(input).toHaveCSS("border-top-width", "0px");
+  await input.focus();
+  const focused = await search.evaluate((node) => getComputedStyle(node).boxShadow);
+  expect(focused).not.toBe("none");
+
+  await page.goto("/explore", { waitUntil: "domcontentloaded" });
+  const tile = page.locator(".site-tile").first();
+  await tile.waitFor();
+  await expect(tile).toHaveCSS("transition-property", /transform/);
+  await tile.hover();
+  await expect.poll(async () => tile.evaluate((node) => getComputedStyle(node).transform), { timeout: 1000 }).not.toBe("none");
+
+  await page.goto("/worlds/new", { waitUntil: "domcontentloaded" });
+  const checkbox = page.locator('input[type="checkbox"]').first();
+  await expect(checkbox).toBeVisible();
+  await expect(checkbox).toHaveCSS("appearance", "none");
+  const size = await checkbox.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { width: Math.round(box.width), height: Math.round(box.height) };
+  });
+  expect(size).toEqual({ width: 16, height: 16 });
 });
 
 test("320px touch targets", async ({ page, context }) => {

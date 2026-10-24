@@ -17,9 +17,12 @@ for (const theme of ["dark", "light"] as const) {
         localStorage.setItem("opuscule-theme", value);
       }, theme);
 
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.mouse.move(0, 0);
       await page.goto(target.path, { waitUntil: "domcontentloaded" });
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(700);
+      await page.mouse.move(0, 0);
 
       await expect(page).toHaveScreenshot(
         `${target.name}-${theme}-${testInfo.project.name}.png`,

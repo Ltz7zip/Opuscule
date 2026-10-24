@@ -15,6 +15,7 @@ import { useDocumentMeta } from "../lib/meta";
 import { vt, vtClassRef } from "../lib/viewTransition";
 import { confirmAction } from "../lib/dialogs";
 import { ContextMenu, type ContextMenuEntry, type ContextMenuModel } from "./ContextMenu";
+import { SelectMenu } from "./SelectMenu";
 import type { MapData, MapMarker, SessionState, TerrainWebResult, TerrainWebStyle, WorldDetail } from "../types";
 
 const Terrain3DPreview = lazy(() => import("./Terrain3DPreview"));
@@ -859,29 +860,43 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
               <div className="terrain-params-row">
                 <label className="field">
                   <span>输出分辨率</span>
-                  <select value={terrainResolution} onChange={(event) => setTerrainResolution(event.target.value)}>
-                    <option value="1024">1024 × 640 · 快速</option>
-                    <option value="1536">1536 × 960 · 标准</option>
-                    <option value="2048">2048 × 1280 · 细节</option>
-                    <option value="4096">4096 × 2560 · 超清（较慢）</option>
-                  </select>
+                  <SelectMenu
+                    compact
+                    value={terrainResolution}
+                    onChange={setTerrainResolution}
+                    ariaLabel="输出分辨率"
+                    options={[
+                      { value: "1024", label: "1024 × 640 · 快速" },
+                      { value: "1536", label: "1536 × 960 · 标准" },
+                      { value: "2048", label: "2048 × 1280 · 细节" },
+                      { value: "4096", label: "4096 × 2560 · 超清（较慢）" },
+                    ]}
+                  />
                 </label>
                 <label className="field">
                   <span>地名数量</span>
-                  <select value={terrainLabelCount} onChange={(event) => setTerrainLabelCount(Number(event.target.value))}>
-                    {[0, 4, 7, 10, 12].map((count) => (
-                      <option key={count} value={count}>{count} 个</option>
-                    ))}
-                  </select>
+                  <SelectMenu
+                    compact
+                    value={String(terrainLabelCount)}
+                    onChange={(value) => setTerrainLabelCount(Number(value))}
+                    ariaLabel="地名数量"
+                    options={[0, 4, 7, 10, 12].map((count) => ({ value: String(count), label: `${count} 个` }))}
+                  />
                 </label>
               </div>
               <label className="field">
                 <span>风格</span>
-                <select value={terrainStyle} onChange={(event) => setTerrainStyle(event.target.value as TerrainWebStyle)}>
-                  <option value="atlas">Atlas · 自然地形</option>
-                  <option value="parchment">Parchment · 手绘地图</option>
-                  <option value="topographic">Topographic · 等高线</option>
-                </select>
+                <SelectMenu
+                  compact
+                  value={terrainStyle}
+                  onChange={(value) => setTerrainStyle(value as TerrainWebStyle)}
+                  ariaLabel="地形风格"
+                  options={[
+                    { value: "atlas", label: "Atlas · 自然地形" },
+                    { value: "parchment", label: "Parchment · 手绘地图" },
+                    { value: "topographic", label: "Topographic · 等高线" },
+                  ]}
+                />
               </label>
               <button type="button" className="studio-primary terrain-generate" onClick={() => void generateTerrain()} disabled={terrainBusy}>
                 {terrainBusy ? <Loader2 size={16} className="spin" /> : <Mountain size={16} />}
@@ -1191,20 +1206,23 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                     </label>
                     <label className="field">
                       <span>类型</span>
-                      <select value={kind} onChange={(event) => setKind(event.target.value as MapMarker["kind"])}>
-                        {(Object.keys(kindLabels) as MapMarker["kind"][]).map((item) => (
-                          <option key={item} value={item}>{kindLabels[item]}</option>
-                        ))}
-                      </select>
+                      <SelectMenu
+                        compact
+                        value={kind}
+                        onChange={(value) => setKind(value as MapMarker["kind"])}
+                        ariaLabel="标记类型"
+                        options={(Object.keys(kindLabels) as MapMarker["kind"][]).map((item) => ({ value: item, label: kindLabels[item] }))}
+                      />
                     </label>
                     <label className="field">
                       <span>关联卡片（可选）</span>
-                      <select value={cardId} onChange={(event) => setCardId(event.target.value)}>
-                        <option value="">不关联</option>
-                        {cards.map((card) => (
-                          <option key={card.id} value={card.id}>{card.title}</option>
-                        ))}
-                      </select>
+                      <SelectMenu
+                        compact
+                        value={cardId}
+                        onChange={setCardId}
+                        ariaLabel="关联卡片"
+                        options={[{ value: "", label: "不关联" }, ...cards.map((card) => ({ value: String(card.id), label: card.title }))]}
+                      />
                     </label>
                     <div className="map-form-actions">
                       <button type="submit" className="studio-primary" disabled={saving || !label.trim()}>
@@ -1223,20 +1241,23 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                       </label>
                       <label className="field">
                         <span>类型</span>
-                        <select value={editKind} onChange={(event) => setEditKind(event.target.value as MapMarker["kind"])}>
-                          {(Object.keys(kindLabels) as MapMarker["kind"][]).map((item) => (
-                            <option key={item} value={item}>{kindLabels[item]}</option>
-                          ))}
-                        </select>
+                        <SelectMenu
+                          compact
+                          value={editKind}
+                          onChange={(value) => setEditKind(value as MapMarker["kind"])}
+                          ariaLabel="编辑标记类型"
+                          options={(Object.keys(kindLabels) as MapMarker["kind"][]).map((item) => ({ value: item, label: kindLabels[item] }))}
+                        />
                       </label>
                       <label className="field">
                         <span>关联卡片（可选）</span>
-                        <select value={editCard} onChange={(event) => setEditCard(event.target.value)}>
-                          <option value="">不关联</option>
-                          {cards.map((card) => (
-                            <option key={card.id} value={card.id}>{card.title}</option>
-                          ))}
-                        </select>
+                        <SelectMenu
+                          compact
+                          value={editCard}
+                          onChange={setEditCard}
+                          ariaLabel="编辑关联卡片"
+                          options={[{ value: "", label: "不关联" }, ...cards.map((card) => ({ value: String(card.id), label: card.title }))]}
+                        />
                       </label>
                       <div className="map-form-actions">
                         <button type="submit" className="studio-primary" disabled={saving || !editLabel.trim()}>
