@@ -355,6 +355,33 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   expect(trailPixels).toBeGreaterThan(0);
 });
 
+test.describe("retina map lens", () => {
+  test.use({ deviceScaleFactor: 2 });
+
+  test("lens fills all four quadrants at DPR 2", async ({ page }) => {
+    await page.goto("/w/wuhai/map", { waitUntil: "domcontentloaded" });
+    await page.locator(".map-canvas").waitFor({ timeout: 20_000 });
+    await page.waitForTimeout(1200);
+    const box = await page.locator(".map-canvas").boundingBox();
+    if (!box) throw new Error("map canvas has no box");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.locator(".map-lens")).toHaveClass(/is-on/);
+    const quadrants = await page.locator(".map-lens canvas").evaluate((node) => {
+      const canvas = node as HTMLCanvasElement;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      const sample = (x: number, y: number) => {
+        const data = ctx.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data;
+        return data[3];
+      };
+      return { width: canvas.width, height: canvas.height, q: [sample(0.25, 0.25), sample(0.75, 0.25), sample(0.25, 0.75), sample(0.75, 0.75)] };
+    });
+    expect(quadrants?.width).toBe(380);
+    expect(quadrants?.height).toBe(380);
+    expect(quadrants?.q.every((alpha) => alpha > 0)).toBe(true);
+  });
+});
+
 test("motion opt-in overrides reduced motion for this site", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?motion=force", { waitUntil: "domcontentloaded" });

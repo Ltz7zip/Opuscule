@@ -41,6 +41,9 @@ export function MapLens({ hostRef, src, zoom, disabled = false }: MapLensProps) 
     canvas.height = size;
     canvas.style.width = `${LENS_SIZE}px`;
     canvas.style.height = `${LENS_SIZE}px`;
+    // Draw in CSS pixels: without this, a DPR-2 canvas only fills its
+    // top-left quadrant (190 of 380 backing pixels).
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     let targetX = 0;
     let targetY = 0;
