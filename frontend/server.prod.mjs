@@ -45,6 +45,14 @@ function shell({ title, description, canonical, body, initial, ssr, theme = "dar
   return `<!doctype html>
 <html lang="zh-CN" data-theme="${theme}">
 <head>
+  <style>
+    @view-transition { navigation: auto; }
+    /* Paint the canvas before the stylesheet arrives: a full-page click must
+       not flash white between the old document and the new one. */
+    html { background: #18181b; color-scheme: dark; }
+    html[data-theme="light"] { background: #ffffff; color-scheme: light; }
+    body { margin: 0; background: inherit; }
+  </style>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="${theme === "light" ? "#ffffff" : "#18181b"}">
@@ -73,9 +81,19 @@ function readTheme(request) {
   return found ? found[1] : "dark";
 }
 
+
+function sendHtml(response, status, html) {
+  const body = String(html);
+  response.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-cache",
+  });
+  response.end(body);
+}
+
 function sendStatus(response, { status, variant, title, description, canonical, theme }) {
-  response.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
-  response.end(shell({ title, description, canonical, body: renderStatus(variant), theme, ssr: false }));
+  sendHtml(response, status, shell({ title, description, canonical, body: renderStatus(variant), theme, ssr: false }));
 }
 
 const SPA_ROUTE =
@@ -151,7 +169,7 @@ const server = http.createServer(async (request, response) => {
   }
   if (proxy(request, response, url.pathname)) return;
 
-  if (url.pathname.startsWith("/assets/")) {
+  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/")) {
     serveStatic(url.pathname, response);
     return;
   }
@@ -166,18 +184,15 @@ const server = http.createServer(async (request, response) => {
       }
       const initial = { kind: "explore", worlds };
       const body = renderExplore(initial);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(
-        shell({
-          title: "探索世界 · Opuscule",
+      sendHtml(response, 200, shell({
+          title: "公开世界 · Opuscule",
           description: "浏览已经公开的世界，进入它们的 Wiki。",
           canonical: `${url.origin}/explore`,
           body,
           initial,
           theme,
           ssr: true,
-        }),
-      );
+        }),);
       return;
     } catch (error) {
       console.error(error);
@@ -192,15 +207,12 @@ const server = http.createServer(async (request, response) => {
     try {
       const profile = await fetchJson(`/u/${encodeURIComponent(username)}/`);
       if (!profile) {
-        response.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
         await sendStatus(response, { status: 404, variant: "404", title: "个人主页不存在 · Opuscule", description: "这个个人主页不存在或未公开。", canonical: `${url.origin}${url.pathname}`, theme });
         return;
       }
       const initial = { kind: "profile", username, profile };
       const body = renderProfile(initial);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(
-        shell({
+      sendHtml(response, 200, shell({
           title: `${profile.name} · Opuscule`,
           description: profile.bio?.slice(0, 180) || profile.headline || "Opuscule 个人主页。",
           canonical: `${url.origin}/u/${username}`,
@@ -208,8 +220,7 @@ const server = http.createServer(async (request, response) => {
           initial,
           theme,
           ssr: true,
-        }),
-      );
+        }),);
       return;
     } catch (error) {
       console.error(error);
@@ -228,18 +239,15 @@ const server = http.createServer(async (request, response) => {
       }
       const initial = { kind: "home", world };
       const body = renderHome(initial);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(
-        shell({
-          title: `${world.name} · Opuscule`,
+      sendHtml(response, 200, shell({
+          title: `${world.name}`,
           description: world.description || "一个公开的 Opuscule 世界。",
           canonical: `${url.origin}/`,
           body,
           initial,
           theme,
           ssr: true,
-        }),
-      );
+        }),);
       return;
     } catch (error) {
       console.error(error);
@@ -273,8 +281,7 @@ const server = http.createServer(async (request, response) => {
       const html = readFileSync(index, "utf8")
         .replace('data-theme="dark"', `data-theme="${theme}"`)
         .replace('content="#18181b"', `content="${theme === "light" ? "#ffffff" : "#18181b"}"`);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
-      response.end(html);
+      sendHtml(response, 200, html);
     } catch {
       response.writeHead(500);
       response.end("Missing dist/index.html");
@@ -287,23 +294,20 @@ const server = http.createServer(async (request, response) => {
   try {
     const world = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/`);
     if (!world || !world.is_public_read) {
-      response.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
       await sendStatus(response, { status: 404, variant: "missing-world", title: "世界不存在 · Opuscule", description: "这个公开 Wiki 不存在。", canonical: `${url.origin}${url.pathname}`, theme });
       return;
     }
     const card = cardSlug ? await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/cards/by-slug/${encodeURIComponent(cardSlug)}/`) : null;
     if (cardSlug && !card) {
-      response.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
       await sendStatus(response, { status: 404, variant: "missing-card", title: "卡片不存在 · Opuscule", description: "这张公开 Wiki 卡片不存在。", canonical: `${url.origin}${url.pathname}`, theme });
       return;
     }
     const initial = { kind: "wiki", worldSlug, cardSlug, world, card: card ?? undefined };
     const body = renderWiki(initial);
-    const title = card ? `${card.title} · ${world.name} Wiki` : `${world.name} · Wiki`;
+    const title = card ? `${card.title} · ${world.name}` : world.name;
     const description = (card?.body_text || world.description || "").slice(0, 180);
     const canonical = `${url.origin}/w/${worldSlug}/wiki${cardSlug ? `/${cardSlug}` : ""}`;
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    response.end(shell({ title, description, canonical, body, initial, theme, ssr: true }));
+    sendHtml(response, 200, shell({ title, description, canonical, body, initial, theme, ssr: true }));
   } catch (error) {
     console.error(error);
     await sendStatus(response, { status: 500, variant: "500", title: "500 · Opuscule", description: "页面渲染失败。", canonical: `${url.origin}${url.pathname}`, theme });

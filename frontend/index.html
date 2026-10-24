@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="dark">
   <head>
+  <style>
+    @view-transition { navigation: auto; }
+    /* Paint the canvas before the stylesheet arrives: a full-page click must
+       not flash white between the old document and the new one. */
+    html { background: #18181b; color-scheme: dark; }
+    html[data-theme="light"] { background: #ffffff; color-scheme: light; }
+    body { margin: 0; background: inherit; }
+  </style>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#18181b" />

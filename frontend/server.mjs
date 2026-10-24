@@ -34,6 +34,14 @@ function htmlShell({ title, description, canonical, body, initial, ssr, theme = 
   return `<!doctype html>
 <html lang="zh-CN" data-theme="${theme}">
 <head>
+  <style>
+    @view-transition { navigation: auto; }
+    /* Paint the canvas before the stylesheet arrives: a full-page click must
+       not flash white between the old document and the new one. */
+    html { background: #18181b; color-scheme: dark; }
+    html[data-theme="light"] { background: #ffffff; color-scheme: light; }
+    body { margin: 0; background: inherit; }
+  </style>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="${theme === "light" ? "#ffffff" : "#18181b"}">
@@ -47,6 +55,8 @@ function htmlShell({ title, description, canonical, body, initial, ssr, theme = 
   <meta property="og:url" content="${escapeHtml(canonical)}">
   <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="/src/styles/app.css?direct">
+  <link rel="stylesheet" href="/src/styles/auth.css?direct">
+  <link rel="stylesheet" href="/src/styles/legacy-workspace.css?direct">
 </head>
 <body>
   <div id="root">${body}</div>
@@ -56,11 +66,23 @@ function htmlShell({ title, description, canonical, body, initial, ssr, theme = 
 </html>`;
 }
 
+
+function sendHtml(response, status, html) {
+  const body = String(html);
+  response.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-cache",
+  });
+  response.end(body);
+}
+
 async function sendStatus(response, { status, variant, title, description, canonical, pathname, theme }) {
   try {
     const { renderStatus } = await vite.ssrLoadModule("/src/ssr/entry-server.tsx");
-    response.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
-    response.end(
+    sendHtml(
+      response,
+      status,
       await vite.transformIndexHtml(
         pathname,
         htmlShell({
@@ -136,21 +158,19 @@ const server = http.createServer(async (request, response) => {
       const initial = { kind: "explore", worlds };
       const { renderExplore } = await vite.ssrLoadModule("/src/ssr/entry-server.tsx");
       const body = renderExplore(initial);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(
-        await vite.transformIndexHtml(
-          url.pathname,
-          htmlShell({
-            title: "探索世界 · Opuscule",
-            description: "浏览已经公开的世界，进入它们的 Wiki。",
-            canonical: `${url.origin}/explore`,
-            body,
-            initial,
-            theme,
-            ssr: true,
-          }),
-        ),
+      const html = await vite.transformIndexHtml(
+        url.pathname,
+        htmlShell({
+          title: "公开世界 · Opuscule",
+          description: "浏览已经公开的世界，进入它们的 Wiki。",
+          canonical: `${url.origin}/explore`,
+          body,
+          initial,
+          theme,
+          ssr: true,
+        }),
       );
+      sendHtml(response, 200, html);
       return;
     } catch (error) {
       vite.ssrFixStacktrace(error);
@@ -188,9 +208,7 @@ const server = http.createServer(async (request, response) => {
       const initial = { kind: "profile", username, profile };
       const { renderProfile } = await vite.ssrLoadModule("/src/ssr/entry-server.tsx");
       const body = renderProfile(initial);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(
-        await vite.transformIndexHtml(
+      sendHtml(response, 200, await vite.transformIndexHtml(
           url.pathname,
           htmlShell({
             title: `${profile.name} · Opuscule`,
@@ -201,8 +219,7 @@ const server = http.createServer(async (request, response) => {
             theme,
             ssr: true,
           }),
-        ),
-      );
+        ),);
       return;
     } catch (error) {
       vite.ssrFixStacktrace(error);
@@ -231,12 +248,10 @@ const server = http.createServer(async (request, response) => {
       const initial = { kind: "home", world };
       const { renderHome } = await vite.ssrLoadModule("/src/ssr/entry-server.tsx");
       const body = renderHome(initial);
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(
-        await vite.transformIndexHtml(
+      sendHtml(response, 200, await vite.transformIndexHtml(
           url.pathname,
           htmlShell({
-            title: `${world.name} · Opuscule`,
+            title: `${world.name}`,
             description: world.description || "一个公开的 Opuscule 世界。",
             canonical: `${url.origin}/`,
             body,
@@ -244,8 +259,7 @@ const server = http.createServer(async (request, response) => {
             theme,
             ssr: true,
           }),
-        ),
-      );
+        ),);
       return;
     } catch (error) {
       vite.ssrFixStacktrace(error);
@@ -293,8 +307,7 @@ const server = http.createServer(async (request, response) => {
         html = html
           .replace('data-theme="dark"', `data-theme="${theme}"`)
           .replace('content="#18181b"', `content="${theme === "light" ? "#ffffff" : "#18181b"}"`);
-        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        response.end(html);
+        sendHtml(response, 200, html);
       } catch (cause) {
         vite.ssrFixStacktrace(cause);
         response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
@@ -339,16 +352,14 @@ const server = http.createServer(async (request, response) => {
     const initial = { kind: "wiki", worldSlug, cardSlug, world, card: card ?? undefined };
     const { renderWiki } = await vite.ssrLoadModule("/src/ssr/entry-server.tsx");
     const body = renderWiki(initial);
-    const title = card ? `${card.title} · ${world.name} Wiki` : `${world.name} · Wiki`;
+    const title = card ? `${card.title} · ${world.name}` : world.name;
     const description = (card?.body_text || world.description || "").slice(0, 180);
     const canonical = `${url.origin}/w/${worldSlug}/wiki${cardSlug ? `/${cardSlug}` : ""}`;
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    response.end(
-      await vite.transformIndexHtml(
-        url.pathname,
-        htmlShell({ title, description, canonical, body, initial, theme, ssr: true }),
-      ),
+    const html = await vite.transformIndexHtml(
+      url.pathname,
+      htmlShell({ title, description, canonical, body, initial, theme, ssr: true }),
     );
+    sendHtml(response, 200, html);
   } catch (error) {
     vite.ssrFixStacktrace(error);
     console.error(error);
