@@ -4,6 +4,7 @@ import { fetchCardBySlug, fetchWorld, fetchWorldTimeline } from "../api";
 import { typeLabel } from "../lib/labels";
 import { useDocumentMeta } from "../lib/meta";
 import { useSharedSource, useVtTarget } from "../lib/viewTransition";
+import { ContourPlate } from "./ContourPlate";
 import type {
   CardDetail,
   CardSummary,
@@ -32,8 +33,9 @@ const eraTones = ["blue", "teal", "red", "violet", "sky", "gold"] as const;
 /** A world surface has no cover image; the initial plate is its stable leaf. */
 function WorldCover({ name, className, style, innerRef }: { name: string; className: string; style?: CSSProperties; innerRef?: Ref<HTMLSpanElement> }) {
   return (
-    <span ref={innerRef} className={className} style={style} aria-hidden="true">
-      {name.trim().slice(0, 1)}
+    <span ref={innerRef} className={`${className} has-contour`} style={style} aria-hidden="true">
+      <ContourPlate seed={name} detail={className.includes("site-hero-cover")} />
+      <span className="cover-glyph">{name.trim().slice(0, 1)}</span>
     </span>
   );
 }
@@ -51,11 +53,12 @@ function Tile({ card, worldSlug }: { card: CardSummary; worldSlug: string }) {
       onTouchStart={source.onTouchStart}
     >
       <span
-        className="site-tile-cover"
+        className="site-tile-cover has-contour"
         ref={source.ref}
         style={card.cover ? { backgroundImage: `url(${card.cover})` } : undefined}
       >
-        {!card.cover && card.title.trim().slice(0, 1)}
+        {!card.cover && <ContourPlate seed={card.slug} />}
+        {!card.cover && <span className="cover-glyph">{card.title.trim().slice(0, 1)}</span>}
       </span>
       <span className="site-tile-kind">{typeLabel(card.type_key)}</span>
       <span className="site-tile-name">{card.title}</span>
@@ -274,7 +277,7 @@ export function WikiPage({
                 </div>
               </div>
               <div
-                className="site-page-cover"
+                className="site-page-cover has-contour"
                 ref={articleCover.ref}
                 style={{
                   ...articleCover.style,
@@ -282,7 +285,8 @@ export function WikiPage({
                 }}
                 aria-hidden="true"
               >
-                {!card.cover && card.title.trim().slice(0, 1)}
+                {!card.cover && <ContourPlate seed={card.slug} detail />}
+                {!card.cover && <span className="cover-glyph">{card.title.trim().slice(0, 1)}</span>}
               </div>
             </header>
 

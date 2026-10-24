@@ -15,16 +15,30 @@ interface MapCanvasStageProps {
   terrain: boolean;
 }
 
-function decodeHeightmap(value: string): Uint8Array | null {
+async function decodeHeightmap(value: string): Promise<ImageData | null> {
   if (!value) return null;
-  try {
-    const binary = window.atob(value);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  } catch {
-    return null;
-  }
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          resolve(null);
+          return;
+        }
+        context.drawImage(image, 0, 0);
+        resolve(context.getImageData(0, 0, canvas.width, canvas.height));
+      } catch {
+        resolve(null);
+      }
+    };
+    image.onerror = () => resolve(null);
+    image.src = `data:image/png;base64,${value}`;
+  });
 }
 
 function hash2(x: number, y: number) {
@@ -48,14 +62,14 @@ export default function MapCanvasStage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const dimensionsRef = useRef({ width: 0, height: 0 });
-  const levels = heightmap ? decodeHeightmap(heightmap) : null;
+  const levelsRef = useRef<ImageData | null>(null);
 
   useEffect(() => {
     const image = new Image();
     image.decoding = "async";
     image.onload = () => {
       imageRef.current = image;
-      draw();
+      drawRef.current();
     };
     image.src = src;
     return () => {
@@ -97,8 +111,12 @@ export default function MapCanvasStage({
       context.restore();
     }
 
-    if (terrain && levels && zoom > 1.02) {
-      const detailOpacity = Math.min(0.9, (zoom - 1) * 0.46);
+    const levels = levelsRef.current;
+    if (terrain && levels) {
+      const hmWidth = levels.width || heightmapWidth;
+      const hmHeight = levels.height || heightmapHeight;
+      const detailOpacity = Math.min(0.8, 0.36 + (zoom - 1) * 0.34);
+      const stride = zoom < 1.25 ? 2 : 1;
       const centerX = width / 2 + pan.x;
       const centerY = height / 2 + pan.y;
       const displayMapWidth = displayWidth * zoom;
@@ -107,41 +125,49 @@ export default function MapCanvasStage({
       context.beginPath();
       context.rect(0, 0, width, height);
       context.clip();
-      context.globalAlpha = detailOpacity;
 
-      const px = (x: number) => centerX + left + (x / (heightmapWidth - 1) - 0.5) * displayMapWidth;
-      const py = (y: number) => centerY + top + (y / (heightmapHeight - 1) - 0.5) * displayMapHeight;
-      const sample = (x: number, y: number) =>
-        levels[(Math.max(0, Math.min(heightmapHeight - 1, y)) * heightmapWidth + Math.max(0, Math.min(heightmapWidth - 1, x))) * 3] / 255;
+      const px = (x: number) => centerX + left + (x / (hmWidth - 1) - 0.5) * displayMapWidth;
+      const py = (y: number) => centerY + top + (y / (hmHeight - 1) - 0.5) * displayMapHeight;
+      const sample = (x: number, y: number) => {
+        const cx = Math.max(0, Math.min(hmWidth - 1, x));
+        const cy = Math.max(0, Math.min(hmHeight - 1, y));
+        return levels.data[(cy * hmWidth + cx) * 4] / 255;
+      };
 
-      // Contours are drawn in screen space, so their weight does not grow with zoom.
-      context.lineWidth = 0.7;
-      context.strokeStyle = "rgba(26, 38, 30, .28)";
-      context.beginPath();
-      for (let level = 0.1; level < 0.95; level += 0.055) {
-        for (let y = 0; y < heightmapHeight - 1; y += 1) {
-          for (let x = 0; x < heightmapWidth - 1; x += 1) {
+      // Survey contours: screen-space weight, major every fifth level.
+      context.strokeStyle = "rgb(26, 38, 30)";
+      let levelIndex = 0;
+      for (let level = 0.1; level < 0.94; level += 0.052) {
+        const major = levelIndex % 5 === 0;
+        context.beginPath();
+        for (let y = 0; y < hmHeight - stride; y += stride) {
+          for (let x = 0; x < hmWidth - stride; x += stride) {
             const a = sample(x, y);
-            const b = sample(x + 1, y);
-            const c = sample(x + 1, y + 1);
-            const d = sample(x, y + 1);
+            const b = sample(x + stride, y);
+            const c = sample(x + stride, y + stride);
+            const d = sample(x, y + stride);
             const edges: Array<[number, number]> = [];
-            if ((a < level) !== (b < level)) edges.push([x + (level - a) / (b - a), y]);
-            if ((b < level) !== (c < level)) edges.push([x + 1, y + (level - b) / (c - b)]);
-            if ((d < level) !== (c < level)) edges.push([x + (level - d) / (c - d), y + 1]);
-            if ((a < level) !== (d < level)) edges.push([x, y + (level - a) / (d - a)]);
+            if ((a < level) !== (b < level)) edges.push([x + (stride * (level - a)) / (b - a), y]);
+            if ((b < level) !== (c < level)) edges.push([x + stride, y + (stride * (level - b)) / (c - b)]);
+            if ((d < level) !== (c < level)) edges.push([x + (stride * (level - d)) / (c - d), y + stride]);
+            if ((a < level) !== (d < level)) edges.push([x, y + (stride * (level - a)) / (d - a)]);
             if (edges.length >= 2) {
               context.moveTo(px(edges[0][0]), py(edges[0][1]));
               context.lineTo(px(edges[1][0]), py(edges[1][1]));
             }
           }
         }
+        context.globalAlpha = detailOpacity * (major ? 1 : 0.55);
+        context.lineWidth = major ? 1.1 : 0.7;
+        context.stroke();
+        levelIndex += 1;
       }
-      context.stroke();
 
-      context.fillStyle = "rgba(22, 55, 33, .60)";
-      for (let y = 1; y < heightmapHeight - 1; y += 2) {
-        for (let x = 1; x < heightmapWidth - 1; x += 2) {
+      // A few summit triangles, kept sparse and below the contour weight.
+      context.globalAlpha = Math.min(0.7, detailOpacity * 1.25);
+      context.fillStyle = "rgba(22, 55, 33, .70)";
+      for (let y = 1; y < hmHeight - 1; y += stride * 2) {
+        for (let x = 1; x < hmWidth - 1; x += stride * 2) {
           const h = sample(x, y);
           if (h < 0.02 || h > 0.46 || hash2(x, y) > 0.24) continue;
           const sx = px(x);
@@ -172,12 +198,36 @@ export default function MapCanvasStage({
     }
   };
 
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!heightmap) {
+      levelsRef.current = null;
+      if (canvasRef.current) canvasRef.current.dataset.contours = "none";
+      drawRef.current();
+      return;
+    }
+    void decodeHeightmap(heightmap).then((decoded) => {
+      if (cancelled) return;
+      levelsRef.current = decoded;
+      if (canvasRef.current) canvasRef.current.dataset.contours = decoded ? "ready" : "missing";
+      drawRef.current();
+    });
+    return () => {
+      cancelled = true;
+    };
+    // draw is ref-based and intentionally not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heightmap]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const resize = () => {
       dimensionsRef.current = { width: canvas.clientWidth, height: canvas.clientHeight };
-      draw();
+      drawRef.current();
     };
     resize();
     const observer = new ResizeObserver(resize);
@@ -187,7 +237,7 @@ export default function MapCanvasStage({
   }, []);
 
   useLayoutEffect(() => {
-    draw();
+    drawRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, pan.x, pan.y, heightmap, heightmapWidth, heightmapHeight, selected, mapWidth, mapHeight]);
 

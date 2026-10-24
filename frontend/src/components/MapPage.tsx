@@ -1101,6 +1101,13 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                       <span>{cursorPoint ? `${(cursorPoint.x * 100).toFixed(1)}% · ${(cursorPoint.y * 100).toFixed(1)}%` : "拖动平移 · 滚轮缩放"}</span>
                     </div>
                   )}
+                  {isTerrain && map.background_url && !terrain3dOpen && (
+                    <div className="map-contour-badge" aria-hidden="true">
+                      <span className="map-contour-swatch" />
+                      <span>CONTOUR</span>
+                      <span>20 M</span>
+                    </div>
+                  )}
                   {terrain3dOpen && mesh ? (
                     <div
                       className="terrain-3d-layer"

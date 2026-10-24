@@ -6,6 +6,7 @@ import { useDocumentMeta } from "../lib/meta";
 import { useSharedSource } from "../lib/viewTransition";
 import { SiteFoot } from "./SiteFoot";
 import { SiteHeader } from "./SiteHeader";
+import { ContourPlate } from "./ContourPlate";
 
 interface ExplorePageProps {
   session: SessionState | null;
@@ -25,8 +26,9 @@ function ExploreTile({ world }: { world: WorldSummary }) {
       onBlur={source.onBlur}
       onTouchStart={source.onTouchStart}
     >
-      <span className="site-tile-cover" ref={source.ref} aria-hidden="true">
-        {world.name.trim().slice(0, 1)}
+      <span className="site-tile-cover has-contour" ref={source.ref} aria-hidden="true">
+        <ContourPlate seed={world.name} />
+        <span className="cover-glyph">{world.name.trim().slice(0, 1)}</span>
       </span>
       <span className="site-tile-kind">
         {world.kind === "private" ? "私人世界" : "共建世界"}

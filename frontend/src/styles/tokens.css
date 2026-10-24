@@ -140,6 +140,8 @@
   --duration-base: 200ms;
   --duration-slow: 320ms;
   --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+  --plate-x: 0px;
+  --plate-y: 0px;
   --pointer-x: 50%;
   --pointer-y: 38%;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

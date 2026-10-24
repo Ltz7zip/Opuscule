@@ -332,6 +332,8 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await page.keyboard.press("Escape");
   await expect(contextMenu).toBeHidden();
 
+  await expect(page.locator(".map-canvas-surface")).toHaveAttribute("data-contours", "ready");
+
   const mapBox = await page.locator(".map-canvas").boundingBox();
   if (mapBox) {
     await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
@@ -340,6 +342,16 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(page.locator(".map-lens-meta")).toContainText("1.9×");
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".site-hero-cover canvas.contour-cover")).toHaveCount(1);
+  await expect.poll(async () => page.locator(".site-hero-cover canvas.contour-cover").evaluate((node) => {
+    const canvas = node as HTMLCanvasElement;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let index = 3; index < data.length; index += 4) if (data[index] > 0) count += 1;
+    return count;
+  }), { timeout: 3000 }).toBeGreaterThan(0);
   await page.mouse.move(360, 280);
   await page.mouse.move(720, 420, { steps: 12 });
   await expect(page.locator(".cursor-trail")).toHaveCount(1);
