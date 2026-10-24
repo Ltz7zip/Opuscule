@@ -87,7 +87,7 @@ Ridgeline 是 Three.js + R3F + drei + GSAP ScrollTrigger + Lenis 的实时 DEM �
   - `.site-hero-cover canvas.contour-cover` 存在且非透明像素 > 0。
 - 公共页 16 张截图基线、SSR wiki 基线已更新（R7 视觉是 intentional）。
 - `tsc --noEmit`、`build:all`、`check:budget`：entry 77.9/120，workspace 172.2/175，CSS 32.9/40。
-- 提交：`3cb6aba`。
+- 提交：`2f77dbc`。
 
 ## 6. 还没做
 
