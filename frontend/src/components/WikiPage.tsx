@@ -45,6 +45,7 @@ function Tile({ card, worldSlug }: { card: CardSummary; worldSlug: string }) {
   return (
     <a
       className="site-tile"
+      data-cursor="OPEN"
       href={`/w/${worldSlug}/wiki/${card.slug}`}
       onPointerEnter={source.onPointerEnter}
       onPointerLeave={source.onPointerLeave}
@@ -184,6 +185,7 @@ export function WikiPage({
           <>
             <section className="site-hero">
               <div className="site-hero-main">
+                <p className="site-hero-overline">WORLD SURVEY · {world.kind === "private" ? "PRIVATE" : "OPEN"}</p>
                 <h1>{world.name}</h1>
                 {world.description && <p className="site-hero-sub">{world.description}</p>}
                 <p className="site-hero-stats">

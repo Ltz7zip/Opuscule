@@ -210,6 +210,7 @@ export function TimelineCanvas({
 
       <div
         ref={viewportRef}
+        data-cursor={canEdit ? "DRAG" : "SCROLL"}
         className={`timeline-canvas-viewport${canEdit ? " can-edit" : ""}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

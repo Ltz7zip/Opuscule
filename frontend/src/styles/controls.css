@@ -692,3 +692,74 @@ html.motion-force .site-tile:hover { transform: translateY(-4px) !important; }
 @media (max-width: 700px) {
   .site-page { background-image: none; }
 }
+
+.cursor-label {
+  position: fixed;
+  z-index: 56;
+  top: 0;
+  left: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--foreground) 48%, transparent);
+  background: color-mix(in srgb, var(--background) 86%, transparent);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(-100px, -100px, 0);
+  transition: opacity .12s var(--ease-out);
+  will-change: transform;
+}
+.cursor-label.is-on { opacity: .92; }
+
+.site-hero-overline {
+  margin: 0 0 var(--space-2);
+  color: var(--site-mute);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  letter-spacing: .16em;
+}
+@media (min-width: 901px) {
+  .site-hero h1 {
+    max-width: 14ch;
+    font-size: var(--text-display);
+    line-height: .98;
+    letter-spacing: -.045em;
+  }
+}
+
+@media (min-width: 901px) {
+  .site-page-head h1 {
+    font-size: var(--text-page-title);
+    line-height: 1.02;
+    letter-spacing: -.04em;
+  }
+}
+
+.map-compass {
+  position: absolute;
+  z-index: 4;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 40px;
+  height: 40px;
+  color: var(--overlay-foreground);
+  pointer-events: none;
+}
+.map-compass circle {
+  fill: color-mix(in srgb, var(--overlay) 64%, transparent);
+  stroke: color-mix(in srgb, var(--overlay-foreground) 38%, transparent);
+  stroke-width: 1;
+}
+.map-compass path { fill: currentColor; }
+.map-compass text {
+  fill: currentColor;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: .1em;
+}

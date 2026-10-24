@@ -15,6 +15,9 @@ interface Point {
  */
 export function CursorTrail() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const labelText = useRef("");
+  const [label, setLabel] = useState("");
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
@@ -100,14 +103,35 @@ export function CursorTrail() {
       return Boolean(element?.closest("input, textarea, select, [contenteditable='true'], .editor-body"));
     };
 
+    const updateLabel = (target: EventTarget | null, x: number, y: number) => {
+      const element = target instanceof Element ? target : null;
+      const labelled = element?.closest<HTMLElement>("[data-cursor]");
+      const articleLink = element?.closest(".site-article-body a, .site-article-body button");
+      const next = labelled?.dataset.cursor ?? (articleLink ? "READ" : "");
+      if (next !== labelText.current) {
+        labelText.current = next;
+        setLabel(next);
+      }
+      if (labelRef.current) {
+        const left = Math.min(window.innerWidth - 86, x + 18);
+        const top = Math.min(window.innerHeight - 34, y + 18);
+        labelRef.current.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      }
+    };
+
     const onMove = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
       if (event.clientX === 0 && event.clientY === 0) return;
       if (isTypingTarget(event.target)) {
         lastX = event.clientX;
         lastY = event.clientY;
+        if (labelText.current) {
+          labelText.current = "";
+          setLabel("");
+        }
         return;
       }
+      updateLabel(event.target, event.clientX, event.clientY);
       const x = event.clientX;
       const y = event.clientY;
       if (lastX === null || lastY === null) {
@@ -140,6 +164,8 @@ export function CursorTrail() {
     const onLeave = () => {
       lastX = null;
       lastY = null;
+      labelText.current = "";
+      setLabel("");
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
@@ -155,5 +181,10 @@ export function CursorTrail() {
   }, [enabled]);
 
   if (!enabled) return null;
-  return <canvas ref={canvasRef} className="cursor-trail" aria-hidden="true" />;
+  return (
+    <>
+      <canvas ref={canvasRef} className="cursor-trail" aria-hidden="true" />
+      <span ref={labelRef} className={`cursor-label${label ? " is-on" : ""}`} aria-hidden="true">{label}</span>
+    </>
+  );
 }

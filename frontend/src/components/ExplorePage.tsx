@@ -19,6 +19,7 @@ function ExploreTile({ world }: { world: WorldSummary }) {
   return (
     <a
       className="site-tile"
+      data-cursor="OPEN"
       href={`/w/${world.slug}/wiki`}
       onPointerEnter={source.onPointerEnter}
       onPointerLeave={source.onPointerLeave}

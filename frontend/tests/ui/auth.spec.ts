@@ -293,6 +293,8 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(timelineMenu).toContainText("新建时间点");
   await expect(timelineMenu).toContainText("复制时间线链接");
   await page.keyboard.press("Escape");
+  await page.locator(".timeline-canvas-viewport").hover();
+  await expect(page.locator(".cursor-label")).toHaveText("DRAG");
 
   await page.goto(`/w/${world.slug}?card=${overviewId}`, { waitUntil: "domcontentloaded" });
   await page.locator(".tree-row").first().waitFor({ timeout: 20_000 });
@@ -311,6 +313,7 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(tile).toHaveCSS("transition-property", /transform/);
   await tile.hover();
   await expect.poll(async () => tile.evaluate((node) => getComputedStyle(node).transform), { timeout: 1000 }).not.toBe("none");
+  await expect(page.locator(".cursor-label")).toHaveText("OPEN");
 
   await page.goto("/worlds/new", { waitUntil: "domcontentloaded" });
   const checkbox = page.locator('input[type="checkbox"]').first();
@@ -333,6 +336,7 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(contextMenu).toBeHidden();
 
   await expect(page.locator(".map-canvas-surface")).toHaveAttribute("data-contours", "ready");
+  await expect(page.locator(".map-compass")).toBeVisible();
 
   const mapBox = await page.locator(".map-canvas").boundingBox();
   if (mapBox) {
@@ -342,6 +346,7 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(page.locator(".map-lens-meta")).toContainText("1.9×");
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".site-hero-overline")).toContainText("WORLD SURVEY");
   await expect(page.locator(".site-hero-cover canvas.contour-cover")).toHaveCount(1);
   await expect.poll(async () => page.locator(".site-hero-cover canvas.contour-cover").evaluate((node) => {
     const canvas = node as HTMLCanvasElement;

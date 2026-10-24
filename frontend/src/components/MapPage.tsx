@@ -1108,6 +1108,13 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                       <span>20 M</span>
                     </div>
                   )}
+                  {map.background_url && !terrain3dOpen && (
+                    <svg className="map-compass" viewBox="0 0 44 44" aria-hidden="true">
+                      <circle cx="22" cy="22" r="16" />
+                      <path d="M22 8 L26 25 L22 21.5 L18 25 Z" />
+                      <text x="22" y="39" textAnchor="middle">N</text>
+                    </svg>
+                  )}
                   {terrain3dOpen && mesh ? (
                     <div
                       className="terrain-3d-layer"
