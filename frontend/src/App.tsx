@@ -4,6 +4,7 @@ import { fetchSession, logout as apiLogout } from "./api";
 import { RouteView } from "./app/RouteView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DialogHost } from "./components/DialogHost";
+import { CursorTrail } from "./components/CursorTrail";
 import { readRoute, type Route } from "./app/routes";
 import type { SessionState } from "./types";
 
@@ -50,6 +51,7 @@ export default function App() {
         onLogin={setSession}
         onLogout={handleLogout}
       />
+      <CursorTrail />
       <DialogHost />
     </ErrorBoundary>
   );

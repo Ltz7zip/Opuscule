@@ -21,6 +21,7 @@ import type { MapData, MapMarker, SessionState, TerrainWebResult, TerrainWebStyl
 const Terrain3DPreview = lazy(() => import("./Terrain3DPreview"));
 import MapCanvasStage from "./MapCanvasStage";
 import MapOverlayCanvas from "./MapOverlayCanvas";
+import { MapLens } from "./MapLens";
 
 interface MapPageProps {
   worldSlug: string;
@@ -1226,6 +1227,12 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                     </div>
                   )}
                 </div>
+                <MapLens
+                  hostRef={canvasRef}
+                  src={map.background_url}
+                  zoom={zoom}
+                  disabled={terrain3dOpen || Boolean(menu)}
+                />
               </div>
 
               <aside ref={inspectorRef} className="studio-inspector map-inspector">

@@ -6,6 +6,7 @@ import { PublicHome } from "../components/PublicHome";
 import { WikiPage } from "../components/WikiPage";
 import type { CardDetail, ProfileData, WorldDetail, WorldSummary } from "../types";
 import { bootMotionChrome } from "../lib/motionChrome";
+import { CursorTrail } from "../components/CursorTrail";
 import "../styles/app.css";
 import "../styles/auth.css";
 import "../styles/legacy-workspace.css";
@@ -41,7 +42,8 @@ if (data && root) {
 
   hydrateRoot(
     root,
-    data.kind === "wiki" ? (
+    <>
+      {data.kind === "wiki" ? (
       <WikiPage
         worldSlug={data.worldSlug}
         cardSlug={data.cardSlug}
@@ -61,6 +63,8 @@ if (data && root) {
       />
     ) : (
       <PublicHome session={null} onLogout={() => undefined} initialWorld={data.world} />
-    ),
+      )}
+      <CursorTrail />
+    </>,
   );
 }

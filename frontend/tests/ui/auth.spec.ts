@@ -331,6 +331,28 @@ test("custom controls: timeline select, single-border search, checkbox", async (
   await expect(contextMenu).toContainText("下载地图背景");
   await page.keyboard.press("Escape");
   await expect(contextMenu).toBeHidden();
+
+  const mapBox = await page.locator(".map-canvas").boundingBox();
+  if (mapBox) {
+    await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+  }
+  await expect(page.locator(".map-lens")).toHaveClass(/is-on/);
+  await expect(page.locator(".map-lens-meta")).toContainText("1.9×");
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.mouse.move(360, 280);
+  await page.mouse.move(720, 420, { steps: 12 });
+  await expect(page.locator(".cursor-trail")).toHaveCount(1);
+  const trailPixels = await page.locator(".cursor-trail").evaluate((node) => {
+    const canvas = node as HTMLCanvasElement;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let index = 3; index < data.length; index += 4) if (data[index] > 0) count += 1;
+    return count;
+  });
+  expect(trailPixels).toBeGreaterThan(0);
 });
 
 test("motion opt-in overrides reduced motion for this site", async ({ page }) => {
@@ -341,6 +363,7 @@ test("motion opt-in overrides reduced motion for this site", async ({ page }) =>
   await expect(hero).toHaveCSS("animation-name", "enter-rise");
   await expect(hero).toHaveCSS("animation-duration", "0.7s");
   await expect(page.locator(".pointer-glow")).toHaveCount(1);
+  await expect(page.locator(".cursor-trail")).toHaveCount(1);
 });
 
 test("320px touch targets", async ({ page, context }) => {

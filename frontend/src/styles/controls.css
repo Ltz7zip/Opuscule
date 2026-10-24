@@ -547,3 +547,72 @@ html.motion-force .site-hero::before { animation: glow-drift 10s ease-in-out inf
 html.motion-force .site-hero-cover { animation: cover-float 5s ease-in-out infinite !important; }
 html.motion-force .site-tile { transition: transform .22s var(--ease-out), border-color .22s var(--ease-out), box-shadow .22s var(--ease-out) !important; }
 html.motion-force .site-tile:hover { transform: translateY(-4px) !important; }
+
+/* ---------- Custom cursor brush + map lens ---------- */
+.cursor-trail {
+  position: fixed;
+  z-index: 55;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.map-lens {
+  position: absolute;
+  z-index: 8;
+  top: 0;
+  left: 0;
+  width: 190px;
+  height: 190px;
+  overflow: hidden;
+  border: 1px solid var(--foreground);
+  border-radius: 0;
+  background: var(--background);
+  box-shadow: var(--shadow-xl);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0) translate(-50%, -50%);
+  transition: opacity .16s var(--ease-out);
+  will-change: transform;
+}
+.map-lens.is-on { opacity: 1; }
+.map-lens canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  filter: saturate(1.12) contrast(1.05);
+}
+.map-lens::before,
+.map-lens::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--foreground) 48%, transparent);
+}
+.map-lens::before { top: 50%; right: 0; left: 0; height: 1px; }
+.map-lens::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+.map-lens-meta {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: var(--space-1) var(--space-2);
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 32%, transparent);
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .04em;
+}
+
+.map-lens-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+  font-size: var(--text-2xs);
+}
