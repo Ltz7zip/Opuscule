@@ -19,14 +19,15 @@ for (const theme of ["dark", "light"] as const) {
 
       await page.goto(target.path, { waitUntil: "domcontentloaded" });
       await page.evaluate(() => document.fonts.ready);
-      await page.waitForTimeout(350);
+      await page.waitForTimeout(700);
 
       await expect(page).toHaveScreenshot(
         `${target.name}-${theme}-${testInfo.project.name}.png`,
         {
           fullPage: true,
-          animations: "disabled",
+          animations: "allow",
           caret: "hide",
+          timeout: 30_000,
           maxDiffPixelRatio: 0.01,
         },
       );

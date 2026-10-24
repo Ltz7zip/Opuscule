@@ -114,7 +114,7 @@ function proxyToBackend(request, response) {
       port: 8000,
       path: request.url,
       method: request.method,
-      headers: { ...request.headers, host: "127.0.0.1:8000" },
+      headers: { ...request.headers, host: request.headers.host ?? "127.0.0.1:8000" },
     },
     (upstreamResponse) => {
       response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);

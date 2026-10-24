@@ -45,6 +45,9 @@ REQUIRED_TOKENS = (
     "selection-fg",
 )
 
+VT_LIB = FRONTEND / "src/lib/viewTransition.ts"
+VT_CSS = STYLES / "view-transitions.css"
+
 REQUIRED_COMPONENTS = (
     "StatusPage.tsx",
     "ErrorBoundary.tsx",
@@ -71,6 +74,14 @@ VAR_USE = re.compile(r"var\((--[a-z0-9-]+)")
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 COPY = re.compile(r"P[0-5]\.[0-9]|演示数据|设计参考\s*Minimalist")
 NATIVE_DIALOG = re.compile(r"window\.(?:confirm|prompt)\s*\(")
+LITERAL_DECL = re.compile(
+    r"(font-size|padding(?:-top|-right|-bottom|-left)?|gap|row-gap|column-gap|border-radius(?:-[a-z]+)?)\s*:\s*([^;{}]+);",
+    re.I,
+)
+PX = re.compile(r"(?<![\w.-])([0-9]*\.?[0-9]+)px")
+# The one accepted font-size literal: the approved 17/1.45 tile title.
+# Everything else must resolve through the type/spacing/radius tokens.
+FONT_WHITELIST = {"legacy-site.css": {"17px"}}
 
 
 def read(path: Path) -> str:
@@ -235,7 +246,88 @@ def main() -> int:
     else:
         passes.append(f"components: {len(REQUIRED_COMPONENTS)} present")
 
-    # 7. SSR shells resolve the theme from the cookie.
+    # 6b. No literal px typography/spacing/radius outside the explicit
+    # whitelist (tile title 17px; structural 0/1px edges). Count declarations,
+    # not occurrences, and print the exact count so a green run is auditable.
+    literal_counts = {"font-size": 0, "padding": 0, "gap": 0, "border-radius": 0}
+    literal_examples: list[str] = []
+    for path in css_files:
+        if path.name == "tokens.css":
+            # tokens.css is the definition site.
+            continue
+        text = re.sub(r"/\*.*?\*/", "", read(path), flags=re.S)
+        for match in LITERAL_DECL.finditer(text):
+            prop = match.group(1).lower()
+            value = match.group(2).strip()
+            numbers = [float(item) for item in PX.findall(value)]
+            if not numbers:
+                continue
+            if prop == "font-size":
+                allowed = value.replace(" ", "") in FONT_WHITELIST.get(path.name, set())
+                group = "font-size"
+            else:
+                allowed = all(number in (0.0, 1.0) for number in numbers)
+                group = "border-radius" if prop.startswith("border-radius") else ("gap" if prop in {"gap", "row-gap", "column-gap"} else "padding")
+            if allowed:
+                continue
+            literal_counts[group] += 1
+            if len(literal_examples) < 6:
+                literal_examples.append(f"{path.name}:{prop}={value}")
+    if any(literal_counts.values()):
+        failures.append(
+            "literals: "
+            + ", ".join(f"{key}={value}" for key, value in literal_counts.items())
+            + (" e.g. " + "; ".join(literal_examples) if literal_examples else "")
+        )
+    else:
+        passes.append("literals: font-size=0 padding=0 gap=0 border-radius=0 (whitelist: tile 17px, 0/1px edges)")
+
+    # 7. Shared-element contract: one naming lib, one transition layer,
+    #    early opt-in on every shell, and no CSS-declared names.
+    if not VT_LIB.is_file():
+        failures.append("view transitions: src/lib/viewTransition.ts missing")
+    if not VT_CSS.is_file():
+        failures.append("view transitions: styles/view-transitions.css missing")
+    else:
+        app_css = read(STYLES / "app.css")
+        base_at = app_css.find('@import "./base.css";')
+        vt_at = app_css.find('@import "./view-transitions.css";')
+        primitives_at = app_css.find('@import "./primitives.css";')
+        if not (0 <= base_at < vt_at < primitives_at):
+            failures.append("view transitions: app.css import order must be base -> view-transitions -> primitives")
+        vt_text = read(VT_CSS)
+        if "@view-transition { navigation: auto; }" not in vt_text:
+            failures.append("view transitions: missing @view-transition navigation opt-in")
+        if "prefers-reduced-motion: reduce" not in vt_text:
+            failures.append("view transitions: missing reduced-motion override")
+        vt_rules = re.sub(r"/\*.*?\*/", "", vt_text, flags=re.S)
+        if re.search(r"^\s*animation:\s*none", vt_rules, flags=re.M):
+            failures.append("view transitions: reduced motion must not use animation: none")
+    css_named = [
+        f"{path.name}:{number}"
+        for path in css_files
+        for number, line in enumerate(read(path).splitlines(), 1)
+        if re.search(r"view-transition-name\s*:", line)
+    ]
+    if css_named:
+        failures.append(f"view transitions: name declared in CSS at {', '.join(css_named[:5])}")
+    for name in ("index.html", "server.mjs", "server.prod.mjs"):
+        if "@view-transition { navigation: auto; }" not in read(FRONTEND / name):
+            failures.append(f"view transitions: {name} lacks the early opt-in")
+    if not failures or not any("view transitions" in failure for failure in failures):
+        passes.append("view transitions: lib + layer + early opt-in, CSS declares no names")
+
+    grey_scale = [
+        f"{name}: raw brand scale"
+        for name in ("app.css", "legacy-site.css", "legacy-workspace.css")
+        if "var(--brand-" in read(STYLES / name)
+    ]
+    if grey_scale:
+        failures.append("visual: page CSS must use semantic greys (found " + ", ".join(grey_scale) + ")")
+    else:
+        passes.append("visual: page CSS uses semantic greys only")
+
+    # 8. SSR shells resolve the theme from the cookie.
     bootstrap_ok = True
     for name in ("server.mjs", "server.prod.mjs"):
         source = read(FRONTEND / name)
