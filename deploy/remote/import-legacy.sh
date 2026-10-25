@@ -25,8 +25,8 @@ sudo -u opuscule git -C "$APP_DIR" pull --ff-only
 log "safety copy of the current database"
 cp -a "$APP_DIR/backend/db.sqlite3" "/root/opuscule-before-import-$TS.sqlite3"
 
-# RESET=1 wipes imported content first (users are kept) — use after fixing the mapping.
-EXTRA="${RESET:+--reset}"
+# Extra flags are forwarded verbatim, e.g.  bash import-legacy.sh --reset
+EXTRA="$*"
 run_import() {
   sudo -u opuscule bash -lc "set -a; . '$ENV_FILE'; set +a; cd '$APP_DIR/backend' && \
     '$PY' manage.py import_legacy --db '$OLD_DB' $EXTRA $1"
@@ -42,7 +42,8 @@ log "restoring ownership and restarting"
 chown -R opuscule:opuscule "$APP_DIR/backend"
 systemctl restart opuscule
 sleep 2
-curl -fsS --max-time 10 "https://$(sed -n 's/^DJANGO_ALLOWED_HOSTS=//p' "$ENV_FILE" | cut -d, -f1)/api/health/" && echo
+HOST=$(sed -n 's/^DJANGO_ALLOWED_HOSTS=//p' "$ENV_FILE" | tr ',' '\n' | grep -vE '^[0-9.]+$' | head -1)
+curl -fsS --max-time 10 "https://${HOST:-127.0.0.1}/api/health/" && echo
 
 log "worlds now in the new database:"
 sudo -u opuscule bash -lc "set -a; . '$ENV_FILE'; set +a; cd '$APP_DIR/backend' && \

@@ -140,6 +140,8 @@ class Command(BaseCommand):
                 transaction.set_rollback(True)
 
         prefix = "[dry-run] " if dry else ""
+        if options["reset"] and not dry:
+            prefix = "[reset] "
         self.stdout.write(self.style.SUCCESS(f"{prefix}导入结果"))
         for key, count in sorted(report.created.items()):
             self.stdout.write(f"  新建 {key:16s} {count}")
