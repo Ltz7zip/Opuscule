@@ -25,9 +25,11 @@ sudo -u opuscule git -C "$APP_DIR" pull --ff-only
 log "safety copy of the current database"
 cp -a "$APP_DIR/backend/db.sqlite3" "/root/opuscule-before-import-$TS.sqlite3"
 
+# RESET=1 wipes imported content first (users are kept) — use after fixing the mapping.
+EXTRA="${RESET:+--reset}"
 run_import() {
   sudo -u opuscule bash -lc "set -a; . '$ENV_FILE'; set +a; cd '$APP_DIR/backend' && \
-    '$PY' manage.py import_legacy --db '$OLD_DB' $1"
+    '$PY' manage.py import_legacy --db '$OLD_DB' $EXTRA $1"
 }
 
 log "dry run (nothing is written)"
