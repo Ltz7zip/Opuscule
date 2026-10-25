@@ -1,0 +1,21 @@
+[Unit]
+Description=Opuscule Django API (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=opuscule
+Group=opuscule
+WorkingDirectory=/srv/opuscule/backend
+EnvironmentFile=/srv/opuscule/deploy/.env
+ExecStart=/srv/opuscule/backend/.venv/bin/gunicorn config.wsgi:application \
+  --bind 127.0.0.1:8000 --workers 2 --threads 2 \
+  --timeout 120 --max-requests 500 --max-requests-jitter 50 \
+  --access-logfile - --error-logfile -
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

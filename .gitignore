@@ -29,3 +29,4 @@ frontend/.npm-cache/
 a.html
 map-2d-current.png
 walkthrough/*.png
+staticfiles/

@@ -162,6 +162,9 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# collectstatic target for a real deployment (gunicorn + nginx serves it).
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
