@@ -48,10 +48,27 @@ node -v && npm -v
 
 log "app user + checkout"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --shell /bin/bash "$APP_USER"
+OLD_DIR=""
 if [[ -d "$APP_DIR/.git" ]]; then
   sudo -u "$APP_USER" git -C "$APP_DIR" fetch --all --prune
   sudo -u "$APP_USER" git -C "$APP_DIR" checkout "$BRANCH"
   sudo -u "$APP_USER" git -C "$APP_DIR" reset --hard "origin/$BRANCH"
+elif [[ -d "$APP_DIR" ]]; then
+  # A previous (non-git or older) deployment lives there: stop whatever runs
+  # from it, move it aside, and clone cleanly.
+  log "existing deployment at $APP_DIR — stopping its services"
+  for unit in $(systemctl list-units --type=service --state=running --no-legend | awk '{print $1}'); do
+    if systemctl show -p WorkingDirectory --value "$unit" 2>/dev/null | grep -q "^$APP_DIR"; then
+      log "  stopping $unit"
+      systemctl stop "$unit" || true
+      systemctl disable "$unit" || true
+    fi
+  done
+  OLD_DIR="/srv/opuscule-old-$TS"
+  log "moving it to $OLD_DIR (kept for rollback)"
+  mv "$APP_DIR" "$OLD_DIR"
+  install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
+  sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO" "$APP_DIR"
 else
   install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
   sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO" "$APP_DIR"
@@ -61,6 +78,25 @@ log "python venv"
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/backend/.venv"
 sudo -u "$APP_USER" "$APP_DIR/backend/.venv/bin/pip" install -q --upgrade pip
 sudo -u "$APP_USER" "$APP_DIR/backend/.venv/bin/pip" install -q -r "$APP_DIR/backend/requirements.txt"
+
+if [[ -n "$OLD_DIR" ]]; then
+  for media in "$OLD_DIR/backend/media" "$OLD_DIR/media"; do
+    if [[ -d "$media" ]]; then
+      log "carrying media from $media"
+      install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR/backend/media"
+      cp -a "$media/." "$APP_DIR/backend/media/" || true
+      chown -R "$APP_USER:$APP_USER" "$APP_DIR/backend/media"
+      break
+    fi
+  done
+  for db in "$OLD_DIR/backend/db.sqlite3" "$OLD_DIR/db.sqlite3"; do
+    if [[ -f "$db" ]]; then
+      cp -a "$db" "$BACKUP/previous-db.sqlite3"
+      log "previous database saved to $BACKUP/previous-db.sqlite3"
+      break
+    fi
+  done
+fi
 
 log "environment file"
 ENV_FILE="$APP_DIR/deploy/.env"
