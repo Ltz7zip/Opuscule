@@ -10,7 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/Ltz7zip/Opuscule/main/deploy/remote
 克隆仓库、建 venv 装依赖、生成 `.env`（随机 SECRET_KEY）、`npm ci && npm run build`、
 `migrate`、`collectstatic`、写 systemd 与 nginx 配置、启动服务、跑健康检查。
 
-结束后访问 `http://<公网IP>/` 即可。
+结束后访问 `https://opuscule.cc/` 和 `https://lavi.opuscule.cc/`（脚本会自动用 certbot 申请证书）。
 
 ## 或者：绑定 SSH 密钥后远程执行
 
@@ -19,6 +19,9 @@ curl -fsSL https://raw.githubusercontent.com/Ltz7zip/Opuscule/main/deploy/remote
 ```bash
 ssh root@<IP> 'bash -s' < deploy/remote/install.sh
 ```
+
+默认域名写死在脚本里：`opuscule.cc` 与 `lavi.opuscule.cc`（两个都已解析到本机）。
+要换域名：`DOMAINS="a.com b.com" bash install.sh`。
 
 ## 端口
 

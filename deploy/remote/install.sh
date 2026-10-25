@@ -7,13 +7,10 @@ REPO="${1:-https://github.com/Ltz7zip/Opuscule.git}"
 BRANCH="${2:-main}"
 APP_USER="opuscule"
 APP_DIR="/srv/opuscule"
-DOMAIN="${DOMAIN:-}"           # auto-detected from an existing letsencrypt cert
+DOMAINS="${DOMAINS:-opuscule.cc lavi.opuscule.cc}"
+PRIMARY="${DOMAINS%% *}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 CERT=""
-if [[ -z "$DOMAIN" ]] && compgen -G "/etc/letsencrypt/live/*/fullchain.pem" > /dev/null; then
-  CERT=$(compgen -G "/etc/letsencrypt/live/*/fullchain.pem" | head -1)
-  DOMAIN=$(basename "$(dirname "$CERT")")
-fi
-[[ -n "$DOMAIN" ]] || DOMAIN="_"
 PORT=8000
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
@@ -40,7 +37,7 @@ python3 -c 'import sys; assert sys.version_info >= (3, 12), "need python >= 3.12
 log "apt packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq python3-venv python3-pip git nginx curl ca-certificates
+apt-get install -y -qq python3-venv python3-pip git nginx curl ca-certificates certbot python3-certbot-nginx
 
 log "nodejs 22 (for the frontend build)"
 if ! command -v node >/dev/null || [[ "$(node -v | sed 's/v\([0-9]*\).*/\1/')" -lt 20 ]]; then
@@ -69,11 +66,15 @@ log "environment file"
 ENV_FILE="$APP_DIR/deploy/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')
+  HOSTS=$(echo "$DOMAINS 43.128.56.200" | tr ' ' '\n' | sort -u | paste -sd, -)
+  ORIGINS=$(for d in $DOMAINS; do printf 'https://%s,' "$d"; done)
   cat > "$ENV_FILE" <<EOF
 DJANGO_DEBUG=0
 DJANGO_SECRET_KEY=$SECRET
-DJANGO_ALLOWED_HOSTS=$DOMAIN,43.128.56.200
-DJANGO_CSRF_TRUSTED_ORIGINS=
+DJANGO_ALLOWED_HOSTS=$HOSTS
+DJANGO_CSRF_TRUSTED_ORIGINS=${ORIGINS%,}
+DJANGO_SESSION_COOKIE_SECURE=0
+DJANGO_SECURE_SSL_REDIRECT=0
 EOF
   chown "$APP_USER:$APP_USER" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
@@ -92,26 +93,61 @@ if systemctl list-unit-files | grep -q '^opuscule\.service'; then
   cp -a /etc/systemd/system/opuscule.service "$BACKUP/" 2>/dev/null || true
 fi
 
+if ss -ltn 2>/dev/null | grep -q ':8000 '; then
+  log "port 8000 busy — stopping the previous API process"
+  fuser -k 8000/tcp 2>/dev/null || true
+  sleep 1
+fi
+
 log "systemd unit"
 install -m 644 "$APP_DIR/deploy/remote/opuscule.service" /etc/systemd/system/opuscule.service
 systemctl daemon-reload
 systemctl enable --now opuscule
 systemctl restart opuscule
 
-log "nginx"
-TEMPLATE="$APP_DIR/deploy/remote/nginx.conf"
-if [[ -n "$CERT" ]]; then
-  TEMPLATE="$APP_DIR/deploy/remote/nginx-tls.conf"
-fi
-sed -e "s/__SERVER_NAME__/$DOMAIN/" -e "s|__CERT__|$(dirname "$CERT")/|" \
-  "$TEMPLATE" > /etc/nginx/sites-available/opuscule
+log "nginx (plain, then TLS if a certificate exists or can be issued)"
+sed -e "s/__SERVER_NAME__/$DOMAINS/" \
+  "$APP_DIR/deploy/remote/nginx.conf" > /etc/nginx/sites-available/opuscule
 ln -sf /etc/nginx/sites-available/opuscule /etc/nginx/sites-enabled/opuscule
-rm -f /etc/nginx/sites-enabled/default
+# Retire every other enabled site (all of them were copied into $BACKUP above).
+for site in /etc/nginx/sites-enabled/*; do
+  [[ -e "$site" ]] || continue
+  case "$(basename "$site")" in
+    opuscule) ;;
+    *) log "disabling previous site $(basename "$site")"; rm -f "$site" ;;
+  esac
+done
 nginx -t
 systemctl reload nginx
+
+log "TLS"
+if [[ -f "/etc/letsencrypt/live/$PRIMARY/fullchain.pem" ]]; then
+  log "reusing the existing certificate for $PRIMARY"
+  sed -e "s/__SERVER_NAME__/$DOMAINS/" \
+      -e "s|__CERT__|/etc/letsencrypt/live/$PRIMARY/|" \
+      "$APP_DIR/deploy/remote/nginx-tls.conf" > /etc/nginx/sites-available/opuscule
+  nginx -t && systemctl reload nginx
+  sed -i 's/^DJANGO_SESSION_COOKIE_SECURE=.*/DJANGO_SESSION_COOKIE_SECURE=1/' "$ENV_FILE"
+  systemctl restart opuscule
+elif command -v certbot >/dev/null; then
+  log "requesting a certificate for: $DOMAINS"
+  CERTBOT_ARGS=(--nginx --non-interactive --agree-tos --redirect
+                $(for d in $DOMAINS; do printf -- '-d %s ' "$d"; done))
+  if [[ -n "$CERTBOT_EMAIL" ]]; then
+    CERTBOT_ARGS+=(-m "$CERTBOT_EMAIL")
+  else
+    CERTBOT_ARGS+=(--register-unsafely-without-email)
+  fi
+  if certbot "${CERTBOT_ARGS[@]}"; then
+    sed -i 's/^DJANGO_SESSION_COOKIE_SECURE=.*/DJANGO_SESSION_COOKIE_SECURE=1/' "$ENV_FILE"
+    systemctl restart opuscule
+  else
+    log "certbot failed — the site still works over plain HTTP"
+  fi
+fi
 
 log "health check"
 sleep 2
 curl -fsS http://127.0.0.1/api/health/ && echo
 curl -fsS -o /dev/null -w 'index: %{http_code}\n' http://127.0.0.1/
-log "done — http://$(curl -fsS ifconfig.me || echo SERVER_IP)/"
+log "done — $DOMAINS (见上方健康检查结果)"
