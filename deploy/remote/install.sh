@@ -75,6 +75,7 @@ else
 fi
 
 log "python venv"
+rm -rf "$APP_DIR/backend/.venv"
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/backend/.venv"
 sudo -u "$APP_USER" "$APP_DIR/backend/.venv/bin/pip" install -q --upgrade pip
 sudo -u "$APP_USER" "$APP_DIR/backend/.venv/bin/pip" install -q -r "$APP_DIR/backend/requirements.txt"
