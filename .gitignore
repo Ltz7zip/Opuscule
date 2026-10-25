@@ -23,3 +23,9 @@ frontend/.playwright/
 
 frontend/.playwright-browsers/
 frontend/.auth/
+
+# Local scratch
+frontend/.npm-cache/
+a.html
+map-2d-current.png
+walkthrough/*.png
