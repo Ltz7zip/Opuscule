@@ -230,6 +230,8 @@ export interface MapData {
   can_edit: boolean;
   background_url: string | null;
   terrain_web: TerrainWebMeta | null;
+  /** Cache key of the packed field payload, null when there is no terrain. */
+  fields_version: string | null;
   markers: MapMarker[];
 }
 

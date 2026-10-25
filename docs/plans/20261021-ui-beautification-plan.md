@@ -447,3 +447,57 @@ workspace / 地图 / 时间线 / 对话框逐屏看过浅色后，修掉两个�
 以“同内容视觉一致”为验收。已建立独立规格 `docs/plans/20261021-original-parity.md`，
 并完成基座第一步：自托管 Geist / Geist Mono / DM Serif Display，字体 token 切换。
 后续按 全局壳 → 个人页 → 公共页 → 工作区 → 地图/时间线 顺序推进。
+
+
+## 24. 极简重做 + 跨文档共享元素（2026-10-25）
+
+范围仍是 `frontend/`，不改路由、API、文案与整页导航。公开页从
+`--legacy-*` 深色层重基到语义 token，补浅色分支；工作区同步重基。
+共享元素只使用原生 View Transitions + CSS，零新依赖。
+
+| 阶段 | 交付 | 状态 |
+|---|---|---|
+| P0-1 | `tokens.css` 增加 `--duration-*` / `--ease-*` / `--measure`；`--text-2xs` 收敛到 11px | 完成 |
+| P0-2 | `styles/view-transitions.css`：根 140ms、morph 200ms、reduce 0.01ms | 完成 |
+| P0-3 | `lib/viewTransition.ts`：`vt` / `runViewTransition` / `useSharedSource`；无 API / reduce / hidden 退化 | 完成 |
+| P1-1 | `legacy-site.css` 重基语义 token，补 `[data-theme="light"]` 可读性；7 色纪元 → `--era-1..4`；地图标记改灰阶 + 形状 | 完成 |
+| P1-2 | 删 `.app-shell` 径向渐变、卡片阴影、装饰 blur；结构统一 1px 线 | 完成 |
+| P1-3 | 公开站网格/卡片 3:2 封面、24px 间距、16px 内边距、17/1.45 标题、hover 只改边框 | 完成 |
+| P1-4 | 文章页 68ch 行宽、24/32/48 垂直节奏、3:2 文章封面、类型标记 | 完成 |
+| P1-5 | 工作区侧栏 44/48px 行高、去反色 active、编辑器 chrome 降噪、移动端 44px 触控 | 完成 |
+| P2-1 | 10 组共享元素：封面 1–3、图标 4–8、同页 9–10 | 完成 |
+| P2-2 | `tests/ui/vt-names.spec.ts`：8 路由 × 2 视口 + 6 组配对 + 无 abort | 完成 |
+| P3-1 | 16 张截图基线重建；`make ui-check` 增补视图过渡/语义灰门禁 | 完成 |
+
+### 关键事实与偏差
+
+- 根 `/` 实际渲染 `wuhai` 世界首页（legacy parity），没有“世界卡列表”；
+  第 1 组因此落在“首页卡片 → 文章封面”，第 2 组落在“`/explore` 世界卡 →
+  Wiki hero 封面”。
+- 浏览器对 `::view-transition-group(*.cover)` 需要 `view-transition-class`，
+  而 React 19 的 style prop 会丢弃该键；退化为对所有命名组统一 200ms morph，
+  根单独 140ms。视觉结果不变，时长契约仍成立。
+- 跨文档过渡曾因 SSR HTML 响应缺少 `Content-Length` 被 Chrome 判为
+  “invalid state”并整次丢弃；`server.mjs` / `server.prod.mjs` 的 HTML
+  响应现统一走 `sendHtml()`（Content-Length + no-cache），并在
+  `index.html` 与两个 SSR shell 内联早期 `@view-transition` opt-in。
+- 公开站与工作区外壳的 `font-size`、`padding`、`gap` 已全部改为
+  8 档字号 + 4 基数间距 token（工作区最小字号从 9px 提到 11px）；
+  `app.css` 中编辑器/地图/时间线深层规则仍保留历史字面量，作为下一轮
+  token 化债务，不计入本轮“已完成”。
+- 全部 Lucide 图标统一为 16/20px、`stroke-width: 1.5`；
+  卡片、输入、次级按钮的 1px 边界改用 `--border-strong`，实测
+  深色 3.08:1 / 浅色 3.26:1；纯结构分隔线仍用 `--border`。
+- 认证页（`auth-terminal.css`）仍保留终端视觉；不在本轮 6 屏矩阵内，
+  作为下一轮独立改造项。
+
+### 验证（2026-10-25）
+
+- `make ci` 全绿；`make ui-check` 新增 view transitions / semantic greys 两项。
+- `npx tsc --noEmit` 通过；`npm run build:all` 通过。
+- `check:budget`：entry 76.4 / 120 kB，workspace 172.3 / 175 kB，
+  CSS 35.4 / 40 kB（改造前 76.4 / 172.1 / 34.1）。
+- `npx playwright test`：44/44（16 截图 + 28 视图过渡断言）。
+- 手测：1440/768/390/320 × 深浅；390/320 无横向溢出；移动端公开页与
+  工作区所有可见控件 ≥44px；reduce 下同页 0 次 `startViewTransition`；
+  无 API 时开卡正常；无 JS 时 `/explore` → Wiki 普通跳转正常。

@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
@@ -44,11 +46,19 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-6#p__@&y-pv6g69%)9cpkzc%349ege(o#-w&@hqn&c*(l_gj^4")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool("DJANGO_DEBUG", True)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# A development-only fallback is allowed while DEBUG is on; turning DEBUG off
+# without a real key must fail at startup instead of shipping a public one.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off."
+        )
+    SECRET_KEY = "django-insecure-6#p__@&y-pv6g69%)9cpkzc%349ege(o#-w&@hqn&c*(l_gj^4"
 
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS",
@@ -160,7 +170,11 @@ MAILERS = {
     "default": {
         "BACKEND": os.environ.get(
             "DJANGO_EMAIL_BACKEND",
-            "django.core.mail.backends.console.EmailBackend",
+            # The console backend is a DEBUG-only convenience; with DEBUG off a
+            # production deployment should use SMTP (mail.E001 fails otherwise).
+            "django.core.mail.backends.console.EmailBackend"
+            if DEBUG
+            else "django.core.mail.backends.smtp.EmailBackend",
         ),
         "HOST": os.environ.get("DJANGO_SMTP_HOST", "localhost"),
         "PORT": env_int("DJANGO_SMTP_PORT", 25),
@@ -174,11 +188,11 @@ MAILERS = {
 # the views; public reads remain available for is_public_read worlds.
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
-    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "DEFAULT_PARSER_CLASSES": ["apps.common.parsers.SafeJSONParser"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_RATES": {
         "login": "10/min",
         "register": "20/hour",

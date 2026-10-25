@@ -1,0 +1,50 @@
+# Architecture contracts for the backend (run with `lint-imports` from
+# backend/). They encode the layering the refactor plan depends on and are
+# checked in scripts/ci.sh, so a cross-layer import fails CI instead of
+# silently widening the dependency graph.
+
+[tool.importlinter]
+root_package = "apps"
+
+[[tool.importlinter.contracts]]
+name = "models stay below serializers and views"
+type = "forbidden"
+source_modules = [
+    "apps.cards.models",
+    "apps.collections.models",
+    "apps.common.models",
+    "apps.identity.models",
+    "apps.maps.models",
+    "apps.timelines.models",
+    "apps.worlds.models",
+]
+forbidden_modules = [
+    "apps.cards.serializers",
+    "apps.cards.views",
+    "apps.collections.serializers",
+    "apps.collections.views",
+    "apps.identity.serializers",
+    "apps.identity.views",
+    "apps.maps.serializers",
+    "apps.maps.views",
+    "apps.timelines.serializers",
+    "apps.timelines.views",
+    "apps.worlds.serializers",
+    "apps.worlds.views",
+]
+
+[[tool.importlinter.contracts]]
+name = "infrastructure helpers do not depend on domain apps"
+type = "forbidden"
+source_modules = [
+    "apps.common.parsers",
+    "apps.common.throttle",
+]
+forbidden_modules = [
+    "apps.cards",
+    "apps.collections",
+    "apps.identity",
+    "apps.maps",
+    "apps.timelines",
+    "apps.worlds",
+]

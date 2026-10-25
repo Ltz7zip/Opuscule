@@ -25,7 +25,7 @@ function applyTheme(theme: Theme) {
     // cookies disabled: the client-side toggle still works for this page.
   }
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", theme === "light" ? "#ffffff" : "#18181b");
+  if (meta) meta.setAttribute("content", theme === "light" ? "#ffffff" : "#0b0b0c");
 }
 
 export function ThemeToggle() {

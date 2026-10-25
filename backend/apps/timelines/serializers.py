@@ -6,12 +6,27 @@ from .models import Era, Timeline, TimelineEntry
 
 
 class TimelineSerializer(serializers.ModelSerializer):
-    entry_count = serializers.IntegerField(source="entries.count", read_only=True)
+    entry_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Timeline
         fields = ["id", "name", "slug", "color", "is_default", "entry_count"]
         read_only_fields = ["id", "entry_count"]
+
+    def get_entry_count(self, obj: Timeline) -> int:
+        value = getattr(obj, "entry_count", None)
+        return value if value is not None else obj.entries.count()
+
+    def validate(self, attrs):
+        world = self.context.get("world") or getattr(self.instance, "world", None)
+        slug = attrs.get("slug") or (self.instance.slug if self.instance else None)
+        if world is not None and slug:
+            queryset = Timeline.objects.filter(world=world, slug=slug)
+            if self.instance is not None:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            if queryset.exists():
+                raise serializers.ValidationError({"slug": "该世界已有同名时间线"})
+        return attrs
 
 
 class TimelineEntrySerializer(serializers.ModelSerializer):

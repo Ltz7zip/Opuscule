@@ -41,7 +41,22 @@ def sitemap(request):
         _url(request.build_absolute_uri("/explore"), priority="0.8"),
     ]
 
-    worlds = World.objects.filter(is_public_read=True).order_by("-updated_at")[:500]
+    worlds = list(World.objects.filter(is_public_read=True).order_by("-updated_at")[:500])
+    # One query for every card, then group in memory; previously this issued a
+    # query per world (up to 500 per sitemap request).
+    cards_by_world: dict[int, list] = {}
+    if worlds:
+        for card in (
+            Card.objects.filter(
+                world_id__in=[world.id for world in worlds],
+                is_public=True,
+                is_auxiliary=False,
+            )
+            .order_by("-updated_at")
+        ):
+            bucket = cards_by_world.setdefault(card.world_id, [])
+            if len(bucket) < 200:
+                bucket.append(card)
     for world in worlds:
         urls.append(
             _url(
@@ -50,15 +65,7 @@ def sitemap(request):
                 "0.7",
             )
         )
-        cards = (
-            Card.objects.filter(
-                world=world,
-                is_public=True,
-                is_auxiliary=False,
-            )
-            .order_by("-updated_at")[:200]
-        )
-        for card in cards:
+        for card in cards_by_world.get(world.id, []):
             urls.append(
                 _url(
                     request.build_absolute_uri(

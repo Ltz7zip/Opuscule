@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Box, Crosshair, Download, ExternalLink, ImagePlus, Link2, Loader2, MapPin, Menu, Mountain, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowLeft, Box, Cpu, Crosshair, Download, ExternalLink, ImagePlus, Link2, Loader2, MapPin, Menu, Mountain, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 
 import {
   createMapMarker,
@@ -15,11 +15,14 @@ import { useDocumentMeta } from "../lib/meta";
 import { vt, vtClassRef } from "../lib/viewTransition";
 import { confirmAction } from "../lib/dialogs";
 import { ContextMenu, type ContextMenuEntry, type ContextMenuModel } from "./ContextMenu";
+import MapLoader from "./MapLoader";
 import { SelectMenu } from "./SelectMenu";
 import type { MapData, MapMarker, SessionState, TerrainWebResult, TerrainWebStyle, WorldDetail } from "../types";
 
 const Terrain3DPreview = lazy(() => import("./Terrain3DPreview"));
 import MapCanvasStage from "./MapCanvasStage";
+import MapTerrainCanvas, { type MapTerrainCanvasHandle } from "./MapTerrainCanvas";
+import PerfHud from "./PerfHud";
 import MapOverlayCanvas from "./MapOverlayCanvas";
 import { MapLens } from "./MapLens";
 
@@ -82,6 +85,10 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
   const [terrainImported, setTerrainImported] = useState<number | null>(null);
   const [terrainLabelTotal, setTerrainLabelTotal] = useState(0);
   const [terrain3dOpen, setTerrain3dOpen] = useState(false);
+  const [flatAlbedo, setFlatAlbedo] = useState<string | null>(null);
+  const mapCanvasRef = useRef<MapTerrainCanvasHandle | null>(null);
+  const [gpuTerrain, setGpuTerrain] = useState(true);
+  const [gpuReady, setGpuReady] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menu, setMenu] = useState<ContextMenuModel | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -123,6 +130,10 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
     description: world?.description || "把世界里的地点、事件与人物放到一张地图上。",
     canonicalPath: `/w/${worldSlug}/map`,
   });
+
+  useEffect(() => {
+    setGpuReady(false);
+  }, [worldSlug, map?.fields_version]);
 
   useEffect(() => {
     const element = canvasRef.current;
@@ -174,6 +185,9 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
   const selected = map?.markers.find((marker) => marker.id === selectedId) ?? null;
   const canEdit = map?.can_edit ?? false;
   const isTerrain = Boolean(map?.background_url?.includes("/terrain-web-"));
+  const gpuActive = Boolean(
+    isTerrain && map?.background_url && map?.fields_version && gpuTerrain && !terrain3dOpen,
+  );
   const mesh = terrainResult?.mesh || map?.terrain_web?.mesh || "";
   const meshWidth = terrainResult?.mesh_width || map?.terrain_web?.mesh_width || 256;
   const meshHeight = terrainResult?.mesh_height || map?.terrain_web?.mesh_height || 160;
@@ -197,6 +211,15 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
     }
     return { left: (canvasBox.width - width) / 2, top: (canvasBox.height - height) / 2, width, height };
   }, [canvasBox, mapAspect]);
+  const projectPin = (x: number, y: number) => {
+    if (!mapView) return null;
+    return {
+      // The world box is centred on the canvas and scaled about its centre,
+      // so the letterbox offset cancels out; only the centre term matters.
+      left: canvasBox.width / 2 + pan.x + (x - 0.5) * mapView.width * zoom,
+      top: canvasBox.height / 2 + pan.y + (y - 0.5) * mapView.height * zoom,
+    };
+  };
   const maxZoom = terrainWidth >= 4096 ? 6 : 4;
   const selectedMarker = map?.markers.find((marker) => marker.id === selectedId) ?? null;
   const pendingTerrainLabels = terrainResult
@@ -500,14 +523,12 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
   const hitMarker = (clientX: number, clientY: number) => {
     if (!canvasRef.current || !map) return null;
     const rect = canvasRef.current.getBoundingClientRect();
-    const viewLeft = mapView?.left ?? 0;
-    const viewTop = mapView?.top ?? 0;
     const viewWidth = mapView?.width ?? rect.width;
     const viewHeight = mapView?.height ?? rect.height;
     let closest: { marker: MapMarker; distance: number } | null = null;
     for (const marker of map.markers) {
-      const mx = rect.left + rect.width / 2 + pan.x + viewLeft + (marker.x - 0.5) * viewWidth * zoom;
-      const my = rect.top + rect.height / 2 + pan.y + viewTop + (marker.y - 0.5) * viewHeight * zoom;
+      const mx = rect.left + rect.width / 2 + pan.x + (marker.x - 0.5) * viewWidth * zoom;
+      const my = rect.top + rect.height / 2 + pan.y + (marker.y - 0.5) * viewHeight * zoom;
       const distance = Math.hypot(clientX - mx, clientY - my);
       if (distance <= 18 && (!closest || distance < closest.distance)) closest = { marker, distance };
     }
@@ -1022,10 +1043,26 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
               <button
                 type="button"
                 className={`studio-link terrain-3d-toggle${terrain3dOpen ? " active" : ""}`}
-                onClick={() => setTerrain3dOpen((value) => !value)}
+                onClick={() => {
+                  setTerrain3dOpen((value) => !value);
+                }}
                 aria-pressed={terrain3dOpen}
               >
                 <Box size={16} /> {terrain3dOpen ? "2D" : "3D β"}
+              </button>
+            )}
+            {isTerrain && map?.fields_version && (
+              <button
+                type="button"
+                className={`studio-link terrain-gpu-toggle${gpuActive ? " active" : ""}`}
+                onClick={() => {
+                  setGpuTerrain((value) => !value);
+                  setGpuReady(false);
+                }}
+                aria-pressed={gpuActive}
+                title="GPU 逐片元渲染（放大后重新求值）"
+              >
+                <Cpu size={16} /> {gpuActive ? "GPU" : "PNG"}
               </button>
             )}
             <span className="studio-count">{map?.markers.length ?? 0} 个图钉</span>
@@ -1046,7 +1083,11 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
         </header>
 
         <main id="main-content" tabIndex={-1} className="ws-workspace studio-workspace">
-          {loading && <div className="loading"><Loader2 size={16} className="spin" /> 正在打开地图…</div>}
+          {loading && (
+            <div className="map-loader-shell">
+              <MapLoader label="正在打开地图" detail="读取世界与标记…" />
+            </div>
+          )}
           {error && <div className="error" role="alert">{error}</div>}
 
           {!loading && map && (
@@ -1095,13 +1136,28 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                     ? `${world?.name ?? "世界"}地图。按回车在地图中心添加标记；标记可拖动。`
                     : `${world?.name ?? "世界"}地图`}
                 >
+                  {!terrain3dOpen && (
+                    <PerfHud
+                      rendererMode={gpuActive ? "gpu" : "cpu"}
+                      terrain={
+                        map.terrain_web
+                          ? {
+                              seed: map.terrain_web.seed,
+                              style: map.terrain_web.style,
+                              width: map.terrain_web.width,
+                              height: map.terrain_web.height,
+                            }
+                          : null
+                      }
+                    />
+                  )}
                   {isTerrain && !terrain3dOpen && (
                     <div className="map-canvas-status" aria-hidden="true">
                       <span>{zoom.toFixed(1)}×</span>
                       <span>{cursorPoint ? `${(cursorPoint.x * 100).toFixed(1)}% · ${(cursorPoint.y * 100).toFixed(1)}%` : "拖动平移 · 滚轮缩放"}</span>
                     </div>
                   )}
-                  {isTerrain && map.background_url && !terrain3dOpen && (
+                  {isTerrain && map.background_url && !terrain3dOpen && !gpuActive && (
                     <div className="map-contour-badge" aria-hidden="true">
                       <span className="map-contour-swatch" />
                       <span>CONTOUR</span>
@@ -1133,7 +1189,7 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                     </div>
                   ) : (
                     <>
-                    {map.background_url && isTerrain && (
+                    {map.background_url && isTerrain && (!gpuActive || !gpuReady) && (
                       <MapCanvasStage
                         src={map.background_url}
                         heightmap={heightmapData}
@@ -1145,6 +1201,25 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                         pan={pan}
                         filterClass={terrainPreviewClass}
                         terrain
+                      />
+                    )}
+                    {map.background_url && isTerrain && gpuActive && map.fields_version && (
+                      <MapTerrainCanvas
+                        ref={mapCanvasRef}
+                        slug={worldSlug}
+                        version={map.fields_version}
+                        width={terrainWidth}
+                        height={terrainResult?.height || map?.terrain_web?.height || 1280}
+                        zoom={zoom}
+                        pan={pan}
+                        view={mapView}
+                        canvasBox={canvasBox}
+                        onReady={() => setGpuReady(true)}
+                        onError={(error) => {
+                          console.warn("GPU 地形不可用，回退到 PNG。", error);
+                          setGpuTerrain(false);
+                          setGpuReady(false);
+                        }}
                       />
                     )}
                     {map.background_url && isTerrain && (
@@ -1172,65 +1247,63 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                       <img className="map-background" src={map.background_url} alt="" draggable={false} />
                     )}
                     <div className="map-grid" aria-hidden="true" />
-                    {isTerrain && pendingTerrainLabels.map((label) => (
-                      <span
-                        key={label.name}
-                        className="terrain-label-anchor"
-                        style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
-                        aria-hidden="true"
-                      >
-                        <span
-                          className="terrain-label"
-                          style={{ transform: `translate(-50%, -50%) scale(${1 / zoom})`, transformOrigin: "center" }}
-                        >
-                          {label.name}
-                        </span>
-                      </span>
-                    ))}
-                    {map.markers.map((marker) => (
-                      <div key={marker.id} className="map-pin-anchor" style={{ left: `${marker.x * 100}%`, top: `${marker.y * 100}%` }}>
-                      <button
-                        type="button"
-                        className={`map-pin${selectedId === marker.id ? " selected" : ""}`}
-                        style={{ left: 0, top: 0, transform: `translate(-50%, -100%) scale(${1 / zoom})`, transformOrigin: "bottom center" }}
-                        onPointerEnter={() => setHoveredMarkerId(marker.id)}
-                        onPointerLeave={() => setHoveredMarkerId(null)}
-                        onPointerDown={(event) => onPointerDown(event, marker)}
-                        onPointerMove={onPointerMove}
-                        onPointerUp={(event) => void onPointerUp(event)}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          openPinMenu(marker, event.clientX || rect.left, event.clientY || rect.bottom);
-                        }}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setDraft(null);
-                          setEditing(false);
-                          setSelectedId(marker.id);
-                        }}
-                        aria-label={`${marker.label} · ${kindLabels[marker.kind]}`}
-                      >
-                        <span
-                          className="map-pin-icon"
-                          ref={vtClassRef("icon", selectedId === marker.id && Boolean(marker.card_slug))}
-                          style={selectedId === marker.id && marker.card_slug ? vt("icon", marker.card_slug) : undefined}
-                        >
-                          <MapPin size={16} />
-                        </span>
-                        <span>{marker.label}</span>
-                      </button>
-                      </div>
-                    ))}
-                    {draft && (
-                      <span
-                        className="map-draft"
-                        style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%` }}
-                        aria-hidden="true"
-                      />
-                    )}
                   </div>
+                  {mapView && canvasBox.width > 0 && (
+                    <div className="map-pins">
+                      {isTerrain && pendingTerrainLabels.map((label) => {
+                        const point = projectPin(label.x, label.y);
+                        if (!point) return null;
+                        return (
+                          <span key={label.name} className="terrain-label-anchor" style={point} aria-hidden="true">
+                            <span className="terrain-label">{label.name}</span>
+                          </span>
+                        );
+                      })}
+                      {map.markers.map((marker) => {
+                        const point = projectPin(marker.x, marker.y);
+                        if (!point) return null;
+                        return (
+                          <div key={marker.id} className="map-pin-anchor" style={point}>
+                            <button
+                              type="button"
+                              className={`map-pin${selectedId === marker.id ? " selected" : ""}`}
+                              onPointerEnter={() => setHoveredMarkerId(marker.id)}
+                              onPointerLeave={() => setHoveredMarkerId(null)}
+                              onPointerDown={(event) => onPointerDown(event, marker)}
+                              onPointerMove={onPointerMove}
+                              onPointerUp={(event) => void onPointerUp(event)}
+                              onContextMenu={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                openPinMenu(marker, event.clientX || rect.left, rect.bottom);
+                              }}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setDraft(null);
+                                setEditing(false);
+                                setSelectedId(marker.id);
+                              }}
+                              aria-label={`${marker.label} · ${kindLabels[marker.kind]}`}
+                            >
+                              <span
+                                className="map-pin-icon"
+                                ref={vtClassRef("icon", selectedId === marker.id && Boolean(marker.card_slug))}
+                                style={selectedId === marker.id && marker.card_slug ? vt("icon", marker.card_slug) : undefined}
+                              >
+                                <MapPin size={16} />
+                              </span>
+                              <span>{marker.label}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {draft && (() => {
+                        const point = projectPin(draft.x, draft.y);
+                        return point ? <span className="map-draft" style={point} aria-hidden="true" /> : null;
+                      })()}
+                    </div>
+                  )}
                   </>
                   )}
                   {map.markers.length === 0 && !draft && !isTerrain && !terrain3dOpen && (
@@ -1239,6 +1312,29 @@ export function MapPage({ worldSlug, session, onLogout }: MapPageProps) {
                       <strong>{canEdit ? "还没有标记" : "这个世界还没有标注地图"}</strong>
                       <span>{canEdit ? "点击画布空白处放下第一个地点" : "地图暂时是空的"}</span>
                     </div>
+                  )}
+                  {(terrainBusy || terrainProgress > 0) && (
+                    <MapLoader
+                      label={terrainBusy ? "正在生成地形底图" : "地形就绪"}
+                      detail={terrainBusy ? terrainPhase || "准备地形参数…" : "写入世界地图…"}
+                      progress={terrainProgress}
+                      hud={
+                        <PerfHud
+                          variant="plain"
+                          rendererMode={terrainBusy ? "pending" : gpuActive ? "gpu" : "cpu"}
+                          terrain={
+                            map.terrain_web
+                              ? {
+                                  seed: map.terrain_web.seed,
+                                  style: map.terrain_web.style,
+                                  width: map.terrain_web.width,
+                                  height: map.terrain_web.height,
+                                }
+                              : null
+                          }
+                        />
+                      }
+                    />
                   )}
                 </div>
                 <MapLens

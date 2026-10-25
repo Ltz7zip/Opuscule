@@ -31,16 +31,16 @@ export default function MapOverlayCanvas({ markers, selectedId, hoveredId, zoom,
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      const viewLeft = view?.left ?? 0;
-      const viewTop = view?.top ?? 0;
       const viewWidth = view?.width ?? width;
       const viewHeight = view?.height ?? height;
       for (const marker of markers) {
         const active = marker.id === selectedId;
         const hovered = marker.id === hoveredId;
         if (!active && !hovered) continue;
-        const x = width / 2 + pan.x + viewLeft + (marker.x - 0.5) * viewWidth * zoom;
-        const y = height / 2 + pan.y + viewTop + (marker.y - 0.5) * viewHeight * zoom;
+        // The world box is centred on the canvas and scaled about its centre;
+        // adding the letterbox offset again would shift every ring sideways.
+        const x = width / 2 + pan.x + (marker.x - 0.5) * viewWidth * zoom;
+        const y = height / 2 + pan.y + (marker.y - 0.5) * viewHeight * zoom;
         ctx.save();
         ctx.strokeStyle = active ? "rgba(255,255,255,.95)" : "rgba(255,255,255,.55)";
         ctx.lineWidth = active ? 1.8 : 1;

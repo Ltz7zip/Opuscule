@@ -1,6 +1,8 @@
 from django.utils.text import slugify
 from rest_framework import serializers
 
+from apps.cards.models import Card
+
 from .models import Collection
 
 
@@ -28,10 +30,16 @@ class CollectionSerializer(serializers.ModelSerializer):
         extra_kwargs = {"slug": {"required": False}}
 
     def get_card_count(self, obj: Collection) -> int:
-        return obj.cards.filter(is_auxiliary=False).count()
+        # List views annotate card_count; fall back to one COUNT only when the
+        # serializer is used without that annotation.
+        value = getattr(obj, "card_count", None)
+        if value is not None:
+            return value
+        return Card.objects.filter(home_collection=obj, is_auxiliary=False).count()
 
     def get_children_count(self, obj: Collection) -> int:
-        return obj.children.count()
+        value = getattr(obj, "children_count", None)
+        return value if value is not None else obj.children.count()
 
     def validate_parent(self, parent: Collection | None) -> Collection | None:
         world = self.context.get("world") or getattr(self.instance, "world", None)

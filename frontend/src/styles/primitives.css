@@ -182,8 +182,10 @@
 .dialog-head-actions { display:flex; align-items:center; gap: var(--space-2); }
 .btn-sm { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
 
-.btn-danger { border: 1px solid color-mix(in srgb, var(--destructive) 45%, var(--border)); background: color-mix(in srgb, var(--destructive) 12%, var(--card)); color: var(--destructive); }
-.btn-danger:hover { background: color-mix(in srgb, var(--destructive) 20%, var(--card)); }
+/* Mono palette: danger loses its hue, so it reads through a dashed outline
+   instead — still unmistakable next to the solid primary button. */
+.btn-danger { border: 1px dashed var(--border-strong); background: transparent; color: var(--foreground); }
+.btn-danger:hover { border-style: solid; border-color: var(--foreground); background: color-mix(in srgb, var(--foreground) 7%, transparent); }
 
 .dialog-compact { width: min(440px, 100%); }
 .dialog-compact .dialog-actions { justify-content: flex-end; }

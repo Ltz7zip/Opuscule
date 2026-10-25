@@ -8,10 +8,12 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
+from django.core.validators import validate_slug
 from django.db import transaction
 
-from apps.cards.models import Card
+from apps.cards.models import Card, plain_text
 from apps.collections.models import Collection
 
 from .models import World, WorldMembership
@@ -46,7 +48,7 @@ def _safe_name(name: str) -> str:
     return normalized
 
 
-def _payload(raw: bytes) -> dict[str, Any]:
+def _payload(raw: bytes) -> tuple[dict[str, Any], zipfile.ZipFile]:
     try:
         archive = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as exc:
@@ -77,6 +79,28 @@ def _required_str(value: object, field: str, limit: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value.strip()) > limit:
         raise WorldImportError(f"{field} 无效")
     return value.strip()
+
+
+def _slug(value: object, field: str, limit: int) -> str:
+    """Import slugs feed URLs, RSS and ZIP entry names, so they must be slugs."""
+    slug = _required_str(value, field, limit)
+    try:
+        validate_slug(slug)
+    except DjangoValidationError as exc:
+        raise WorldImportError(f"{field} 只能包含字母、数字、下划线或连字符") from exc
+    return slug
+
+
+def _assert_acyclic(parent_of: dict[str, str]) -> None:
+    """Reject collection trees whose parent chain loops back on itself."""
+    for start in parent_of:
+        seen: set[str] = set()
+        current = start
+        while current in parent_of:
+            if current in seen:
+                raise WorldImportError("collection parent 形成环")
+            seen.add(current)
+            current = parent_of[current]
 
 
 @transaction.atomic
@@ -119,10 +143,11 @@ def import_world(*, owner, upload) -> World:
 
     collection_map: dict[str, Collection] = {}
     parent_links: list[tuple[Collection, str]] = []
+    parent_of: dict[str, str] = {}
     for index, item in enumerate(data.get("collections") or []):
         if not isinstance(item, dict):
             raise WorldImportError("collections 项无效")
-        slug = _required_str(item.get("slug"), "collections.slug", 80)
+        slug = _slug(item.get("slug"), "collections.slug", 80)
         if slug in collection_map:
             raise WorldImportError("collection slug 重复")
         collection = Collection.objects.create(
@@ -138,6 +163,8 @@ def import_world(*, owner, upload) -> World:
         parent = item.get("parent")
         if isinstance(parent, str) and parent:
             parent_links.append((collection, parent))
+            parent_of[slug] = parent
+    _assert_acyclic(parent_of)
     for collection, parent_slug in parent_links:
         parent = collection_map.get(parent_slug)
         if parent is None:
@@ -149,7 +176,7 @@ def import_world(*, owner, upload) -> World:
     for item in data.get("cards") or []:
         if not isinstance(item, dict):
             raise WorldImportError("cards 项无效")
-        slug = _required_str(item.get("slug"), "cards.slug", 120)
+        slug = _slug(item.get("slug"), "cards.slug", 120)
         if slug in card_map:
             raise WorldImportError("card slug 重复")
         body_json = item.get("body_json") or {}
@@ -167,7 +194,9 @@ def import_world(*, owner, upload) -> World:
             title=_required_str(item.get("title"), "cards.title", 240),
             slug=slug,
             body_json=body_json,
-            body_text=str(item.get("body_text") or ""),
+            # body_text indexes search: derive it from the document instead of
+            # trusting a field the archive can forge.
+            body_text=plain_text(body_json),
             is_public=bool(item.get("is_public", True)),
             is_auxiliary=bool(item.get("is_auxiliary", False)),
         )

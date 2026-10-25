@@ -346,7 +346,26 @@ export function searchCards(query: string, offset = 0): Promise<SearchResponse> 
 
 
 export function fetchWorldMap(slug: string): Promise<MapData> {
-  return request<MapData>(`/worlds/${encodeURIComponent(slug)}/map/`);
+  // The payload carries the field cache token, so it must never be served
+  // from a heuristic HTTP cache after a terrain regeneration.
+  return request<MapData>(`/worlds/${encodeURIComponent(slug)}/map/`, { cache: "no-store" });
+}
+
+export async function fetchMapFields(slug: string, version: string): Promise<ArrayBuffer> {
+  const response = await fetch(
+    `${BASE}/worlds/${encodeURIComponent(slug)}/map/fields/?v=${encodeURIComponent(version)}`,
+    { credentials: "same-origin" },
+  );
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      detail = null;
+    }
+    throw new ApiError(response.status, detail, messageFrom(detail, response.status));
+  }
+  return response.arrayBuffer();
 }
 
 export function createMapMarker(

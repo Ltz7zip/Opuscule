@@ -1,4 +1,6 @@
+from django.db.models import Count, Q
 from rest_framework import generics
+from rest_framework.permissions import AllowAny
 
 from apps.worlds.access import get_world_for_read, get_world_for_write
 
@@ -8,6 +10,7 @@ from .serializers import CollectionSerializer
 
 class CollectionListCreateView(generics.ListCreateAPIView):
     serializer_class = CollectionSerializer
+    permission_classes = [AllowAny]
 
     def get_world(self):
         return get_world_for_read(self.request, self.kwargs["world_slug"])
@@ -17,7 +20,18 @@ class CollectionListCreateView(generics.ListCreateAPIView):
         qs = Collection.objects.filter(world=world)
         if world.role_for(self.request.user) is None:
             qs = qs.filter(is_public=True)
-        return qs.select_related("parent").order_by("position_key", "id")
+        return (
+            qs.select_related("parent")
+            .annotate(
+                card_count=Count(
+                    "cards",
+                    filter=Q(cards__is_auxiliary=False, cards__deleted_at__isnull=True),
+                    distinct=True,
+                ),
+                children_count=Count("children", distinct=True),
+            )
+            .order_by("position_key", "id")
+        )
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

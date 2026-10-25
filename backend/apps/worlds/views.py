@@ -4,14 +4,14 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied, ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -38,6 +38,8 @@ from .services import create_world
 
 
 class HealthView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request):
         try:
             connection.ensure_connection()
@@ -49,11 +51,16 @@ class HealthView(APIView):
         return Response({"status": "ok", "service": "opuscule-api", "database": "ok"})
 
 
-def with_public_counts(qs):
-    return qs.annotate(
+def with_public_counts(qs, viewer=None):
+    """Annotate public counts (and the viewer role when authenticated).
+
+    The role subquery keeps ``WorldSerializer`` from issuing one membership
+    query per world on list and detail pages.
+    """
+    qs = qs.annotate(
         public_card_count=Count(
             "cards",
-            filter=Q(cards__is_public=True, cards__is_auxiliary=False),
+            filter=Q(cards__is_public=True, cards__is_auxiliary=False, cards__deleted_at__isnull=True),
             distinct=True,
         ),
         public_collection_count=Count(
@@ -62,10 +69,20 @@ def with_public_counts(qs):
             distinct=True,
         ),
     )
+    if viewer is not None and getattr(viewer, "is_authenticated", False):
+        qs = qs.annotate(
+            viewer_role=Subquery(
+                WorldMembership.objects.filter(
+                    world=OuterRef("pk"), user=viewer
+                ).values("role")[:1]
+            )
+        )
+    return qs
 
 
 class WorldListView(generics.ListCreateAPIView):
     serializer_class = WorldSerializer
+    permission_classes = [AllowAny]
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -74,7 +91,7 @@ class WorldListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = with_public_counts(World.objects.all())
+        qs = with_public_counts(World.objects.all(), user)
         if getattr(user, "is_authenticated", False):
             return qs.filter(
                 Q(is_public_read=True) | Q(memberships__user=user)
@@ -105,10 +122,11 @@ class ExploreView(generics.ListAPIView):
     """Public directory: only public-read worlds, regardless of login."""
 
     serializer_class = WorldSerializer
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         return with_public_counts(
-            World.objects.filter(is_public_read=True)
+            World.objects.filter(is_public_read=True), self.request.user
         ).order_by("-updated_at", "id")
 
     def list(self, request, *args, **kwargs):
@@ -119,6 +137,7 @@ class ExploreView(generics.ListAPIView):
 
 class WorldDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "slug"
+    permission_classes = [AllowAny]
 
     def get_serializer_class(self):
         if self.request.method in {"PUT", "PATCH"}:
@@ -127,9 +146,9 @@ class WorldDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = with_public_counts(
-            World.objects.prefetch_related("collections", "cards")
-        )
+        # Detail serialization queries collections and cards itself; a prefetch
+        # here would be filtered away again and only cost a round trip.
+        qs = with_public_counts(World.objects.all(), user)
         if getattr(user, "is_authenticated", False):
             return qs.filter(
                 Q(is_public_read=True) | Q(memberships__user=user)
@@ -310,6 +329,8 @@ class WorldInviteDetailView(generics.DestroyAPIView):
 
 
 class InviteInfoView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, token: str):
         invite = get_object_or_404(WorldInvite, token=token)
         already_member = (
@@ -577,7 +598,9 @@ class WorldImportHistoryView(APIView):
         seen: set[int] = set()
         rows = []
         for event in events:
-            world = World.all_objects.filter(pk=event.world_id).first()
+            # select_related("world") already loaded the recycled world through
+            # the base manager; do not re-query it per event.
+            world = event.world
             if world is None or world.id in seen:
                 continue
             seen.add(world.id)

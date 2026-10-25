@@ -1,4 +1,6 @@
+from django.db.models import Count
 from rest_framework import generics
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -17,12 +19,14 @@ def ensure_default_timeline(world):
 
 
 class WorldTimelineView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, world_slug: str):
         world = get_world_for_read(request, world_slug)
-        timelines = world.timelines.all()
+        timelines = world.timelines.annotate(entry_count=Count("entries"))
         if not timelines.exists():
             ensure_default_timeline(world)
-            timelines = world.timelines.all()
+            timelines = world.timelines.annotate(entry_count=Count("entries"))
         requested = (request.query_params.get("timeline") or "").strip()
         selected = timelines.filter(slug=requested).first() if requested else None
         if selected is None:
@@ -104,7 +108,12 @@ class TimelineListCreateView(generics.ListCreateAPIView):
         return get_world_for_write(self.request, self.kwargs["world_slug"])
 
     def get_queryset(self):
-        return self.get_world().timelines.all()
+        return self.get_world().timelines.annotate(entry_count=Count("entries"))
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["world"] = self.get_world()
+        return context
 
     def perform_create(self, serializer):
         world = self.get_world()
@@ -117,5 +126,13 @@ class TimelineListCreateView(generics.ListCreateAPIView):
 class TimelineDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TimelineSerializer
 
+    def get_world(self):
+        return get_world_for_write(self.request, self.kwargs["world_slug"])
+
     def get_queryset(self):
-        return get_world_for_write(self.request, self.kwargs["world_slug"]).timelines.all()
+        return self.get_world().timelines.annotate(entry_count=Count("entries"))
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["world"] = self.get_world()
+        return context

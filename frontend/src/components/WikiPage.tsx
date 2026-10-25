@@ -14,6 +14,7 @@ import type {
 } from "../types";
 import { RichText } from "./RichText";
 import { SiteFoot } from "./SiteFoot";
+import ExploreBackdrop from "./ExploreBackdrop";
 import { SiteHeader } from "./SiteHeader";
 import { TypeIcon } from "./TypeIcon";
 
@@ -161,6 +162,7 @@ export function WikiPage({
 
   return (
     <div className="site-page wiki-page">
+      <ExploreBackdrop opacity={0.4} />
       <SiteHeader
         worldName={world?.name}
         worldSlug={world?.slug ?? worldSlug}

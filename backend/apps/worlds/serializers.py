@@ -1,9 +1,14 @@
+from django.db.models import Count, Q
 from rest_framework import serializers
 
+from apps.cards.models import Card
 from apps.cards.serializers import CardListSerializer
+from apps.collections.models import Collection
 from apps.collections.serializers import CollectionSerializer
 
 from .models import World, WorldAuditEvent, WorldInvite, WorldMembership
+
+_ROLE_MISSING = object()
 
 
 class WorldSerializer(serializers.ModelSerializer):
@@ -33,22 +38,33 @@ class WorldSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_role(self, obj: World) -> str | None:
+        role = getattr(obj, "viewer_role", _ROLE_MISSING)
+        if role is not _ROLE_MISSING:
+            return role
         request = self.context.get("request")
         return obj.role_for(getattr(request, "user", None))
 
     def get_can_edit(self, obj: World) -> bool:
-        request = self.context.get("request")
-        return obj.can_edit(getattr(request, "user", None))
+        return self.get_role(obj) in {
+            WorldMembership.Role.OWNER,
+            WorldMembership.Role.EDITOR,
+        }
 
     def get_card_count(self, obj: World) -> int:
-        return getattr(
-            obj,
-            "public_card_count",
-            obj.cards.filter(is_public=True, is_auxiliary=False).count(),
-        )
+        # ``getattr`` evaluates its default argument eagerly, so probe first:
+        # the list views annotate public_card_count to avoid a COUNT per world.
+        value = getattr(obj, "public_card_count", None)
+        if value is not None:
+            return value
+        return obj.cards.filter(
+            is_public=True, is_auxiliary=False, deleted_at__isnull=True
+        ).count()
 
     def get_collection_count(self, obj: World) -> int:
-        return getattr(obj, "public_collection_count", obj.collections.filter(is_public=True).count())
+        value = getattr(obj, "public_collection_count", None)
+        if value is not None:
+            return value
+        return obj.collections.filter(is_public=True).count()
 
 
 class WorldDetailSerializer(WorldSerializer):
@@ -59,18 +75,26 @@ class WorldDetailSerializer(WorldSerializer):
         fields = WorldSerializer.Meta.fields + ["collections", "cards"]
 
     def _viewer_is_member(self, obj: World) -> bool:
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-        return obj.role_for(user) is not None
+        return self.get_role(obj) is not None
 
     def get_collections(self, obj: World) -> list[dict]:
-        collections = obj.collections.all()
+        collections = Collection.objects.filter(world=obj)
         if not self._viewer_is_member(obj):
             collections = collections.filter(is_public=True)
+        collections = collections.annotate(
+            card_count=Count(
+                "cards",
+                filter=Q(cards__is_auxiliary=False, cards__deleted_at__isnull=True),
+                distinct=True,
+            ),
+            children_count=Count("children", distinct=True),
+        ).order_by("position_key", "id")
         return CollectionSerializer(collections, many=True).data
 
     def get_cards(self, obj: World) -> list[dict]:
-        cards = obj.cards.filter(is_auxiliary=False)
+        # ``obj.cards`` is a reverse manager and therefore still exposes
+        # recycled cards; go through the filtered default manager instead.
+        cards = Card.objects.filter(world=obj, is_auxiliary=False)
         if not self._viewer_is_member(obj):
             cards = cards.filter(is_public=True)
         cards = cards.select_related("home_collection")

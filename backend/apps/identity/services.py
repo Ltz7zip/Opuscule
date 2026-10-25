@@ -22,7 +22,7 @@ def _visible_worlds(owner, viewer) -> list[World]:
         .annotate(
             public_card_count=Count(
                 "cards",
-                filter=Q(cards__is_public=True, cards__is_auxiliary=False),
+                filter=Q(cards__is_public=True, cards__is_auxiliary=False, cards__deleted_at__isnull=True),
             )
         )
         .distinct()

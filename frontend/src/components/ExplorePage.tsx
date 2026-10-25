@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ExploreBackdrop from "./ExploreBackdrop";
 
 import { fetchExplore } from "../api";
 import type { SessionState, WorldSummary } from "../types";
@@ -72,6 +73,7 @@ export function ExplorePage({ session, onLogout, initialWorlds }: ExplorePagePro
 
   return (
     <div className="site-page explore-page">
+      <ExploreBackdrop />
       <SiteHeader session={session} onLogout={onLogout} active="explore" />
 
       <main id="main-content" tabIndex={-1} className="site-wrap">

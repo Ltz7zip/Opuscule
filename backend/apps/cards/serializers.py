@@ -1,7 +1,28 @@
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from .models import Card, CardComment, Notification, plain_text
+from .models import Card, CardComment, CardRevision, Notification, plain_text
+
+# Tiptap documents in practice nest a handful of levels (doc > list > item >
+# paragraph > text). Anything past this is not an editor document.
+MAX_BODY_DEPTH = 64
+
+
+def json_depth(node: object) -> int:
+    """Iterative maximum container nesting depth of a JSON value."""
+    deepest = 0
+    stack: list[tuple[object, int]] = [(node, 1)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > deepest:
+            deepest = depth
+            if deepest > MAX_BODY_DEPTH:
+                return deepest
+        if isinstance(current, dict):
+            stack.extend((value, depth + 1) for value in current.values())
+        elif isinstance(current, list):
+            stack.extend((value, depth + 1) for value in current)
+    return deepest
 
 
 class CardListSerializer(serializers.ModelSerializer):
@@ -20,6 +41,8 @@ class CardListSerializer(serializers.ModelSerializer):
             "is_auxiliary",
             "body_text",
             "revision",
+            "pinned",
+            "era",
             "updated_at",
         ]
         read_only_fields = fields
@@ -43,6 +66,8 @@ class CardDetailSerializer(serializers.ModelSerializer):
             "is_auxiliary",
             "presence_json",
             "revision",
+            "pinned",
+            "era",
             "created_at",
             "updated_at",
         ]
@@ -55,11 +80,16 @@ class CardDetailSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Collection belongs to another world.")
         return collection
 
+    def validate_body_json(self, value):
+        if value and json_depth(value) > MAX_BODY_DEPTH:
+            raise serializers.ValidationError("正文嵌套层级过深")
+        return value
+
     def _unique_slug(self, world, title: str, current: str = "") -> str:
         base = slugify(title) or "card"
         slug = current or base
         index = 2
-        qs = Card.objects.filter(world=world).exclude(pk=self.instance.pk if self.instance else None)
+        qs = Card.all_objects.filter(world=world).exclude(pk=self.instance.pk if self.instance else None)
         while qs.filter(slug=slug).exists():
             slug = f"{base}-{index}"
             index += 1
@@ -73,7 +103,29 @@ class CardDetailSerializer(serializers.ModelSerializer):
         validated_data["body_text"] = plain_text(validated_data.get("body_json") or {})
         return super().create(validated_data)
 
+    REVISION_FIELDS = {
+        "title": "标题",
+        "body_json": "正文",
+        "icon": "图标",
+        "cover": "封面",
+        "type_key": "类型",
+        "era": "纪元",
+    }
+
     def update(self, instance, validated_data):
+        changed = [self.REVISION_FIELDS[field] for field in self.REVISION_FIELDS if field in validated_data]
+        if changed:
+            request = self.context.get("request")
+            author = getattr(request, "user", None)
+            CardRevision.objects.update_or_create(
+                card=instance,
+                index=instance.revision,
+                defaults={
+                    "snapshot": instance.snapshot(),
+                    "summary": "、".join(changed),
+                    "author": author if author and author.is_authenticated else None,
+                },
+            )
         if "body_json" in validated_data:
             validated_data["body_text"] = plain_text(validated_data["body_json"] or {})
         if not validated_data.get("slug"):
@@ -127,3 +179,25 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ["id", "kind", "message", "actor_name", "card_title", "card_slug", "card_id", "world_slug", "read_at", "created_at"]
         read_only_fields = ["id", "kind", "message", "actor_name", "card_title", "card_slug", "created_at"]
+
+
+class TrashCardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Card
+        fields = ["id", "title", "slug", "type_key", "home_collection", "revision", "deleted_at"]
+        read_only_fields = fields
+
+
+class CardRevisionSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.username", read_only=True, allow_null=True)
+
+    class Meta:
+        model = CardRevision
+        fields = ["index", "summary", "author_name", "created_at"]
+        read_only_fields = fields
+
+
+class CardRevisionDetailSerializer(CardRevisionSerializer):
+    class Meta(CardRevisionSerializer.Meta):
+        fields = CardRevisionSerializer.Meta.fields + ["snapshot"]
+        read_only_fields = fields

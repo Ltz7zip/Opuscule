@@ -111,14 +111,14 @@ export default function MapCanvasStage({
       context.restore();
     }
 
+    const centerX = width / 2 + pan.x;
+    const centerY = height / 2 + pan.y;
     const levels = levelsRef.current;
     if (terrain && levels) {
       const hmWidth = levels.width || heightmapWidth;
       const hmHeight = levels.height || heightmapHeight;
       const detailOpacity = Math.min(0.8, 0.36 + (zoom - 1) * 0.34);
       const stride = zoom < 1.25 ? 2 : 1;
-      const centerX = width / 2 + pan.x;
-      const centerY = height / 2 + pan.y;
       const displayMapWidth = displayWidth * zoom;
       const displayMapHeight = displayHeight * zoom;
       context.save();
@@ -126,8 +126,14 @@ export default function MapCanvasStage({
       context.rect(0, 0, width, height);
       context.clip();
 
-      const px = (x: number) => centerX + left + (x / (hmWidth - 1) - 0.5) * displayMapWidth;
-      const py = (y: number) => centerY + top + (y / (hmHeight - 1) - 0.5) * displayMapHeight;
+      // The image is drawn inside translate(center) + scale(zoom), so its
+      // top-left corner lands at center + zoom * (left - width/2).  The old
+      // form forgot to scale the letterbox offset, which drifted the contour
+      // layer away from the terrain as soon as you zoomed in.
+      const originX = centerX + zoom * (left - width / 2);
+      const originY = centerY + zoom * (top - height / 2);
+      const px = (x: number) => originX + (x / (hmWidth - 1)) * displayMapWidth;
+      const py = (y: number) => originY + (y / (hmHeight - 1)) * displayMapHeight;
       const sample = (x: number, y: number) => {
         const cx = Math.max(0, Math.min(hmWidth - 1, x));
         const cy = Math.max(0, Math.min(hmHeight - 1, y));
@@ -186,8 +192,8 @@ export default function MapCanvasStage({
     }
 
     if (selected) {
-      const sx = width / 2 + pan.x + (selected.x - 0.5) * width * zoom;
-      const sy = height / 2 + pan.y + (selected.y - 0.5) * height * zoom;
+      const sx = centerX + zoom * (left - width / 2) + selected.x * displayWidth * zoom;
+      const sy = centerY + zoom * (top - height / 2) + selected.y * displayHeight * zoom;
       context.save();
       context.strokeStyle = "rgba(255,255,255,.92)";
       context.lineWidth = 1.5;

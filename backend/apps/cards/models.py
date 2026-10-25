@@ -7,16 +7,33 @@ from apps.worlds.models import World
 
 
 def plain_text(node: object) -> str:
-    """Flatten a Tiptap JSON document into searchable text."""
+    """Flatten a Tiptap JSON document into searchable text.
+
+    Walks the tree iteratively so a deeply nested document cannot exhaust the
+    Python call stack (the JSON body is user-controlled).
+    """
     if not isinstance(node, dict):
         return ""
     parts: list[str] = []
-    text = node.get("text")
-    if isinstance(text, str):
-        parts.append(text)
-    for child in node.get("content") or []:
-        parts.append(plain_text(child))
+    stack: list[object] = [node]
+    while stack:
+        current = stack.pop()
+        if not isinstance(current, dict):
+            continue
+        text = current.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+        children = current.get("content")
+        if isinstance(children, list):
+            stack.extend(reversed(children))
     return " ".join(part for part in parts if part).strip()
+
+
+class ActiveCardManager(models.Manager):
+    """Hide recycled cards from every ordinary query, including world trees."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
 
 
 class Card(TimeStampedModel):
@@ -44,9 +61,22 @@ class Card(TimeStampedModel):
     is_auxiliary = models.BooleanField(default=False)
     presence_json = models.JSONField(default=dict, blank=True)
     revision = models.PositiveIntegerField(default=1)
+    pinned = models.BooleanField(default=False)
+    era = models.CharField(max_length=80, blank=True, default="")
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deleted_cards",
+    )
+
+    objects = ActiveCardManager()
+    all_objects = models.Manager()
 
     class Meta:
-        ordering = ["id"]
+        ordering = ["-pinned", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["world", "slug"],
@@ -65,6 +95,41 @@ class Card(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.title
+
+    def snapshot(self) -> dict:
+        return {
+            "title": self.title,
+            "body_json": self.body_json,
+            "body_text": self.body_text,
+            "icon": self.icon,
+            "cover": self.cover,
+            "type_key": self.type_key,
+            "era": self.era,
+        }
+
+
+class CardRevision(models.Model):
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name="revisions")
+    index = models.PositiveIntegerField()
+    snapshot = models.JSONField(default=dict)
+    summary = models.CharField(max_length=120, blank=True, default="")
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="card_revisions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-index"]
+        constraints = [
+            models.UniqueConstraint(fields=["card", "index"], name="cards_revision_unique_index")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.card.title} · v{self.index}"
 
 
 class CardImage(TimeStampedModel):

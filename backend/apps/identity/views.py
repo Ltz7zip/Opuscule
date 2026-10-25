@@ -2,6 +2,8 @@ import re
 from datetime import timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.utils import timezone
 from django.middleware.csrf import get_token
@@ -22,10 +24,24 @@ from .serializers import UserProfileSerializer
 from .services import profile_for, profile_payload
 
 
+def password_error(password: str, user=None) -> str | None:
+    """Run Django's configured validators and return a display message."""
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as exc:
+        return " ".join(exc.messages)
+    return None
+
+
 def session_payload(user) -> dict:
     if not getattr(user, "is_authenticated", False):
         return {"authenticated": False, "user": None, "worlds": []}
-    memberships = WorldMembership.objects.filter(user=user).select_related("world")
+    # Recycled worlds keep their memberships; they must not reappear in the
+    # workspace switcher.
+    memberships = WorldMembership.objects.filter(
+        user=user,
+        world__deleted_at__isnull=True,
+    ).select_related("world")
     return {
         "authenticated": True,
         "user": {"id": user.pk, "username": user.get_username()},
@@ -167,12 +183,13 @@ class RegisterView(APIView):
                 {"detail": "用户名需为 3–32 位字母、数字或下划线"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if len(password) < 8:
+        user_model = get_user_model()
+        message = password_error(password, user_model(username=username))
+        if message:
             return Response(
-                {"detail": "密码至少 8 位"},
+                {"detail": message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        user_model = get_user_model()
         if user_model.objects.filter(username=username).exists():
             return Response(
                 {"detail": "用户名已被占用"},
@@ -199,9 +216,10 @@ class ChangePasswordView(APIView):
                 {"detail": "当前密码不正确"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if len(new) < 8:
+        message = password_error(new, request.user)
+        if message:
             return Response(
-                {"detail": "新密码至少 8 位"},
+                {"detail": message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if current == new:

@@ -31,6 +31,7 @@ class World(TimeStampedModel):
     published_at = models.DateTimeField(null=True, blank=True)
     theme_json = models.JSONField(default=dict, blank=True)
     map_background = models.FileField(upload_to="world-map-backgrounds/", blank=True, default="")
+    terrain_web = models.JSONField(default=dict, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
     objects = WorldManager()
@@ -156,6 +157,7 @@ class WorldAuditEvent(models.Model):
         INVITE_REVOKED = "invite.revoked", "邀请撤销"
         INVITE_ACCEPTED = "invite.accepted", "邀请接受"
         IMPORTED = "world.imported", "世界导入"
+        TERRAIN_UPLOADED = "terrain.uploaded", "地形由本地生成上传"
 
     world = models.ForeignKey(World, on_delete=models.CASCADE, related_name="audit_events")
     actor = models.ForeignKey(

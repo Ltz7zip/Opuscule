@@ -155,6 +155,22 @@ class MultipleTimelineApiTests(APITestCase):
         )
         self.assertIn(response.status_code, {401, 403})
 
+    def test_duplicate_timeline_slug_is_a_validation_error(self):
+        self.client.force_authenticate(self.owner)
+        created = self.client.post(
+            "/api/worlds/multi-world/timelines/",
+            {"name": "支线", "slug": "side"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        duplicate = self.client.post(
+            "/api/worlds/multi-world/timelines/",
+            {"name": "撞车", "slug": "side"},
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("slug", duplicate.data)
+
 
 class TimelineMonthTests(APITestCase):
     def setUp(self):

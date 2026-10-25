@@ -5,18 +5,29 @@ from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.identity.models import UserProfile
 from apps.worlds.access import get_world_for_read, get_world_for_write
 from apps.worlds.models import World, WorldMembership
 
-from .models import Card, CardComment, CardImage, Notification
-from .serializers import CardCommentSerializer, CardDetailSerializer, NotificationSerializer, SearchResultSerializer
+from .models import Card, CardComment, CardImage, CardRevision, Notification, plain_text
+from .serializers import (
+    CardCommentSerializer,
+    CardDetailSerializer,
+    CardListSerializer,
+    CardRevisionDetailSerializer,
+    CardRevisionSerializer,
+    NotificationSerializer,
+    SearchResultSerializer,
+    TrashCardSerializer,
+)
 
 
 class CardListCreateView(generics.ListCreateAPIView):
     serializer_class = CardDetailSerializer
+    permission_classes = [AllowAny]
 
     def get_world(self):
         return get_world_for_read(self.request, self.kwargs["world_slug"])
@@ -31,7 +42,7 @@ class CardListCreateView(generics.ListCreateAPIView):
         collection = self.request.query_params.get("collection")
         if collection:
             qs = qs.filter(home_collection_id=collection)
-        return qs.order_by("id")
+        return qs.order_by("-pinned", "id")
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -43,9 +54,10 @@ class CardListCreateView(generics.ListCreateAPIView):
         serializer.save(world=world)
 
 
-class CardDetailView(generics.RetrieveUpdateAPIView):
+class CardDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CardDetailSerializer
     lookup_field = "pk"
+    permission_classes = [AllowAny]
 
     def get_world(self):
         return get_world_for_read(self.request, self.kwargs["world_slug"])
@@ -66,10 +78,92 @@ class CardDetailView(generics.RetrieveUpdateAPIView):
         get_world_for_write(request, self.kwargs["world_slug"])
         return super().update(request, *args, **kwargs)
 
+    def destroy(self, request, *args, **kwargs):
+        get_world_for_write(request, self.kwargs["world_slug"])
+        card = self.get_object()
+        card.deleted_at = timezone.now()
+        card.deleted_by = request.user
+        card.save(update_fields=["deleted_at", "deleted_by"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CardTrashListView(APIView):
+    def get(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        cards = (
+            Card.all_objects.filter(world=world, deleted_at__isnull=False)
+            .select_related("home_collection")
+            .order_by("-deleted_at", "-id")
+        )
+        return Response({"count": cards.count(), "cards": TrashCardSerializer(cards, many=True).data})
+
+
+class CardRestoreView(APIView):
+    def post(self, request, world_slug: str, pk: int):
+        world = get_world_for_write(request, world_slug)
+        card = get_object_or_404(Card.all_objects, world=world, pk=pk, deleted_at__isnull=False)
+        card.deleted_at = None
+        card.deleted_by = None
+        card.save(update_fields=["deleted_at", "deleted_by"])
+        return Response(CardListSerializer(card).data)
+
+
+class CardPurgeView(APIView):
+    def delete(self, request, world_slug: str, pk: int):
+        world = get_world_for_write(request, world_slug)
+        card = get_object_or_404(Card.all_objects, world=world, pk=pk, deleted_at__isnull=False)
+        card.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CardRevisionListView(APIView):
+    def get(self, request, world_slug: str, pk: int):
+        world = get_world_for_write(request, world_slug)
+        card = get_object_or_404(Card.objects, world=world, pk=pk)
+        revisions = card.revisions.select_related("author")
+        return Response(
+            {
+                "card": {"id": card.id, "title": card.title, "revision": card.revision},
+                "versions": CardRevisionSerializer(revisions, many=True).data,
+            }
+        )
+
+
+class CardRevisionDetailView(APIView):
+    def get(self, request, world_slug: str, pk: int, index: int):
+        world = get_world_for_write(request, world_slug)
+        card = get_object_or_404(Card.objects, world=world, pk=pk)
+        revision = get_object_or_404(CardRevision.objects.select_related("author"), card=card, index=index)
+        return Response(CardRevisionDetailSerializer(revision).data)
+
+
+class CardRevisionRestoreView(APIView):
+    def post(self, request, world_slug: str, pk: int, index: int):
+        world = get_world_for_write(request, world_slug)
+        card = get_object_or_404(Card.objects, world=world, pk=pk)
+        revision = get_object_or_404(CardRevision, card=card, index=index)
+        CardRevision.objects.update_or_create(
+            card=card,
+            index=card.revision,
+            defaults={
+                "snapshot": card.snapshot(),
+                "summary": "回滚前自动保存",
+                "author": request.user,
+            },
+        )
+        for field in ("title", "body_json", "body_text", "icon", "cover", "type_key", "era"):
+            if field in revision.snapshot:
+                setattr(card, field, revision.snapshot[field])
+        card.body_text = plain_text(card.body_json or {})
+        card.revision += 1
+        card.save()
+        return Response(CardDetailSerializer(card, context={"request": request, "world": world}).data)
+
 
 class CardBySlugView(generics.RetrieveAPIView):
     serializer_class = CardDetailSerializer
     lookup_field = "slug"
+    permission_classes = [AllowAny]
 
     def get_world(self):
         return get_world_for_read(self.request, self.kwargs["world_slug"])
@@ -102,6 +196,8 @@ def _snippet(text: str, query: str) -> str:
 
 
 class SearchView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request):
         query = (request.query_params.get("q") or "").strip()[:80]
         if not query:
@@ -340,12 +436,15 @@ class CardCommentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return Notification.objects.filter(recipient=self.request.user).select_related("actor", "card")
 
 
 class NotificationReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, pk: int):
         notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
         if notification.read_at is None:
@@ -355,6 +454,8 @@ class NotificationReadView(APIView):
 
 
 class NotificationReadAllView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
         return Response({"ok": True})

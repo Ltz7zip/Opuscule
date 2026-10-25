@@ -86,6 +86,22 @@ class ProfileApiTests(APITestCase):
         )
         self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_register_rejects_common_numeric_password(self):
+        from rest_framework.test import APIClient
+
+        client = APIClient(enforce_csrf_checks=True)
+        token = client.get("/api/auth/csrf/").data["csrfToken"]
+        response = client.post(
+            "/api/auth/register/",
+            {"username": "numeric_newcomer", "password": "12345678"},
+            format="json",
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            get_user_model().objects.filter(username="numeric_newcomer").exists()
+        )
+
     def test_public_profile_hides_private_world_and_cards(self):
         response = self.client.get("/api/u/traveler/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -266,4 +282,14 @@ class ChangePasswordTests(APITestCase):
             format="json",
         )
         self.assertEqual(weak.status_code, 400)
+        self.assertTrue(self.user.check_password("old-password"))
+
+    def test_common_numeric_password_is_rejected(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            "/api/auth/password/",
+            {"current_password": "old-password", "new_password": "12345678"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
         self.assertTrue(self.user.check_password("old-password"))

@@ -1,32 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ACESFilmicToneMapping,
+  NoToneMapping,
   AmbientLight,
+  DirectionalLight,
+  HemisphereLight,
+  PCFSoftShadowMap,
+  PlaneGeometry,
+  RepeatWrapping,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  CubeTexture,
   Color,
-  DataTexture,
-  DirectionalLight,
   Fog,
-  HemisphereLight,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
-  PCFSoftShadowMap,
+  ShaderMaterial,
+  Vector3,
+  MeshPhongMaterial,
   PerspectiveCamera,
-  PlaneGeometry,
-  RGBAFormat,
-  RepeatWrapping,
   Scene,
   SRGBColorSpace,
   Texture,
   TextureLoader,
-  UnsignedByteType,
-  Vector2,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Water } from "three/examples/jsm/objects/Water.js";
 import { Loader2, RotateCw, Sun } from "lucide-react";
 
 interface Terrain3DPreviewProps {
@@ -34,6 +34,10 @@ interface Terrain3DPreviewProps {
   meshWidth: number;
   meshHeight: number;
   textureData: string;
+  /** Flat (hillshade-free) albedo captured from the GPU 2D map. */
+  albedoData?: string;
+  /** Full-resolution map PNG: pixel-identical to what the 2D view shows. */
+  albedoUrl?: string;
   onClose: () => void;
 }
 
@@ -106,15 +110,25 @@ function decodeMesh(base64: string): Uint8Array {
   return levels;
 }
 
-export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureData, onClose }: Terrain3DPreviewProps) {
+export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureData, albedoData, albedoUrl, onClose }: Terrain3DPreviewProps) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const lightRef = useRef<DirectionalLight | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const [azimuth, setAzimuth] = useState(38);
-  const [elevation, setElevation] = useState(42);
+  const sunRef = useRef<DirectionalLight | null>(null);
+  const skyRef = useRef<HemisphereLight | null>(null);
+  const ambientRef = useRef<AmbientLight | null>(null);
+  const materialRef = useRef<MeshPhongMaterial | null>(null);
+  const waterRef = useRef<Water | null>(null);
   const [autoRotate, setAutoRotate] = useState(true);
-  const [heightScale, setHeightScale] = useState(1);
+  const [heightScale, setHeightScale] = useState(1.3);
+  const [azimuth, setAzimuth] = useState(42);
+  const [elevation, setElevation] = useState(34);
+  const [sunLevel, setSunLevel] = useState(1.35);
+  const [skyLevel, setSkyLevel] = useState(0.35);
+  const [ambientLevel, setAmbientLevel] = useState(0.5);
+  const [specular, setSpecular] = useState(0.12);
+  const [shininess, setShininess] = useState(12);
   const terrainRef = useRef<Mesh | null>(null);
+  const landRef = useRef<Mesh | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
 
@@ -124,14 +138,11 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
     let disposed = false;
     let renderer: WebGLRenderer | null = null;
     let geometry: BufferGeometry | null = null;
-    let material: MeshStandardMaterial | null = null;
-    let waterMaterial: MeshBasicMaterial | null = null;
+    let waterGeometry: BufferGeometry | null = null;
+    let material: MeshPhongMaterial | null = null;
+    let waterMaterial: ShaderMaterial | null = null;
     let colorTexture: Texture | null = null;
-    let normalTexture: DataTexture | null = null;
-    let bumpTexture: DataTexture | null = null;
-    let roughnessTexture: DataTexture | null = null;
-    let detailTexture: DataTexture | null = null;
-    let backgroundTexture: CanvasTexture | null = null;
+    let backgroundTexture: Texture | null = null;
 
     let frame = 0;
 
@@ -145,37 +156,143 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
       const depth = width * (rows / cols);
       const heightScale = 0.30;
       const scene = new Scene();
-      const skyCanvas = document.createElement("canvas");
-      skyCanvas.width = 2;
-      skyCanvas.height = 256;
-      const skyContext = skyCanvas.getContext("2d");
-      if (skyContext) {
-        const sky = skyContext.createLinearGradient(0, 0, 0, 256);
-        sky.addColorStop(0, "#03080d");
-        sky.addColorStop(0.55, "#07141d");
-        sky.addColorStop(1, "#102b34");
-        skyContext.fillStyle = sky;
-        skyContext.fillRect(0, 0, 2, 256);
-      }
-      backgroundTexture = new CanvasTexture(skyCanvas);
-      backgroundTexture.colorSpace = SRGBColorSpace;
-      scene.background = backgroundTexture;
-      scene.fog = new Fog(0x08131b, 18, 34);
+      // Procedural cube sky.  Face order and axis bases follow three's own
+      // cube convention (+x, -x, +y, -y, +z, -z); getting a basis wrong shows
+      // up as a hard seam and mirrored clouds, which is what broke the last
+      // attempt.
+      const makeSkyCube = (): CubeTexture => {
+        const size = 512;
+        const sunDir = new Vector3(0.55, 0.42, 0.72).normalize();
+        const hash = (x: number, y: number) => {
+          const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+          return n - Math.floor(n);
+        };
+        const valueNoise = (x: number, y: number) => {
+          const xi = Math.floor(x);
+          const yi = Math.floor(y);
+          const xf = x - xi;
+          const yf = y - yi;
+          const u = xf * xf * (3 - 2 * xf);
+          const v = yf * yf * (3 - 2 * yf);
+          const a = hash(xi, yi);
+          const b = hash(xi + 1, yi);
+          const c = hash(xi, yi + 1);
+          const d = hash(xi + 1, yi + 1);
+          return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+        };
+        const smoothstep = (edge0: number, edge1: number, value: number) => {
+          const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+          return t * t * (3 - 2 * t);
+        };
+        const fbm = (x: number, y: number) => {
+          let value = 0;
+          let amp = 0.5;
+          let freq = 1;
+          for (let o = 0; o < 4; o += 1) {
+            value += valueNoise(x * freq, y * freq) * amp;
+            amp *= 0.5;
+            freq *= 2.07;
+          }
+          return value;
+        };
+        // three's cube faces: forward, up, right (right is flipped per face).
+        const faces: Array<[Vector3, Vector3, Vector3]> = [
+          [new Vector3(1, 0, 0), new Vector3(0, -1, 0), new Vector3(0, 0, -1)],
+          [new Vector3(-1, 0, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1)],
+          [new Vector3(0, 1, 0), new Vector3(0, 0, 1), new Vector3(1, 0, 0)],
+          [new Vector3(0, -1, 0), new Vector3(0, 0, -1), new Vector3(1, 0, 0)],
+          [new Vector3(0, 0, 1), new Vector3(0, -1, 0), new Vector3(1, 0, 0)],
+          [new Vector3(0, 0, -1), new Vector3(0, -1, 0), new Vector3(-1, 0, 0)],
+        ];
+        const canvases: HTMLCanvasElement[] = [];
+        for (const [forward, up, right] of faces) {
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const img = ctx.createImageData(size, size);
+            const dir = new Vector3();
+            for (let y = 0; y < size; y += 1) {
+              for (let x = 0; x < size; x += 1) {
+                const s01 = (x / (size - 1)) * 2 - 1;
+                const t01 = (y / (size - 1)) * 2 - 1;
+                dir.copy(forward).addScaledVector(right, s01).addScaledVector(up, t01).normalize();
+                const h = Math.max(-1, Math.min(1, dir.y));
+                const up01 = Math.max(0, h);
 
-      const camera = new PerspectiveCamera(36, 1, 0.1, 60);
+                // Daylight sky: deep blue zenith fading to a pale, hazy horizon.
+                const t = Math.pow(up01, 0.42);
+                let r = 132 + (36 - 132) * t;
+                let g = 170 + (86 - 170) * t;
+                let b = 205 + (162 - 205) * t;
+
+                // Cumulus deck: project the view ray onto a flat layer so the
+                // clouds get perspective (dense overhead, stacked at the
+                // horizon) instead of a uniform smear.
+                const layer = 1 / Math.max(0.09, h + 0.09);
+                const cx = dir.x * layer * 1.15 + 12.0;
+                const cz = dir.z * layer * 1.15 + 24.0;
+                const base = fbm(cx, cz);
+                const detail = fbm(cx * 2.6 + 5.1, cz * 2.6 + 9.4);
+                const shape = base * 0.75 + detail * 0.35;
+                const cover = smoothstep(0.52, 0.78, shape) * smoothstep(-0.02, 0.16, h);
+                const lit = smoothstep(0.5, 0.95, shape + detail * 0.25);
+                r = r * (1 - cover) + (196 + lit * 52) * cover;
+                g = g * (1 - cover) + (203 + lit * 46) * cover;
+                b = b * (1 - cover) + (212 + lit * 40) * cover;
+
+                // Warm sun disc + broad forward-scatter glow.
+                const cosSun = dir.dot(sunDir);
+                const disc = Math.pow(Math.max(0, cosSun), 1500) * 255;
+                const glow = Math.pow(Math.max(0, cosSun), 9) * 62;
+                r += disc + glow * 1.05;
+                g += disc * 0.97 + glow * 0.94;
+                b += disc * 0.86 + glow * 0.74;
+
+                // Below the waterline the cubemap still has to be sane: fade to
+                // the sea tone so reflections that look down stay coherent.
+                const below = smoothstep(0.0, -0.12, h);
+                r = r * (1 - below) + 12 * below;
+                g = g * (1 - below) + 34 * below;
+                b = b * (1 - below) + 58 * below;
+
+                const i = (y * size + x) * 4;
+                img.data[i] = Math.min(255, r);
+                img.data[i + 1] = Math.min(255, g);
+                img.data[i + 2] = Math.min(255, b);
+                img.data[i + 3] = 255;
+              }
+            }
+            ctx.putImageData(img, 0, 0);
+          }
+          canvases.push(canvas);
+        }
+        const cube = new CubeTexture(canvases);
+        cube.colorSpace = SRGBColorSpace;
+        cube.needsUpdate = true;
+        return cube;
+      };
+      backgroundTexture = makeSkyCube();
+      scene.background = backgroundTexture;
+      scene.fog = new Fog(0x84aacd, 42, 120);
+
+      const camera = new PerspectiveCamera(36, 1, 0.1, 400);
       camera.position.set(6.4, 4.9, 7.4);
       camera.lookAt(0, 0.32, 0);
 
       renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.outputColorSpace = SRGBColorSpace;
-      renderer.toneMapping = ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.02;
-      // The full-grid mesh includes water, so projected terrain shadows
-      // produce dark rings/acne on the sea.  Keep PBR lighting, skip shadows.
-      renderer.shadowMap.enabled = false;
+      // Colour must match the 2D map, so no filmic curve: ACES desaturates and
+      // lifts mid-tones, which is exactly why the model drifted from the map.
+      renderer.toneMapping = NoToneMapping;
+      renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = PCFSoftShadowMap;
       renderer.domElement.setAttribute("aria-label", "可旋转的三维地形预览");
+      // React StrictMode mounts twice; a stale canvas would sit frozen above
+      // the live one and swallow every lighting change.
+      mount.querySelectorAll("canvas").forEach((stale) => stale.remove());
       mount.appendChild(renderer.domElement);
 
       // Full continuous grid: land and water share one surface.  Water cells
@@ -318,195 +435,208 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
           target.push(a, b, c, b, d, c);
         }
       }
-      const indices = landIndices.concat(waterIndices);
 
-      const landGeometry = new BufferGeometry();
-      landGeometry.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
-      landGeometry.setAttribute("color", new BufferAttribute(new Float32Array(colors), 3));
-      landGeometry.setAttribute("uv", new BufferAttribute(new Float32Array(uvs), 2));
-      landGeometry.setIndex(indices);
-      landGeometry.addGroup(0, landIndices.length, 0);
-      landGeometry.addGroup(landIndices.length, waterIndices.length, 1);
-      landGeometry.computeVertexNormals();
+      // Two meshes instead of two material groups: only the land may cast and
+      // receive shadows, otherwise the flat sea plane paints shadow acne rings.
+      const positionAttr = new BufferAttribute(new Float32Array(positions), 3);
+      const colorAttr = new BufferAttribute(new Float32Array(colors), 3);
+      const uvAttr = new BufferAttribute(new Float32Array(uvs), 2);
+      const buildSurface = (surfaceIndices: number[]) => {
+        const surface = new BufferGeometry();
+        surface.setAttribute("position", positionAttr);
+        surface.setAttribute("color", colorAttr);
+        surface.setAttribute("uv", uvAttr);
+        surface.setIndex(surfaceIndices);
+        surface.computeVertexNormals();
+        return surface;
+      };
+      const landGeometry = buildSurface(landIndices);
+      // Same buffer, second name: the shader uses it as the land tint when a
+      // map texel is unusable (water-coloured bleed on a cliff face).
+      landGeometry.setAttribute("aTint", colorAttr);
+      waterGeometry = buildSurface(waterIndices);
       geometry = landGeometry;
 
-      // Baked normal map from the full height grid.
-      const normalData = new Uint8Array(cols * rows * 4);
-      for (let row = 0; row < rows; row += 1) {
-        for (let col = 0; col < cols; col += 1) {
-          const at = (r: number, c: number) => heightGrid[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
-          const dx = (at(row, col + 1) - at(row, col - 1)) * 7.5;
-          const dz = (at(row + 1, col) - at(row - 1, col)) * 7.5;
-          const length = Math.sqrt(dx * dx + dz * dz + 1);
-          const i = (row * cols + col) * 4;
-          normalData[i] = Math.round((-dx / length * 0.5 + 0.5) * 255);
-          normalData[i + 1] = Math.round((-dz / length * 0.5 + 0.5) * 255);
-          normalData[i + 2] = Math.round((1 / length * 0.5 + 0.5) * 255);
-          normalData[i + 3] = 255;
-        }
-      }
-      normalTexture = new DataTexture(normalData, cols, rows, RGBAFormat, UnsignedByteType);
-      normalTexture.needsUpdate = true;
 
-      const bumpData = new Uint8Array(cols * rows * 4);
-      const roughnessData = new Uint8Array(cols * rows * 4);
-      const texCellW = width / Math.max(1, cols - 1);
-      const texCellD = depth / Math.max(1, rows - 1);
-      for (let row = 0; row < rows; row += 1) {
-        for (let col = 0; col < cols; col += 1) {
-          const i = row * cols + col;
-          const at = (r: number, c: number) => heightGrid[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
-          const h = heightGrid[i];
-          const hL = at(row, col - 1);
-          const hR = at(row, col + 1);
-          const hU = at(row - 1, col);
-          const hD = at(row + 1, col);
-          const slope = Math.hypot((hR - hL) / (2 * cellW), (hD - hU) / (2 * cellD));
-          const level = levels[i] / 255;
-          const heightByte = Math.round(Math.min(1, Math.max(0, h)) * 255);
-          // Water stays matte; broad specular patches read as blown-out glare.
-          const rough = level <= 0 ? 228 : Math.round(Math.min(255, 105 + slope * 520));
-          const j = i * 4;
-          bumpData[j] = heightByte;
-          bumpData[j + 1] = heightByte;
-          bumpData[j + 2] = heightByte;
-          bumpData[j + 3] = 255;
-          roughnessData[j] = rough;
-          roughnessData[j + 1] = rough;
-          roughnessData[j + 2] = rough;
-          roughnessData[j + 3] = 255;
-        }
-      }
-      bumpTexture = new DataTexture(bumpData, cols, rows, RGBAFormat, UnsignedByteType);
-      bumpTexture.needsUpdate = true;
-      roughnessTexture = new DataTexture(roughnessData, cols, rows, RGBAFormat, UnsignedByteType);
-      roughnessTexture.needsUpdate = true;
-
-      const detailSize = 256;
-      const detailData = new Uint8Array(detailSize * detailSize * 4);
-      for (let y = 0; y < detailSize; y += 1) {
-        for (let x = 0; x < detailSize; x += 1) {
-          const grain =
-            valueNoise(x * 0.19, y * 0.19) * 0.38 +
-            valueNoise(x * 0.061, y * 0.061) * 0.27 +
-            valueNoise(x * 0.83, y * 0.83) * 0.22 +
-            valueNoise(x * 2.1, y * 2.1) * 0.13;
-          const level = Math.round(105 + grain * 150);
-          const warm = valueNoise(x * 0.037, y * 0.037);
-          const i = (y * detailSize + x) * 4;
-          detailData[i] = Math.round(level * (0.85 + warm * 0.15));
-          detailData[i + 1] = Math.round(level * (0.96 + warm * 0.04));
-          detailData[i + 2] = Math.round(level * (0.80 + warm * 0.10));
-          detailData[i + 3] = 255;
-        }
-      }
-      detailTexture = new DataTexture(detailData, detailSize, detailSize, RGBAFormat, UnsignedByteType);
-      detailTexture.wrapS = RepeatWrapping;
-      detailTexture.wrapT = RepeatWrapping;
-      detailTexture.repeat.set(24, 17);
-      detailTexture.needsUpdate = true;
-
-      if (textureData) {
-        colorTexture = new TextureLoader().load(`data:image/png;base64,${textureData}`);
+      // Prefer the real map PNG: same pixels the 2D view renders, so the 3D
+      // palette matches by construction instead of by calibration.
+      if (albedoUrl && !albedoData) {
+        colorTexture = new TextureLoader().load(albedoUrl);
         colorTexture.colorSpace = SRGBColorSpace;
         colorTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
       }
-      material = new MeshStandardMaterial({
+      const albedoSource = albedoData ?? (textureData ? `data:image/png;base64,${textureData}` : "");
+      if (!albedoUrl && albedoSource) {
+        const source = albedoSource;
+        colorTexture = new TextureLoader().load(source);
+        colorTexture.colorSpace = SRGBColorSpace;
+        colorTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        // The generated cartography leans muted; re-render it through a canvas
+        // with a saturation/brightness lift so the lit model reads vivid
+        // instead of grey-green.
+        new TextureLoader().load(source, (loaded) => {
+          if (disposed) return;
+          const image = loaded.image as HTMLImageElement;
+          if (!image?.width) return;
+          const canvas = document.createElement("canvas");
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          // The GPU capture is already the exact map colour; any filter here
+        // would push the 3D away from the 2D palette.
+        ctx.filter = albedoData ? "none" : "saturate(1.25) brightness(1.06)";
+          ctx.drawImage(image, 0, 0);
+          const vivid = new CanvasTexture(canvas);
+          vivid.colorSpace = SRGBColorSpace;
+          vivid.anisotropy = colorTexture?.anisotropy ?? 1;
+          vivid.needsUpdate = true;
+          if (material) {
+            material.map = vivid;
+            material.needsUpdate = true;
+          }
+          colorTexture?.dispose();
+          colorTexture = vivid;
+          loaded.dispose();
+        });
+      }
+      // Lit surface over the map texture: ambient-dominant so the palette stays
+      // recognisable, with a weak directional lamp for shape and a small
+      // specular lobe the panel can dial up.
+      material = new MeshPhongMaterial({
         map: colorTexture ?? undefined,
         vertexColors: !colorTexture,
-        metalness: 0.02,
-        roughness: 0.92,
+        specular: new Color(0x121a20),
+        shininess: 12,
+        emissive: new Color(0x05070a),
       });
-      material.onBeforeCompile = (shader) => {
-        shader.vertexShader = shader.vertexShader
-          .replace(
-            "#include <common>",
-            "#include <common>\nvarying vec3 vTerrainWorldPos;\nvarying vec3 vTerrainWorldNormal;",
-          )
-          .replace(
-            "#include <beginnormal_vertex>",
-            "#include <beginnormal_vertex>\nvTerrainWorldNormal = normalize(mat3(modelMatrix) * objectNormal);",
-          )
-          .replace(
-            "#include <worldpos_vertex>",
-            "#include <worldpos_vertex>\nvTerrainWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;",
-          );
-        shader.fragmentShader = shader.fragmentShader
-          .replace(
-            "#include <common>",
-            `#include <common>
-            varying vec3 vTerrainWorldPos;
-            varying vec3 vTerrainWorldNormal;
-            float terrainHash(vec3 p) {
-              return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
-            }
-            float terrainNoise(vec3 p) {
-              vec3 i = floor(p);
-              vec3 f = fract(p);
-              f = f * f * (3.0 - 2.0 * f);
-              return mix(
-                mix(mix(terrainHash(i), terrainHash(i + vec3(1, 0, 0)), f.x),
-                    mix(terrainHash(i + vec3(0, 1, 0)), terrainHash(i + vec3(1, 1, 0)), f.x), f.y),
-                mix(mix(terrainHash(i + vec3(0, 0, 1)), terrainHash(i + vec3(1, 0, 1)), f.x),
-                    mix(terrainHash(i + vec3(0, 1, 1)), terrainHash(i + vec3(1, 1, 1)), f.x), f.y),
-                f.z);
-            }
-            float terrainFbm(vec3 p) {
-              float value = 0.0;
-              float amplitude = 0.5;
-              for (int octave = 0; octave < 4; octave++) {
-                value += terrainNoise(p) * amplitude;
-                p *= 2.03;
-                amplitude *= 0.5;
-              }
-              return value;
-            }`,
-          )
-          .replace(
-            "#include <map_fragment>",
-            `#include <map_fragment>
-            vec3 terrainN = normalize(vTerrainWorldNormal);
-            float slope = 1.0 - clamp(abs(terrainN.y), 0.0, 1.0);
-            float rockMask = smoothstep(0.28, 0.58, slope);
-            float rockNoise = terrainFbm(vTerrainWorldPos * 5.0);
-            float rockFine = terrainFbm(vTerrainWorldPos * 24.0);
-            vec3 rockColor = mix(vec3(0.27, 0.24, 0.20), vec3(0.46, 0.41, 0.34), rockNoise);
-            rockColor *= 0.80 + rockFine * 0.32;
-            float strata = 0.5 + 0.5 * sin(vTerrainWorldPos.y * 76.0 + rockNoise * 22.0);
-            rockColor *= 0.92 + strata * 0.08;
-            diffuseColor.rgb = mix(diffuseColor.rgb, rockColor, rockMask * 0.88);
-            `,
-          );
-      };
-      material.customProgramCacheKey = () => "terrain-map-rock-blend";
-      waterMaterial = new MeshBasicMaterial({ color: 0x08324a });
-      const terrain = new Mesh(landGeometry, [material, waterMaterial]);
-      terrainRef.current = terrain;
-      terrain.castShadow = false;
-      terrain.receiveShadow = false;
-      scene.add(terrain);
 
-      scene.add(new AmbientLight(0x9bb5c5, 0.55));
-      scene.add(new HemisphereLight(0xb9d7e5, 0x1b2721, 1.2));
-      const sun = new DirectionalLight(0xfff0cf, 2.6);
-      sun.position.set(5, 8, 5);
-      sun.target.position.set(0, 0.2, 0);
-      sun.castShadow = false;
-      sun.shadow.mapSize.set(1024, 1024);
-      sun.shadow.camera.near = 0.5;
-      sun.shadow.camera.far = 30;
-      sun.shadow.camera.left = -7;
-      sun.shadow.camera.right = 7;
-      sun.shadow.camera.top = 7;
-      sun.shadow.camera.bottom = -7;
+      materialRef.current = material;
+
+      const land = new Mesh(landGeometry, material);
+      land.castShadow = true;
+      land.receiveShadow = true;
+      landRef.current = land;
+      terrainRef.current = land;
+      scene.add(land);
+
+      // three's own Water (ocean) object: projective normal-mapped ripples,
+      // sun glints and a reflection sampler.  The reflection is a static sky
+      // gradient so we do not pay for a second scene render every frame.
+      const normalCanvas = document.createElement("canvas");
+      normalCanvas.width = 512;
+      normalCanvas.height = 512;
+      const normalCtx = normalCanvas.getContext("2d");
+      if (normalCtx) {
+        const img = normalCtx.createImageData(512, 512);
+        const hash = (x: number, y: number) => {
+          const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+          return n - Math.floor(n);
+        };
+        const noise = (x: number, y: number) => {
+          const xi = Math.floor(x);
+          const yi = Math.floor(y);
+          const xf = x - xi;
+          const yf = y - yi;
+          const u = xf * xf * (3 - 2 * xf);
+          const v = yf * yf * (3 - 2 * yf);
+          const a = hash(xi, yi);
+          const b = hash(xi + 1, yi);
+          const c = hash(xi, yi + 1);
+          const d = hash(xi + 1, yi + 1);
+          return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+        };
+        const height = (x: number, y: number) => {
+          let value = 0;
+          let amp = 0.5;
+          for (let o = 0; o < 4; o += 1) {
+            value += noise(x * (2 ** o), y * (2 ** o)) * amp;
+            amp *= 0.5;
+          }
+          return value;
+        };
+        for (let y = 0; y < 512; y += 1) {
+          for (let x = 0; x < 512; x += 1) {
+            const scale = 0.045;
+            const h0 = height(x * scale, y * scale);
+            const hx = height((x + 1) * scale, y * scale);
+            const hy = height(x * scale, (y + 1) * scale);
+            const i = (y * 512 + x) * 4;
+            img.data[i] = Math.max(0, Math.min(255, 128 + (h0 - hx) * 900));
+            img.data[i + 1] = Math.max(0, Math.min(255, 128 + (h0 - hy) * 900));
+            img.data[i + 2] = 255;
+            img.data[i + 3] = 255;
+          }
+        }
+        normalCtx.putImageData(img, 0, 0);
+      }
+      const waterNormals = new CanvasTexture(normalCanvas);
+      waterNormals.wrapS = RepeatWrapping;
+      waterNormals.wrapT = RepeatWrapping;
+
+
+      const waterMesh = new Water(new PlaneGeometry(width * 60, depth * 60, 1, 1), {
+        waterNormals,
+        sunDirection: new Vector3(0.6, 0.72, 0.34).normalize(),
+        sunColor: 0x2f6d99,
+        waterColor: 0x062a44,
+        distortionScale: 1.1,
+        alpha: 1,
+        textureWidth: 1024,
+        textureHeight: 1024,
+        fog: true,
+      });
+      waterMesh.rotation.x = -Math.PI / 2;
+      waterMesh.position.y = 0;
+      waterMesh.material.transparent = false;
+      waterMesh.material.depthWrite = true;
+      waterMesh.material.uniforms.size.value = 6.0;
+      // Deep-water tint: the stock shader mixes in the raw reflection at
+      // grazing angles, which reads grey. Pull that reflection towards the
+      // water colour so the sea stays a saturated blue at every angle.
+      waterMesh.material.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "vec3 albedo = mix( ( sunColor * diffuseLight * 0.3 + scatter ) * getShadowMask(), ( vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight ), reflectance);",
+          `vec3 reflectTint = mix(waterColor * 1.35, reflectionSample, 0.42);
+           vec3 albedo = mix((sunColor * diffuseLight * 0.3 + scatter) * getShadowMask(), reflectTint + reflectionSample * specularLight * 0.45, reflectance * 0.68);`,
+        );
+      };
+      waterMaterial = waterMesh.material as ShaderMaterial;
+      waterRef.current = waterMesh;
+      scene.add(waterMesh);
+
+      const ambientLight = new AmbientLight(0xffffff, 0.5);
+      ambientRef.current = ambientLight;
+      scene.add(ambientLight);
+
+      const sky = new HemisphereLight(0xe6f2ff, 0x4a4f42, 0.35);
+      skyRef.current = sky;
+      scene.add(sky);
+
+      const sun = new DirectionalLight(0xfff8ee, sunLevel);
+      sun.position.set(6, 9, 5);
+      sun.target.position.set(0, 0, 0);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.near = 4;
+      sun.shadow.camera.far = 32;
+      const shadowSpan = Math.max(width, depth) * 0.85;
+      sun.shadow.camera.left = -shadowSpan;
+      sun.shadow.camera.right = shadowSpan;
+      sun.shadow.camera.top = shadowSpan;
+      sun.shadow.camera.bottom = -shadowSpan;
+      sun.shadow.camera.updateProjectionMatrix();
       sun.shadow.bias = -0.0006;
       sun.shadow.normalBias = 0.02;
+      sun.shadow.radius = 1.6;
       scene.add(sun);
       scene.add(sun.target);
-      const fill = new DirectionalLight(0x8fb6c9, 0.55);
-      fill.position.set(-6, 4, -5);
-      scene.add(fill);
-      lightRef.current = sun;
+      sunRef.current = sun;
+      land.castShadow = true;
+      land.receiveShadow = true;
+
+
+
 
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0, 0.35, 0);
@@ -531,8 +661,15 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
       const observer = new ResizeObserver(resize);
       observer.observe(mount);
 
+      const clockStart = performance.now();
+      let lastTime = 0;
       const animate = () => {
         if (disposed) return;
+        if (waterRef.current) {
+          const uniforms = waterRef.current.material.uniforms;
+          uniforms.time.value += 0.32 * ((performance.now() - clockStart) / 1000 - lastTime);
+          lastTime = (performance.now() - clockStart) / 1000;
+        }
         controls.update();
         renderer?.render(scene, camera);
         frame = window.requestAnimationFrame(animate);
@@ -553,15 +690,11 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
       window.cancelAnimationFrame(frame);
       controlsRef.current?.dispose();
       controlsRef.current = null;
-      lightRef.current = null;
       geometry?.dispose();
+      waterGeometry?.dispose();
       material?.dispose();
       colorTexture?.dispose();
       waterMaterial?.dispose();
-      normalTexture?.dispose();
-      bumpTexture?.dispose();
-      roughnessTexture?.dispose();
-      detailTexture?.dispose();
       backgroundTexture?.dispose();
 
       if (renderer) {
@@ -569,28 +702,48 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
         if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
       }
     };
-  }, [mesh, meshHeight, meshWidth, textureData]);
+  }, [mesh, meshHeight, meshWidth, textureData, albedoData, albedoUrl]);
+
+
+
 
   useEffect(() => {
-    const light = lightRef.current;
-    if (!light) return;
+    if (landRef.current) landRef.current.scale.y = heightScale;
+    if (waterRef.current) waterRef.current.scale.y = heightScale;
+  }, [heightScale, status]);
+
+  useEffect(() => {
+    const sun = sunRef.current;
+    if (!sun) return;
     const a = (azimuth / 180) * Math.PI;
     const e = (elevation / 180) * Math.PI;
-    const radius = 11;
-    light.position.set(
+    const radius = 13;
+    sun.position.set(
       Math.cos(a) * Math.cos(e) * radius,
-      Math.sin(e) * radius,
+      Math.max(0.8, Math.sin(e) * radius),
       Math.sin(a) * Math.cos(e) * radius,
     );
   }, [azimuth, elevation, status]);
 
   useEffect(() => {
-    if (controlsRef.current) controlsRef.current.autoRotate = autoRotate;
-  }, [autoRotate, status]);
+    if (sunRef.current) sunRef.current.intensity = sunLevel;
+  }, [sunLevel, status]);
 
   useEffect(() => {
-    if (terrainRef.current) terrainRef.current.scale.y = heightScale;
-  }, [heightScale, status]);
+    if (skyRef.current) skyRef.current.intensity = skyLevel;
+    if (ambientRef.current) ambientRef.current.intensity = ambientLevel;
+  }, [skyLevel, ambientLevel, status]);
+
+  useEffect(() => {
+    const material = materialRef.current;
+    if (!material) return;
+    material.specular.copy(new Color(0x9fb4c2)).multiplyScalar(specular);
+    material.shininess = shininess;
+  }, [specular, shininess, status]);
+
+  useEffect(() => {
+    if (controlsRef.current) controlsRef.current.autoRotate = autoRotate;
+  }, [autoRotate, status]);
 
   return (
     <div className="terrain-3d-shell">
@@ -607,13 +760,33 @@ export default function Terrain3DPreview({ mesh, meshWidth, meshHeight, textureD
         <>
           <p className="terrain-3d-hint">拖动旋转 · 滚轮缩放 · 右键平移</p>
           <div className="terrain-3d-controls">
-            <label>
+                                                            <label>
               <span>光方位 {azimuth}°</span>
               <input type="range" min={0} max={360} step={1} value={azimuth} onChange={(event) => setAzimuth(Number(event.target.value))} />
             </label>
             <label>
               <span>光高度 {elevation}°</span>
-              <input type="range" min={8} max={85} step={1} value={elevation} onChange={(event) => setElevation(Number(event.target.value))} />
+              <input type="range" min={6} max={86} step={1} value={elevation} onChange={(event) => setElevation(Number(event.target.value))} />
+            </label>
+            <label>
+              <span>日光 {sunLevel.toFixed(2)}</span>
+              <input type="range" min={0} max={2.5} step={0.05} value={sunLevel} onChange={(event) => setSunLevel(Number(event.target.value))} />
+            </label>
+            <label>
+              <span>天光 {skyLevel.toFixed(2)}</span>
+              <input type="range" min={0} max={1.2} step={0.05} value={skyLevel} onChange={(event) => setSkyLevel(Number(event.target.value))} />
+            </label>
+            <label>
+              <span>环境 {ambientLevel.toFixed(2)}</span>
+              <input type="range" min={0} max={1.2} step={0.05} value={ambientLevel} onChange={(event) => setAmbientLevel(Number(event.target.value))} />
+            </label>
+            <label>
+              <span>高光 {Math.round(specular * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.02} value={specular} onChange={(event) => setSpecular(Number(event.target.value))} />
+            </label>
+            <label>
+              <span>光泽 {shininess}</span>
+              <input type="range" min={2} max={120} step={1} value={shininess} onChange={(event) => setShininess(Number(event.target.value))} />
             </label>
             <label>
               <span>高度 ×{heightScale.toFixed(2)}</span>

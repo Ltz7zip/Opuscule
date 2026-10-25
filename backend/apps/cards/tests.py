@@ -5,7 +5,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.collections.models import Collection
 from apps.worlds.models import World, WorldMembership
 
-from .models import Card
+from .models import Card, CardRevision
 
 
 def body(text: str) -> dict:
@@ -114,6 +114,70 @@ class CardApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["revision"], 2)
         self.assertIn("旧图校正", response.data["body_text"])
+
+    def test_revision_snapshot_and_restore(self):
+        self.client.force_authenticate(self.user)
+        patched = self.client.patch(
+            f"/api/worlds/wuhai/cards/{self.card.id}/",
+            {"body_json": body("新的远洋记录")},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, 200, patched.data)
+        self.assertEqual(patched.data["revision"], 2)
+        self.assertEqual(CardRevision.objects.filter(card=self.card).count(), 1)
+
+        versions = self.client.get(f"/api/worlds/wuhai/cards/{self.card.id}/revisions/")
+        self.assertEqual(versions.status_code, 200, versions.data)
+        self.assertEqual(versions.data["versions"][0]["index"], 1)
+        self.assertIn("正文", versions.data["versions"][0]["summary"])
+
+        restored = self.client.post(f"/api/worlds/wuhai/cards/{self.card.id}/revisions/1/restore/")
+        self.assertEqual(restored.status_code, 200, restored.data)
+        self.assertEqual(restored.data["revision"], 3)
+        self.assertIn("远洋船长", restored.data["body_text"])
+        self.assertTrue(CardRevision.objects.filter(card=self.card, index=2).exists())
+
+    def test_trash_hides_card_and_restore_brings_it_back(self):
+        self.client.force_authenticate(self.user)
+        deleted = self.client.delete(f"/api/worlds/wuhai/cards/{self.card.id}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+        world = self.client.get("/api/worlds/wuhai/")
+        self.assertEqual(world.data["cards"], [])
+        missing = self.client.get(f"/api/worlds/wuhai/cards/{self.card.id}/")
+        self.assertEqual(missing.status_code, status.HTTP_404_NOT_FOUND)
+
+        trash = self.client.get("/api/worlds/wuhai/cards/trash/")
+        self.assertEqual(trash.status_code, 200, trash.data)
+        self.assertEqual(trash.data["count"], 1)
+        self.assertEqual(trash.data["cards"][0]["title"], "船长 · 莉薇娅")
+
+        restored = self.client.post(f"/api/worlds/wuhai/cards/{self.card.id}/restore/")
+        self.assertEqual(restored.status_code, 200, restored.data)
+        self.assertEqual(restored.data["title"], "船长 · 莉薇娅")
+        self.assertEqual(self.client.get(f"/api/worlds/wuhai/cards/{self.card.id}/").status_code, 200)
+        self.assertEqual(self.client.get("/api/worlds/wuhai/cards/trash/").data["count"], 0)
+
+    def test_recycled_card_can_be_purged(self):
+        self.client.force_authenticate(self.user)
+        self.client.delete(f"/api/worlds/wuhai/cards/{self.card.id}/")
+        purged = self.client.delete(f"/api/worlds/wuhai/cards/{self.card.id}/purge/")
+        self.assertEqual(purged.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Card.all_objects.filter(id=self.card.id).exists())
+        self.assertEqual(self.client.get("/api/worlds/wuhai/cards/trash/").data["count"], 0)
+
+    def test_pinned_card_and_era_are_exposed(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.patch(
+            f"/api/worlds/wuhai/cards/{self.card.id}/",
+            {"pinned": True, "era": "潮汐历"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["pinned"])
+        self.assertEqual(response.data["era"], "潮汐历")
+        world = self.client.get("/api/worlds/wuhai/")
+        self.assertEqual(world.data["cards"][0]["id"], self.card.id)
 
     def test_cross_world_collection_is_rejected(self):
         self.client.force_authenticate(self.user)
@@ -561,6 +625,65 @@ class NotificationApiTests(APITestCase):
         self.assertEqual(read.status_code, 200)
         self.assertIsNotNone(read.data["read_at"])
         self.client.post("/api/notifications/read-all/")
+
+    def test_anonymous_notification_access_is_forbidden(self):
+        self.assertEqual(
+            self.client.get("/api/notifications/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.post("/api/notifications/1/read/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.post("/api/notifications/read-all/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+class CardBodyNestingTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="nesting_owner", password="secret")
+        self.world = World.objects.create(slug="nesting-world", name="嵌套世界")
+        WorldMembership.objects.create(world=self.world, user=self.user, role=WorldMembership.Role.OWNER)
+        self.card = Card.objects.create(world=self.world, title="嵌套卡", slug="nesting-card")
+        self.client.force_authenticate(self.user)
+
+    @staticmethod
+    def _nested_payload(depth: int) -> str:
+        import json
+
+        root: dict = {"type": "doc"}
+        cursor = root
+        for _ in range(depth):
+            child: dict = {"type": "paragraph"}
+            cursor["content"] = [child]
+            cursor = child
+        return json.dumps({"body_json": root}, ensure_ascii=False)
+
+    def test_deeply_nested_body_json_is_rejected_not_500(self):
+        response = self.client.patch(
+            f"/api/worlds/nesting-world/cards/{self.card.id}/",
+            data=self._nested_payload(2000),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_body_json_past_the_depth_limit_is_rejected(self):
+        response = self.client.patch(
+            f"/api/worlds/nesting-world/cards/{self.card.id}/",
+            data=self._nested_payload(100),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_normal_nested_body_json_still_saves(self):
+        response = self.client.patch(
+            f"/api/worlds/nesting-world/cards/{self.card.id}/",
+            data=self._nested_payload(10),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
 
 class CardAppearanceTests(APITestCase):

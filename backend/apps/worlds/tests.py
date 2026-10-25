@@ -284,11 +284,17 @@ class WorldCreateTests(APITestCase):
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(self.client.get(f"/api/worlds/{slug}/").status_code, 404)
         self.assertNotIn(slug, [world["slug"] for world in self.client.get("/api/worlds/").data])
+        # The recycled world must also disappear from the session payload that
+        # feeds the workspace switcher.
+        session_worlds = [world["slug"] for world in self.client.get("/api/auth/session/").data["worlds"]]
+        self.assertNotIn(slug, session_worlds)
         trash = self.client.get("/api/worlds/trash/")
         self.assertIn(slug, [world["slug"] for world in trash.data])
         restored = self.client.post(f"/api/worlds/{slug}/restore/")
         self.assertEqual(restored.status_code, status.HTTP_200_OK, restored.data)
         self.assertEqual(self.client.get(f"/api/worlds/{slug}/").status_code, 200)
+        session_worlds = [world["slug"] for world in self.client.get("/api/auth/session/").data["worlds"]]
+        self.assertIn(slug, session_worlds)
 
     def test_only_owner_can_delete_or_restore(self):
         self.client.force_authenticate(self.user)
@@ -455,7 +461,12 @@ class WorldImportTests(APITestCase):
             title="航海士",
             slug="navigator",
             type_key="character",
-            body_json={"type": "doc", "content": []},
+            body_json={
+                "type": "doc",
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "在雾里航行。"}]}
+                ],
+            },
             body_text="在雾里航行。",
         )
         MapMarker.objects.create(world=self.world, label="七钟楼", kind="place", x=0.4, y=0.6, card=self.card)
@@ -498,6 +509,78 @@ class WorldImportTests(APITestCase):
             format="multipart",
         )
         self.assertIn(response.status_code, {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN})
+
+    @staticmethod
+    def _payload_zip(payload: dict) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("world.json", json.dumps(payload, ensure_ascii=False))
+        return buffer.getvalue()
+
+    def _import(self, payload: dict):
+        return self.client.post(
+            "/api/worlds/import/",
+            {
+                "file": SimpleUploadedFile(
+                    "probe.zip", self._payload_zip(payload), content_type="application/zip"
+                )
+            },
+            format="multipart",
+        )
+
+    def test_import_ignores_forged_body_text(self):
+        self.client.force_authenticate(self.owner)
+        response = self._import(
+            {
+                "format": "opuscule-world-export/v1",
+                "world": {"name": "伪造正文"},
+                "collections": [],
+                "cards": [
+                    {
+                        "slug": "forged-card",
+                        "title": "伪造卡",
+                        "body_json": {
+                            "type": "doc",
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [{"type": "text", "text": "真实正文"}],
+                                }
+                            ],
+                        },
+                        "body_text": "不应进入搜索索引",
+                    }
+                ],
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        card = Card.objects.get(world__slug=response.data["slug"], slug="forged-card")
+        self.assertEqual(card.body_text, "真实正文")
+
+    def test_import_rejects_unsafe_card_slug(self):
+        self.client.force_authenticate(self.owner)
+        response = self._import(
+            {
+                "format": "opuscule-world-export/v1",
+                "world": {"name": "坏 slug"},
+                "cards": [{"slug": "../escape", "title": "坏", "body_json": {"type": "doc"}}],
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_import_rejects_collection_cycle(self):
+        self.client.force_authenticate(self.owner)
+        response = self._import(
+            {
+                "format": "opuscule-world-export/v1",
+                "world": {"name": "环"},
+                "collections": [
+                    {"slug": "a", "name": "A", "parent": "b"},
+                    {"slug": "b", "name": "B", "parent": "a"},
+                ],
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
     def test_background_roundtrip(self):
@@ -620,3 +703,53 @@ class WorldImportHistoryTests(APITestCase):
             self.client.post("/api/worlds/history-source/undo-import/").status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+
+class QueryBudgetTests(APITestCase):
+    """List endpoints must not issue a query per row."""
+
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user(
+            username="budget_owner", password="secret"
+        )
+        self.world = World.objects.create(slug="budget-base", name="基线世界", is_public_read=True)
+        WorldMembership.objects.create(
+            world=self.world, user=self.owner, role=WorldMembership.Role.OWNER
+        )
+        Collection.objects.create(world=self.world, name="人物", slug="people")
+
+    def _count(self, path: str) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(path)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return len(captured.captured_queries)
+
+    def _grow(self, count: int) -> None:
+        for index in range(count):
+            world = World.objects.create(
+                slug=f"budget-grow-{index}", name=f"增长 {index}", is_public_read=True
+            )
+            WorldMembership.objects.create(
+                world=world, user=self.owner, role=WorldMembership.Role.OWNER
+            )
+            Collection.objects.create(
+                world=world, name=f"人物 {index}", slug=f"people-{index}"
+            )
+
+    def test_explore_query_count_is_constant(self):
+        self.client.force_authenticate(self.owner)
+        before = self._count("/api/explore/")
+        self._grow(4)
+        self.assertEqual(self._count("/api/explore/"), before)
+
+    def test_collection_query_count_is_constant(self):
+        self.client.force_authenticate(self.owner)
+        before = self._count("/api/worlds/budget-base/collections/")
+        for index in range(4):
+            Collection.objects.create(
+                world=self.world, name=f"条目 {index}", slug=f"entry-{index}"
+            )
+        self.assertEqual(self._count("/api/worlds/budget-base/collections/"), before)

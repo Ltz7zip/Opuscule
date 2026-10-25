@@ -3,9 +3,34 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 
-from apps.cards.views import CardBySlugView, CardCommentDetailView, CardCommentListCreateView, CardDetailView, CardImageUploadView, CardListCreateView, NotificationListView, NotificationReadAllView, NotificationReadView, SearchView
+from apps.cards.views import (
+    CardBySlugView,
+    CardCommentDetailView,
+    CardCommentListCreateView,
+    CardDetailView,
+    CardImageUploadView,
+    CardListCreateView,
+    CardPurgeView,
+    CardRestoreView,
+    CardRevisionDetailView,
+    CardRevisionListView,
+    CardRevisionRestoreView,
+    CardTrashListView,
+    NotificationListView,
+    NotificationReadAllView,
+    NotificationReadView,
+    SearchView,
+)
 from apps.common.seo import robots, sitemap
-from apps.maps.views import MapMarkerDetailView, MapMarkerListCreateView, WorldMapBackgroundView, WorldMapView
+from apps.maps.views import (
+    MapMarkerDetailView,
+    MapMarkerListCreateView,
+    TerrainUploadView,
+    TerrainWebGenerateView,
+    WorldMapBackgroundView,
+    WorldMapFieldsView,
+    WorldMapView,
+)
 from apps.timelines.views import EraDetailView, EraListCreateView, TimelineDetailView, TimelineEntryDetailView, TimelineEntryListCreateView, TimelineListCreateView, WorldTimelineView
 from apps.common.feeds import site_feed, world_feed
 from apps.common.share import card_share, profile_share, world_share
@@ -160,6 +185,21 @@ urlpatterns = [
         name="world-map-background",
     ),
     path(
+        "api/worlds/<slug:world_slug>/map/terrain-web/",
+        TerrainWebGenerateView.as_view(),
+        name="world-map-terrain-web",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/map/terrain/",
+        TerrainUploadView.as_view(),
+        name="world-map-terrain-upload",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/map/fields/",
+        WorldMapFieldsView.as_view(),
+        name="world-map-fields",
+    ),
+    path(
         "api/worlds/<slug:world_slug>/map/",
         WorldMapView.as_view(),
         name="world-map",
@@ -183,6 +223,36 @@ urlpatterns = [
         "api/worlds/<slug:world_slug>/cards/",
         CardListCreateView.as_view(),
         name="card-list",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/cards/trash/",
+        CardTrashListView.as_view(),
+        name="card-trash",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/cards/<int:pk>/restore/",
+        CardRestoreView.as_view(),
+        name="card-restore",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/cards/<int:pk>/purge/",
+        CardPurgeView.as_view(),
+        name="card-purge",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/cards/<int:pk>/revisions/",
+        CardRevisionListView.as_view(),
+        name="card-revision-list",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/cards/<int:pk>/revisions/<int:index>/",
+        CardRevisionDetailView.as_view(),
+        name="card-revision-detail",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/cards/<int:pk>/revisions/<int:index>/restore/",
+        CardRevisionRestoreView.as_view(),
+        name="card-revision-restore",
     ),
     path(
         "api/worlds/<slug:world_slug>/cards/by-slug/<slug:slug>/",
