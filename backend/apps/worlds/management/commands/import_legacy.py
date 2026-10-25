@@ -39,6 +39,40 @@ class Report:
         bucket_map[key] = bucket_map.get(key, 0) + amount
 
 
+def legacy_blocks_to_doc(blocks, fallback_text: str = "") -> dict:
+    """Turn the old block list into a Tiptap document.
+
+    Old blocks look like ``[{"id": "b1", "type": "text", "title": "概览",
+    "text": "…"}]``.  They are rendered as a heading (when titled) followed by
+    paragraphs, which is what the block editor did.
+    """
+    content: list[dict] = []
+    for block in blocks or []:
+        if not isinstance(block, dict):
+            continue
+        title = str(block.get("title") or "").strip()
+        text = str(block.get("text") or block.get("content") or "").strip()
+        if title:
+            content.append(
+                {"type": "heading", "attrs": {"level": 3},
+                 "content": [{"type": "text", "text": title}]}
+            )
+        for line in text.split("\n"):
+            line = line.strip()
+            if line:
+                content.append(
+                    {"type": "paragraph", "content": [{"type": "text", "text": line}]}
+                )
+    if not content and fallback_text:
+        for line in fallback_text.split("\n"):
+            line = line.strip()
+            if line:
+                content.append(
+                    {"type": "paragraph", "content": [{"type": "text", "text": line}]}
+                )
+    return {"type": "doc", "content": content}
+
+
 def _json(value, fallback):
     if value in (None, "", b""):
         return fallback
@@ -134,7 +168,7 @@ class Command(BaseCommand):
             self._memberships(reader, report, worlds, users)
             cards = self._cards(reader, report, worlds)
             self._markers(reader, report, worlds, cards)
-            self._timelines(reader, report, worlds)
+            self._timelines(reader, report, worlds, cards)
             self._eras(reader, report, worlds)
             if dry:
                 transaction.set_rollback(True)
@@ -265,16 +299,26 @@ class Command(BaseCommand):
                 doc_id = reader.pick(row, "document_id", "doc_id")
                 if doc_id is None:
                     continue
-                body = None
-                for key in ("blocks", "body_json", "doc", "content", "body"):
-                    if key in cols and row[key]:
-                        body = _json(row[key], {})
-                        if body:
-                            break
-                bodies[doc_id] = body or {}
+                blocks = []
+                doc_override = None
+                if "blocks" in cols and row["blocks"]:
+                    parsed = _json(row["blocks"], [])
+                    if isinstance(parsed, list):
+                        blocks = parsed
+                    elif isinstance(parsed, dict) and parsed.get("type") == "doc":
+                        doc_override = parsed  # a few revisions stored Tiptap here
+
+                bodies[doc_id] = {
+                    "blocks": blocks,
+                    "doc": doc_override,
+                    "text": row["body"] if "body" in cols and row["body"] else "",
+                }
 
         mapping: dict[int, Card] = {}
         for row in reader.rows("world_document"):
+            if reader.pick(row, "deleted_at"):
+                report.bump("skipped", "卡片（已删除）")
+                continue
             doc_type = (reader.pick(row, "document_type", default="card") or "card").lower()
             if doc_type not in CARD_TYPES:
                 report.bump("skipped", f"文档类型:{doc_type}")
@@ -291,7 +335,8 @@ class Command(BaseCommand):
                 mapping[row["id"]] = Card.all_objects.get(world=world, slug=slug)
                 report.bump("skipped", "卡片（已存在）")
                 continue
-            body = bodies.get(row["id"], {})
+            raw = bodies.get(row["id"], {"blocks": [], "doc": None, "text": ""})
+            body = raw["doc"] or legacy_blocks_to_doc(raw["blocks"], raw["text"])
             card = Card.objects.create(
                 world=world,
                 title=title,
@@ -330,7 +375,9 @@ class Command(BaseCommand):
             y = float(reader.pick(row, "y", "top", default=0) or 0)
             if x > 1 or y > 1:  # stored as percentages in some revisions
                 x, y = x / 100.0, y / 100.0
-            kind = str(reader.pick(row, "kind", default="place")).lower()
+            raw_kind = str(reader.pick(row, "kind", default="place")).lower()
+            # pin/label are the old "place" flavours; a region reads as an event.
+            kind = {"pin": "place", "label": "place", "zone": "event"}.get(raw_kind, raw_kind)
             if kind not in MARKER_KINDS:
                 kind = "place"
             MapMarker.objects.create(
@@ -344,16 +391,23 @@ class Command(BaseCommand):
             report.bump("created", "地图标记")
 
     # ------------------------------------------------------------ timelines
-    def _timelines(self, reader, report, worlds) -> dict[int, Timeline]:
+    def _timelines(self, reader, report, worlds, cards) -> dict[int, Timeline]:
         mapping: dict[int, Timeline] = {}
         world_of_timeline: dict[int, int] = {}
+        calendar_names = {
+            row["id"]: (row["name"] if "name" in row.keys() else "")
+            for row in reader.rows("world_calendar")
+        }
         for row in reader.rows("world_timeline"):
             world_id = reader.pick(row, "world_id")
             world_of_timeline[row["id"]] = world_id
             world = worlds.get(world_id)
             if not world:
                 continue
-            name = (reader.pick(row, "name", "title") or "时间线")[:80]
+            calendar_id = reader.pick(row, "calendar_id")
+            name = (reader.pick(row, "name", "title")
+                    or (calendar_names.get(calendar_id) if calendar_id else "")
+                    or "主时间线")[:80]
             slug = (reader.pick(row, "slug") or "").strip()[:80] or f"timeline-{row['id']}"
             timeline, created = Timeline.objects.get_or_create(
                 world=world,
@@ -404,6 +458,7 @@ class Command(BaseCommand):
                 month=reader.pick(row, "month"),
                 end_year=reader.pick(row, "end_year"),
                 era=(era_name or "")[:80],
+                card=cards.get(reader.pick(row, "featured_card_id")),
                 title=(reader.pick(row, "title", "name") or "未命名")[:160],
                 description=reader.pick(row, "description", "summary", default="") or "",
             )

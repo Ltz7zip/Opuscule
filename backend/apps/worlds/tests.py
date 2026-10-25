@@ -6,6 +6,7 @@ import io
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
+from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from apps.cards.models import Card
@@ -753,3 +754,99 @@ class QueryBudgetTests(APITestCase):
                 world=self.world, name=f"条目 {index}", slug=f"entry-{index}"
             )
         self.assertEqual(self._count("/api/worlds/budget-base/collections/"), before)
+
+
+class ImportLegacyCommandTests(TestCase):
+    """The old generation stored its content in different tables."""
+
+    def _fixture(self, tmpdir):
+        import json
+        import sqlite3
+        from pathlib import Path
+
+        path = Path(tmpdir) / "legacy.sqlite3"
+        con = sqlite3.connect(path)
+        con.executescript(
+            """
+            create table auth_user (id integer primary key, username text, email text,
+                first_name text, last_name text, password text, is_staff int,
+                is_superuser int, is_active int, date_joined text);
+            create table world_world (id integer primary key, owner_id int, name text,
+                slug text, description text, theme_config text, is_published int,
+                audience text, published_slug text, published_at text);
+            create table world_membership (id integer primary key, world_id int,
+                user_id int, role text);
+            create table world_document (id integer primary key, world_id int,
+                document_type text, name text, slug text, icon text, cover text,
+                is_published int, pinned int, deleted_at text);
+            create table world_card (id integer primary key, document_id int,
+                blocks text, body text);
+            create table world_mapmarker (id integer primary key, document_id int,
+                kind text, name text, x real, y real, card_id int);
+            create table world_timeline (id integer primary key, world_id int,
+                calendar_id int);
+            create table world_calendar (id integer primary key, name text);
+            create table world_timelineevent (id integer primary key, timeline_id int,
+                year int, title text, description text, era_id int);
+            create table world_era (id integer primary key, world_id int, name text,
+                start_year int, end_year int);
+            """
+        )
+        con.execute(
+            "insert into auth_user values (1,'traveler','t@example.com','','',"
+            "'pbkdf2_sha256$x$y=',0,0,1,'2026-01-01 00:00:00')"
+        )
+        con.execute(
+            "insert into world_world values (1,1,'雾海纪年','05841b','简介','{}',1,"
+            "'public','wuhai','2026-02-01 00:00:00')"
+        )
+        con.execute("insert into world_calendar values (1,'主历')")
+        con.execute("insert into world_timeline values (1,1,1)")
+        con.execute(
+            "insert into world_document values (1,1,'card','七钟楼','seven-bells','',"
+            "'',1,0,null)"
+        )
+        con.execute(
+            "insert into world_document values (2,1,'card','已删','gone','','',1,0,"
+            "'2026-03-01 00:00:00')"
+        )
+        blocks = json.dumps([{"id": "b1", "type": "text", "title": "概览", "text": "钟声"}])
+        con.execute("insert into world_card values (1,1,?,'概览\n钟声')", (blocks,))
+        con.execute("insert into world_mapmarker values (1,1,'pin','七钟楼',32.0,48.0,1)")
+        con.execute("insert into world_timelineevent values (1,1,532,'钟楼建成','',1)")
+        con.execute("insert into world_era values (1,1,'第二纪元',500,600)")
+        con.commit()
+        con.close()
+        return path
+
+    def test_import_maps_legacy_tables(self):
+        import tempfile
+
+        from django.core.management import call_command
+
+        from apps.cards.models import Card
+        from apps.maps.models import MapMarker
+        from apps.timelines.models import TimelineEntry
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._fixture(tmpdir)
+            call_command("import_legacy", db=str(path), verbosity=0)
+
+        world = World.objects.get(slug="wuhai")  # published_slug wins over the hex id
+        self.assertEqual(world.name, "雾海纪年")
+        self.assertTrue(world.is_public_read)
+        self.assertEqual(world.memberships.count(), 1)
+
+        card = Card.objects.get(world=world, slug="seven-bells")
+        self.assertIn("钟声", card.body_text)
+        self.assertEqual(card.body_json["type"], "doc")
+        self.assertFalse(Card.all_objects.filter(world=world, slug="gone").exists())
+
+        marker = MapMarker.objects.get(world=world)
+        self.assertEqual((marker.label, marker.kind), ("七钟楼", "place"))
+        self.assertAlmostEqual(marker.x, 0.32)  # percent → fraction
+        self.assertEqual(marker.card_id, card.id)
+
+        entry = TimelineEntry.objects.get(world=world)
+        self.assertEqual((entry.year, entry.title), (532, "钟楼建成"))
+        self.assertEqual(entry.timeline.name, "主历")
