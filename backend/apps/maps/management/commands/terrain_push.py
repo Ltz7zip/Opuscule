@@ -56,7 +56,8 @@ class Command(BaseCommand):
         parser.add_argument("--seed", type=int)
         parser.add_argument("--style", choices=STYLE_NAMES)
         parser.add_argument("--resolution", help="例如 2048x1280")
-        parser.add_argument("--label-count", type=int, default=7)
+        parser.add_argument("--label-count", type=int, default=0,
+                            help="烘焙到图上的虚构地名数量（默认 0，避免与真实图钉混淆）")
         parser.add_argument("--force", action="store_true", help="忽略 if_version 冲突")
 
     def handle(self, *args, **options):

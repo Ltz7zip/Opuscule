@@ -146,6 +146,11 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="只报告，不写数据库")
         parser.add_argument("--worlds", default="", help="只导入这些 slug，逗号分隔")
         parser.add_argument(
+            "--bodies-only",
+            action="store_true",
+            help="只补齐已有卡片的正文（不动世界/标记/地形）",
+        )
+        parser.add_argument(
             "--reset",
             action="store_true",
             help="先删除现有的世界/卡片/标记/时间线（用户保留），适合重跑修正过的导入",
@@ -161,6 +166,12 @@ class Command(BaseCommand):
         report = Report()
 
         with transaction.atomic():
+            if options["bodies_only"]:
+                self._fill_bodies(reader, report)
+                if dry:
+                    transaction.set_rollback(True)
+                self._report(report, dry, "[bodies] ")
+                return
             if options["reset"] and not dry:
                 self._reset(report)
             users = self._users(reader, report)
@@ -173,9 +184,10 @@ class Command(BaseCommand):
             if dry:
                 transaction.set_rollback(True)
 
-        prefix = "[dry-run] " if dry else ""
-        if options["reset"] and not dry:
-            prefix = "[reset] "
+        self._report(report, dry, "[reset] " if options["reset"] else "")
+
+    def _report(self, report: Report, dry: bool, prefix: str = "") -> None:
+        prefix = ("[dry-run] " if dry else "") + prefix
         self.stdout.write(self.style.SUCCESS(f"{prefix}导入结果"))
         for key, count in sorted(report.created.items()):
             self.stdout.write(f"  新建 {key:16s} {count}")
@@ -202,6 +214,66 @@ class Command(BaseCommand):
             queryset.delete()
             if count:
                 report.bump("skipped", f"{label}（重置）", count)
+
+    def _fill_bodies(self, reader, report) -> None:
+        """Write bodies into cards that were imported without them."""
+        world_by_slug: dict[str, World] = {}
+        for row in reader.rows("world_world"):
+            slug = (reader.pick(row, "published_slug") or reader.pick(row, "slug") or "").strip()
+            if slug:
+                world = World.all_objects.filter(slug=slug).first()
+                if world:
+                    world_by_slug[slug] = world
+
+        bodies: dict[int, dict] = {}
+        cols = reader.columns("world_card")
+        for row in reader.rows("world_card"):
+            doc_id = reader.pick(row, "document_id")
+            if doc_id is None:
+                continue
+            blocks = _json(row["blocks"], []) if "blocks" in cols and row["blocks"] else []
+            bodies[doc_id] = {
+                "blocks": blocks if isinstance(blocks, list) else [],
+                "doc": blocks if isinstance(blocks, dict) else None,
+                "text": row["body"] if "body" in cols and row["body"] else "",
+            }
+
+        for row in reader.rows("world_document"):
+            if reader.pick(row, "deleted_at"):
+                continue
+            doc_type = (reader.pick(row, "document_type", default="card") or "card").lower()
+            if doc_type not in CARD_TYPES:
+                continue
+            world = world_by_slug.get(
+                (reader.pick(row, "published_slug") or "").strip()
+            ) or World.all_objects.filter(slug=f"card-{row['id']}").first()
+            if world is None:
+                # find by the document's world slug
+                old_world = next(
+                    (w for w in reader.rows("world_world") if w["id"] == reader.pick(row, "world_id")),
+                    None,
+                )
+                if old_world is not None:
+                    slug = (reader.pick(old_world, "published_slug")
+                            or reader.pick(old_world, "slug") or "").strip()
+                    world = world_by_slug.get(slug)
+            if world is None:
+                report.bump("skipped", "正文（找不到世界）")
+                continue
+            slug = (reader.pick(row, "slug") or "").strip()[:120] or f"card-{row['id']}"
+            card = Card.all_objects.filter(world=world, slug=slug).first()
+            if card is None:
+                report.bump("skipped", "正文（找不到卡片）")
+                continue
+            raw = bodies.get(row["id"], {"blocks": [], "doc": None, "text": ""})
+            body = raw["doc"] or legacy_blocks_to_doc(raw["blocks"], raw["text"])
+            if not body.get("content"):
+                report.bump("skipped", "正文（原始为空）")
+                continue
+            card.body_json = body
+            card.body_text = plain_text(body)
+            card.save(update_fields=["body_json", "body_text", "updated_at"])
+            report.bump("created", "卡片正文")
 
     # ---------------------------------------------------------------- users
     def _users(self, reader: LegacyReader, report: Report) -> dict[int, object]:

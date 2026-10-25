@@ -850,3 +850,29 @@ class ImportLegacyCommandTests(TestCase):
         entry = TimelineEntry.objects.get(world=world)
         self.assertEqual((entry.year, entry.title), (532, "钟楼建成"))
         self.assertEqual(entry.timeline.name, "主历")
+
+    def test_bodies_only_keeps_everything_else(self):
+        import tempfile
+
+        from django.core.management import call_command
+
+        from apps.cards.models import Card
+        from apps.maps.models import MapMarker
+        from apps.timelines.models import TimelineEntry
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._fixture(tmpdir)
+            call_command("import_legacy", db=str(path), verbosity=0)
+            card = Card.objects.get(slug="seven-bells")
+            card.body_json = {}
+            card.body_text = ""
+            card.save(update_fields=["body_json", "body_text"])
+            markers_before = MapMarker.objects.count()
+            entries_before = TimelineEntry.objects.count()
+
+            call_command("import_legacy", db=str(path), bodies_only=True, verbosity=0)
+
+        card.refresh_from_db()
+        self.assertIn("钟声", card.body_text)
+        self.assertEqual(MapMarker.objects.count(), markers_before)
+        self.assertEqual(TimelineEntry.objects.count(), entries_before)
