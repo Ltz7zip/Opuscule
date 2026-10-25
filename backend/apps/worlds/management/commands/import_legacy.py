@@ -52,11 +52,19 @@ def _json(value, fallback):
 
 
 def _dt(value):
+    """Old rows store naive local datetimes; the new settings run with USE_TZ."""
     if not value:
         return None
     if isinstance(value, (int, float)):
-        return timezone.make_aware(timezone.datetime.fromtimestamp(value))
-    return parse_datetime(str(value).replace("Z", "+00:00"))
+        return timezone.make_aware(
+            timezone.datetime.fromtimestamp(value), timezone.get_default_timezone()
+        )
+    parsed = parse_datetime(str(value).replace("Z", "+00:00"))
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_default_timezone())
+    return parsed
 
 
 class LegacyReader:
@@ -103,6 +111,11 @@ class Command(BaseCommand):
         parser.add_argument("--db", required=True, help="旧库路径")
         parser.add_argument("--dry-run", action="store_true", help="只报告，不写数据库")
         parser.add_argument("--worlds", default="", help="只导入这些 slug，逗号分隔")
+        parser.add_argument(
+            "--reset",
+            action="store_true",
+            help="先删除现有的世界/卡片/标记/时间线（用户保留），适合重跑修正过的导入",
+        )
 
     def handle(self, *args, **options):
         path = Path(options["db"]).expanduser()
@@ -114,6 +127,8 @@ class Command(BaseCommand):
         report = Report()
 
         with transaction.atomic():
+            if options["reset"] and not dry:
+                self._reset(report)
             users = self._users(reader, report)
             worlds = self._worlds(reader, report, users, only)
             self._memberships(reader, report, worlds, users)
@@ -132,6 +147,25 @@ class Command(BaseCommand):
             self.stdout.write(f"  跳过 {key:16s} {count}")
         for warning in report.warnings:
             self.stdout.write(self.style.WARNING(f"  ! {warning}"))
+
+    def _reset(self, report: Report) -> None:
+        """Delete imported content (users are kept) so a corrected run is clean."""
+        from apps.collections.models import Collection
+
+        steps = [
+            ("地图标记", MapMarker.objects.all()),
+            ("时间线条目", TimelineEntry.objects.all()),
+            ("卡片", Card.all_objects.all()),
+            ("时间线", Timeline.objects.all()),
+            ("纪元", Era.objects.all()),
+            ("集合", Collection.objects.all()),
+            ("世界", World.all_objects.all()),
+        ]
+        for label, queryset in steps:
+            count = queryset.count()
+            queryset.delete()
+            if count:
+                report.bump("skipped", f"{label}（重置）", count)
 
     # ---------------------------------------------------------------- users
     def _users(self, reader: LegacyReader, report: Report) -> dict[int, object]:
@@ -168,8 +202,12 @@ class Command(BaseCommand):
     def _worlds(self, reader, report, users, only) -> dict[int, World]:
         mapping: dict[int, World] = {}
         for row in reader.rows("world_world"):
-            slug = (reader.pick(row, "slug") or "").strip()
-            if not slug or (only and slug not in only):
+            raw_slug = (reader.pick(row, "slug") or "").strip()
+            published = (reader.pick(row, "published_slug") or "").strip()
+            # Old worlds used a 6-hex internal slug; the public address lived in
+            # published_slug. Prefer the readable one when present.
+            slug = published or raw_slug
+            if not slug or (only and slug not in only and raw_slug not in only):
                 continue
             if World.all_objects.filter(slug=slug).exists():
                 world = World.all_objects.get(slug=slug)
@@ -306,8 +344,11 @@ class Command(BaseCommand):
     # ------------------------------------------------------------ timelines
     def _timelines(self, reader, report, worlds) -> dict[int, Timeline]:
         mapping: dict[int, Timeline] = {}
+        world_of_timeline: dict[int, int] = {}
         for row in reader.rows("world_timeline"):
-            world = worlds.get(reader.pick(row, "world_id"))
+            world_id = reader.pick(row, "world_id")
+            world_of_timeline[row["id"]] = world_id
+            world = worlds.get(world_id)
             if not world:
                 continue
             name = (reader.pick(row, "name", "title") or "时间线")[:80]
@@ -324,21 +365,43 @@ class Command(BaseCommand):
             mapping[row["id"]] = timeline
             report.bump("created" if created else "skipped", "时间线")
 
+        # WorldTimeline events carry no world_id: resolve through timeline → document.
+        doc_world = {
+            row["id"]: row["world_id"]
+            for row in reader.rows("world_document")
+            if "world_id" in row.keys()
+        }
+        era_names = {
+            row["id"]: (row["name"] if "name" in row.keys() else "")
+            for row in reader.rows("world_era")
+        }
         for row in reader.rows("world_timelineevent"):
-            world = worlds.get(reader.pick(row, "world_id"))
+            world_id = reader.pick(row, "world_id")
+            if world_id is None:
+                timeline_id = reader.pick(row, "timeline_id")
+                world_id = world_of_timeline.get(timeline_id) if timeline_id else None
+            if world_id is None:
+                doc_id = reader.pick(row, "document_id")
+                world_id = doc_world.get(doc_id) if doc_id else None
+            world = worlds.get(world_id)
             if not world:
+                report.bump("skipped", "时间线条目（找不到世界）")
                 continue
             year = reader.pick(row, "year", "start_year")
             if year is None:
                 report.bump("skipped", "时间线条目（无年份）")
                 continue
+            era_name = reader.pick(row, "era", "era_name")
+            if not era_name:
+                era_id = reader.pick(row, "era_id")
+                era_name = era_names.get(era_id, "") if era_id else ""
             TimelineEntry.objects.create(
                 world=world,
                 timeline=mapping.get(reader.pick(row, "timeline_id")),
                 year=int(year),
                 month=reader.pick(row, "month"),
                 end_year=reader.pick(row, "end_year"),
-                era=(reader.pick(row, "era", "era_name", default="") or "")[:80],
+                era=(era_name or "")[:80],
                 title=(reader.pick(row, "title", "name") or "未命名")[:160],
                 description=reader.pick(row, "description", "summary", default="") or "",
             )

@@ -40,7 +40,7 @@ log "restoring ownership and restarting"
 chown -R opuscule:opuscule "$APP_DIR/backend"
 systemctl restart opuscule
 sleep 2
-curl -fsS --max-time 10 -H 'Host: 127.0.0.1' http://127.0.0.1/api/health/ && echo
+curl -fsS --max-time 10 "https://$(sed -n 's/^DJANGO_ALLOWED_HOSTS=//p' "$ENV_FILE" | cut -d, -f1)/api/health/" && echo
 
 log "worlds now in the new database:"
 sudo -u opuscule bash -lc "set -a; . '$ENV_FILE'; set +a; cd '$APP_DIR/backend' && \
