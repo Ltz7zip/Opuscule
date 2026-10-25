@@ -196,6 +196,12 @@ fi
 
 log "health check"
 sleep 2
-curl -fsS http://127.0.0.1/api/health/ && echo
-curl -fsS -o /dev/null -w 'index: %{http_code}\n' http://127.0.0.1/
+if ! curl -fsS --max-time 10 -H 'Host: 127.0.0.1' http://127.0.0.1/api/health/ >/dev/null 2>&1; then
+  # TLS is on now: plain HTTP answers 301, so probe the real hostname.
+  curl -fsS --max-time 10 "https://$PRIMARY/api/health/" && echo
+  curl -fsS -o /dev/null --max-time 10 -w "index: %{http_code}\n" "https://$PRIMARY/"
+else
+  curl -fsS --max-time 10 -H 'Host: 127.0.0.1' http://127.0.0.1/api/health/ && echo
+  curl -fsS -o /dev/null --max-time 10 -w 'index: %{http_code}\n' -H 'Host: 127.0.0.1' http://127.0.0.1/
+fi
 log "done — $DOMAINS (见上方健康检查结果)"
