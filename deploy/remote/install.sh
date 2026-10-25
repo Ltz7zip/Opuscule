@@ -120,11 +120,22 @@ done
 nginx -t
 systemctl reload nginx
 
+# Reuse any existing certificate whose SAN covers the primary domain: boxes
+# often carry a certificate named after an IP or a temporary hostname.
+CERT=""
+for candidate in /etc/letsencrypt/live/*/cert.pem; do
+  [[ -f "$candidate" ]] || continue
+  if openssl x509 -in "$candidate" -noout -ext subjectAltName 2>/dev/null | grep -q "DNS:$PRIMARY\b"; then
+    CERT=$(dirname "$candidate")
+    break
+  fi
+done
+
 log "TLS"
-if [[ -f "/etc/letsencrypt/live/$PRIMARY/fullchain.pem" ]]; then
-  log "reusing the existing certificate for $PRIMARY"
+if [[ -n "$CERT" && -f "$CERT/fullchain.pem" ]]; then
+  log "reusing the existing certificate at $CERT (covers $PRIMARY)"
   sed -e "s/__SERVER_NAME__/$DOMAINS/" \
-      -e "s|__CERT__|/etc/letsencrypt/live/$PRIMARY/|" \
+      -e "s|__CERT__|$CERT/|" \
       "$APP_DIR/deploy/remote/nginx-tls.conf" > /etc/nginx/sites-available/opuscule
   nginx -t && systemctl reload nginx
   sed -i 's/^DJANGO_SESSION_COOKIE_SECURE=.*/DJANGO_SESSION_COOKIE_SECURE=1/' "$ENV_FILE"
