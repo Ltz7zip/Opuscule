@@ -255,7 +255,7 @@ urlpatterns = [
         name="card-revision-restore",
     ),
     path(
-        "api/worlds/<slug:world_slug>/cards/by-slug/<slug:slug>/",
+        "api/worlds/<slug:world_slug>/cards/by-slug/<path:card_slug>/",
         CardBySlugView.as_view(),
         name="card-by-slug",
     ),
@@ -291,3 +291,6 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Keep API 404s JSON-shaped (see apps/common/errors.py).
+handler404 = "apps.common.errors.not_found"

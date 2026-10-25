@@ -163,6 +163,7 @@ class CardRevisionRestoreView(APIView):
 class CardBySlugView(generics.RetrieveAPIView):
     serializer_class = CardDetailSerializer
     lookup_field = "slug"
+    lookup_url_kwarg = "card_slug"
     permission_classes = [AllowAny]
 
     def get_world(self):

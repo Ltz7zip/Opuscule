@@ -704,3 +704,32 @@ class CardAppearanceTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["icon"], "✦")
         self.assertEqual(response.data["cover"], "https://example.com/cover.jpg")
+
+
+class CardSlugRouteTests(APITestCase):
+    """Old worlds used non-ASCII card slugs; the by-slug route must accept them."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("slug_user", password="pw12345678")
+        self.world = World.objects.create(slug="slug-world", name="W", is_public_read=True)
+        WorldMembership.objects.create(world=self.world, user=self.user, role=WorldMembership.Role.OWNER)
+        self.card = Card.objects.create(
+            world=self.world, title="烬海", slug="烬海", body_json={"type": "doc", "content": []}
+        )
+
+    def test_by_slug_accepts_chinese_slug(self):
+        response = self.client.get(f"/api/worlds/{self.world.slug}/cards/by-slug/{self.card.slug}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["title"], "烬海")
+
+
+class Api404ShapeTests(APITestCase):
+    def test_unknown_api_path_is_json(self):
+        response = self.client.get("/api/worlds/nope/definitely-not-a-route/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["Content-Type"].split(";")[0], "application/json")
+
+    def test_unknown_page_path_is_still_html(self):
+        response = self.client.get("/definitely-not-a-page")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn(b"<html", response.content.lower())
