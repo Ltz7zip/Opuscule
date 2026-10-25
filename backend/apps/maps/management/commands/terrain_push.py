@@ -20,6 +20,15 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.maps.terrain_web import STYLE_NAMES, generate_terrain
 
 
+def _opener() -> urllib.request.OpenerDirector:
+    """Ignore the system proxy: this talks to one known host over the public net.
+
+    macOS routes urllib through the OS proxy settings, which breaks certificate
+    verification for local tooling; a direct connection does not.
+    """
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _multipart(fields: dict[str, str], files: dict[str, tuple[str, bytes]]) -> tuple[bytes, str]:
     boundary = f"----terrain{uuid.uuid4().hex}"
     chunks: list[bytes] = []
@@ -115,7 +124,7 @@ class Command(BaseCommand):
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Content-Type", content_type)
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
+            with _opener().open(request, timeout=180) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
@@ -126,7 +135,7 @@ class Command(BaseCommand):
         request = urllib.request.Request(url, method="GET")
         request.add_header("Authorization", f"Bearer {token}")
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with _opener().open(request, timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
