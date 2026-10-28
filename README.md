@@ -1,152 +1,86 @@
 # Opuscule
 
-A small, stdlib-first Python project with a local design-preview loop.
+一个世界设定写作应用：以「世界」组织设定词条（卡片），再用一篇可发布的世界概念把它们读成一本书。
 
-## Quick start
+线上：<https://opuscule.cc/>
 
-```sh
-./.venv/bin/python main.py
-# Hi, Opuscule
+## 本地启动
 
-make test
-make compile
-```
-
-The checked-in `.venv` uses Python 3.14.6 for this scaffold. The backend venv
-also uses 3.14.6 on this host (3.13 preferred when available; see
-`docs/adr/ADR-0010-runtime-stack.md`). The package targets Python 3.12+ and
-uses only the standard library at runtime.
-
-## P0.1–P5.4 / P2.6 / P4.17 runnable slice
-
-Two local services:
+两个本地服务（后端 API + 前端 SPA）：
 
 ```sh
+# 后端
 cd backend
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py seed_demo
 .venv/bin/python manage.py runserver 127.0.0.1:8000
 
+# 前端（另开终端）
 cd frontend
-npm install
+npm ci
 npm run dev -- --port 5173
-npm run check:budget   # build-gated JS/CSS budget
-npm run dev:ssr       # Wiki SSR dev pilot on :5174
-npm run build:all     # client + SSR production bundles
-npm run preview:ssr   # production SSR preview on :5175
-make ci               # backend + design + client/SSR + budget
-# CI: .github/workflows/ci.yml (backend tests + build + budget)
 ```
 
-Open `http://127.0.0.1:5173/` for the public page,
-`http://127.0.0.1:5173/login` for the demo login,
-`http://127.0.0.1:5173/register` for registration,
-`http://127.0.0.1:5173/worlds/new` for creating a world,
-`http://127.0.0.1:5173/explore` for public worlds,
-`http://127.0.0.1:5173/w/wuhai/wiki` for the public Wiki,
-`http://127.0.0.1:5173/trash` for the owner trash,
-`http://127.0.0.1:5173/search?q=灯塔` for public search,
-`http://127.0.0.1:8000/robots.txt` / `/sitemap.xml` for SEO surfaces,
-`http://127.0.0.1:8000/share/w/wuhai/fog-harbor/` for the server-rendered share page,
-`http://127.0.0.1:5174/w/wuhai/wiki/fog-harbor/` for the Wiki SSR dev pilot (`npm run dev:ssr`),
-`http://127.0.0.1:5175/`, `/w/wuhai/wiki/fog-harbor/`, `/explore` or `/u/traveler` for the production SSR preview (`npm run build:all && npm run preview:ssr`),
-`http://127.0.0.1:5173/w/wuhai/map` for the world map MVP,
-`http://127.0.0.1:5173/w/wuhai/timeline` for the world timeline MVP,
-`http://127.0.0.1:5173/w/wuhai` for the workspace, and
-`http://127.0.0.1:5173/u/traveler` for the personal homepage. Local demo login:
-`traveler` / `opuscule-demo` (seed-only; not for production). See
-`docs/plans/20261020-p0-vertical-slice.md` and
-`docs/plans/20261020-p0.2-auth-permissions.md`,
-`docs/plans/20261020-p0.3-personal-profile.md` and
-`docs/plans/20261020-p0.4-modules-wiki-explore-register.md` and
-`docs/plans/20261020-p0.5-world-onboarding.md` and
-`docs/plans/20261020-p0.6-world-settings-switcher.md` and
-`docs/plans/20261020-p0.7-members.md` and
-`docs/plans/20261020-p0.8-invites.md` and
-`docs/plans/20261020-p0.9-ownership-trash.md` and
-`docs/plans/20261020-p0.10-audit.md` and
-`docs/plans/20261020-p1.1-search-cache-budget.md` and
-`docs/plans/20261020-p1.2-seo-ci.md` and
-`docs/plans/20261020-p1.3-share-ssr.md` and
-`docs/plans/20261020-p1.4-ssr-pilot.md` and
-`docs/plans/20261020-p1.5-ssr-production.md` and
-`docs/plans/20261020-p2.1-world-map.md` and
-`docs/plans/20261020-p2.2-map-edit-drag.md` and
-`docs/plans/20261020-p1.6-explore-ssr.md` and
-`docs/plans/20261020-p1.7-profile-ssr.md` and
-`docs/plans/20261020-p1.8-home-ssr.md` and
-`docs/plans/20261020-p3.1-ci-deploy.md` and
-`docs/plans/20261020-p3.2-world-export.md` and
-`docs/plans/20261020-p3.3-world-import.md` and
-`docs/plans/20261020-p3.4-import-e2e-audit.md` and
-`docs/plans/20261020-p3.5-audit-filter.md` and
-`docs/plans/20261020-p3.6-audit-csv.md` and
-`docs/plans/20261020-p3.7-csv-injection.md` and
-`docs/plans/20261020-p3.8-import-history.md` and
-`docs/plans/20261020-p3.9-health.md` and
-`docs/plans/20261020-p4.1-timeline.md` and
-`docs/plans/20261020-p4.2-timeline-edit.md` and
-`docs/plans/20261020-p2.3-map-zoom.md` and
-`docs/plans/20261020-p2.4-map-pan.md` and
-`docs/plans/20261020-p4.3-timeline-filter.md` and
-`docs/plans/20261020-p4.4-rss-feed.md` and
-`docs/plans/20261020-p4.5-search-worlds.md` and
-`docs/plans/20261020-p4.6-auth-throttle.md` and
-`docs/plans/20261020-p4.7-account-lockout.md` and
-`docs/plans/20261020-p4.8-proxy-throttle.md` and
-`docs/plans/20261020-p4.9-search-users.md` and
-`docs/plans/20261020-p4.10-search-ranking.md` and
-`docs/plans/20261020-p5.1-prod-settings.md` and
-`docs/plans/20261020-p5.2-change-password.md` and
-`docs/plans/20261020-timeline-editor-parity.md` for scope and known gaps.
+打开 <http://127.0.0.1:5173/>。本机演示账号：`traveler` / `opuscule-demo`
+（`seed_demo` 生成，仅限本地）。
 
-## Layout
+| 端口 | 用途 |
+|---|---|
+| 8000 | Django API（`/api/`、`/admin/`、`/media/`、feed/robots/sitemap/share） |
+| 5173 | Vite SPA（公开站 + 工作区） |
+| 5174 | 公开页 SSR dev：`npm run dev:ssr` |
+| 5175 | 生产 SSR preview：`npm run build:all && npm run preview:ssr` |
+
+## 能做什么
+
+- **世界与协作**：创建世界、成员/角色、一次性邀请、7 个世界配额、软删除/回收站、所有权转移、审计日志。
+- **设定集**：Collection 树 + Card 词条；Tiptap 编辑器（表格、任务、callout、图片、书签、卡片嵌入、行内提及/自动链接、共享媒体库）；卡片评论带选区锚点与通知。
+- **世界概念**：一世界一篇可发布文档；草稿/发布/不可变历史/回滚、409 冲突保护、成员评论；公开页是「书页」版式（封面、目录、行内引用、阅读进度）。
+- **时间线与地图**：多时间线 + 纪元、画布缩放/平移、标记与背景图。
+- **公开面**：公开 Wiki、搜索（卡片/世界/创作者/概念）、RSS、sitemap/robots、分享页、个人主页。
+- **导出导入**：owner ZIP 导出/导入（含概念历史与地图背景），可撤销。
+- **工程**：深/浅主题、SSR（本地）、JS/CSS 预算、`make ci`、单机部署。
+
+## 目录
 
 ```
-src/opuscule/        original stdlib package / scaffold
-tests/               stdlib unittest tests for the scaffold
-backend/             Django 6.1 + DRF P0.1–P0.4
-frontend/            React 19 + Vite + Tiptap workspace (P0.1–P0.4)
-docs/adr/            architecture decisions
-docs/spikes/         read-only legacy data audit
-docs/plans/          implementation plans
-scripts/             analysis helpers
-.design/current/     standalone HTML design drafts
-.design/history/     snapshots taken before major edits
-.dsh/skills/         project-level DSH skills
+src/opuscule/        CLI 脚手架（与后端无关）
+tests/               脚手架的 unittest
+backend/             Django + DRF API（apps/{worlds,cards,collections,timelines,maps,identity,common}）
+frontend/            React 19 + Vite 8 + TS + Tiptap 3
+docs/adr/            架构决策（INDEX）
+docs/plans/          实现计划
+docs/verification/   验收记录
+deploy/              单机部署脚本与 nginx/systemd 示例
+.design/current/     单文件设计稿
+scripts/             ci / design / ui 检查
+AGENTS.md            项目约定（先读）
 ```
 
-## Design preview
+## 测试与门禁
 
-1. Put a single-file HTML draft at `.design/current/index.html`.
-2. Open it from the DSH file tree; it renders in the right-sidebar document
-   preview.
-3. With `@guowenzhang/dsh-web-design` installed, switch the preview to
-   **编辑** to change text, styles, position, or delete blocks, then save back
-   to the HTML file.
-4. Serve the draft when a real origin is needed:
+```sh
+cd backend && .venv/bin/python manage.py test
+make ci    # 后端测试 + 生产 settings + import 契约 + 设计稿 + UI 契约 + 构建 + 预算
+```
 
-   ```sh
-   make serve-design
-   # http://127.0.0.1:8000
-   ```
+## 部署
 
-5. Use the Playwright MCP (`mcp__playwright__*`) to check runtime behavior,
-   console errors, and responsive layouts.
+线上是 nginx（静态 `frontend/dist`）+ gunicorn（`/api` 等前缀反代），没有 node/SSR；
+更新走 `deploy/remote/update.sh`，内容用 `world_snapshot` 同步。细节见
+[`deploy/README.md`](deploy/README.md) 与 [`AGENTS.md`](AGENTS.md)。
 
-## Architecture decisions
+## 设计稿
 
-- `docs/adr/INDEX.md` — accepted ADRs for tool hosts, Collection/IA, Era/Hist,
-  runtime, and licensing.
-- `docs/spikes/20261020-pre-p0-data-dry-run.md` — read-only legacy data audit.
-- `scripts/legacy_audit.py` — reproducible audit script (read-only SQLite).
-- `docs/plans/20261020-p0-vertical-slice.md` — P0.1 scope and gaps.
-- `docs/verification/20261020-p0.1.md` … `p0.9.md` … `p2.2.md` / `p1.6.md` … `p1.8.md` / `p3.1.md` … `p3.9.md` / `p4.1.md` … `p4.13.md` / `p2.3.md` … `p2.6.md` / `p5.1.md` / `p5.2.md` / `timeline-editor-parity.md` — fresh test/build/browser evidence.
+1. 单文件 HTML 写到 `.design/current/index.html`（CSS/JS 内联）。
+2. 在 DSH 文件树打开，右侧栏预览；装 `@guowenzhang/dsh-web-design` 可编辑并保存回文件。
+3. 大改前快照到 `.design/history/<timestamp>/`。
+4. 需要真实 origin：`make serve-design`（:8000，先停 Django）。
 
-## Notes
+## 文档
 
-- Design drafts are standalone HTML; they do not import the Python package.
-- Keep `.design/history/` out of version control; `current/` is the live draft.
-- The project skill `opuscule-dev` documents the same workflow for the agent.
-- If the right-sidebar **编辑** toggle does not appear, restart the DSH desktop
-  app once; client plugins load at startup.
+- [`AGENTS.md`](AGENTS.md) — 约定、部署、内容同步
+- [`docs/adr/INDEX.md`](docs/adr/INDEX.md) — 决策记录
+- `docs/plans/`、`docs/verification/` — 计划与验收
+- [`docs/ui-review-checklist.md`](docs/ui-review-checklist.md) — UI 走查
+- [`frontend/src/styles/README.md`](frontend/src/styles/README.md) — 样式分层

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "opuscule"
 version = "0.10.2.dev7"
-description = "A small, stdlib-first Python project with a local design-preview loop."
+description = "Opuscule: a Django/React worldbuilding app with a local design-preview loop."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []

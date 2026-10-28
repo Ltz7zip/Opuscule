@@ -1,49 +1,37 @@
-# Opuscule backend (P0.1–P1.3)
+# Opuscule backend
 
-Local vertical slice: World / Collection / Card + DRF JSON API.
+Django + DRF 的 JSON API；本地 SQLite，线上 gunicorn。
 
 ```sh
-# Python 3.14 on this host (3.13 is preferred when available)
-python3.14 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+cd backend
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py seed_demo
+.venv/bin/python manage.py seed_demo        # traveler / opuscule-demo（仅本机）
 .venv/bin/python manage.py runserver 127.0.0.1:8000
 ```
 
-Endpoints:
+测试：`.venv/bin/python manage.py test`（`apps/*/tests.py` 与 `test_*.py`）。
 
-- `GET /api/health/`
-- `GET /api/auth/csrf/` / `GET /api/auth/session/`
-- `POST /api/auth/login/` / `POST /api/auth/logout/` / `POST /api/auth/register/`
-- `GET /api/u/<username>/` — public personal homepage
-- `GET/PATCH /api/profile/` — own profile (session auth)
-- `GET /api/explore/` — public world directory
-- `GET/POST /api/worlds/` — list / create world
-- `PATCH /api/worlds/<slug>/` — owner settings/publish
-- `GET/PATCH/DELETE /api/worlds/wuhai/`
-- `GET /api/worlds/wuhai/map/` / `POST /api/worlds/wuhai/map/markers/`
-- `GET /api/worlds/wuhai/export/` (owner ZIP export)
-- `POST /api/worlds/import/` (multipart ZIP import)
-- `POST /api/worlds/wuhai/transfer-ownership/`
-- `GET /api/worlds/trash/` / `POST /api/worlds/wuhai/restore/`
-- `GET /api/worlds/wuhai/audit/`
-- `GET /api/search/?q=灯塔`
-- `GET /robots.txt` / `GET /sitemap.xml`
-- `GET /share/w/wuhai/` / `GET /share/w/wuhai/fog-harbor/` / `GET /share/u/traveler/`
-- `GET/POST /api/worlds/wuhai/members/`
-- `GET/POST /api/worlds/wuhai/invites/`
-- `DELETE /api/worlds/wuhai/invites/<id>/`
-- `GET /api/invites/<token>/` / `POST /api/invites/<token>/accept/`
-- `PATCH/DELETE /api/worlds/wuhai/members/<id>/`
-- `GET/POST /api/worlds/wuhai/collections/`
-- `GET /api/worlds/wuhai/cards/by-slug/<card_slug>/`
-- `GET/POST /api/worlds/wuhai/cards/`
-- `GET/PATCH /api/worlds/wuhai/cards/<id>/`
+## API 面
 
-> P0.1–P0.5 uses Django session auth + CSRF and `WorldMembership` (owner/editor/
-> viewer); P0.4 adds public Wiki, explore and registration; P0.5 adds world
-> creation and owner publish; P0.6 enforces the 7-world owner quota and supports owner settings; P0.7 adds owner-only member management; P0.8 adds one-time invite tokens; P0.9 adds soft delete/trash/restore and owner transfer; P0.10 adds WorldAuditEvent/audit API; P1.1 adds public search and public cache headers; P1.2 adds robots/sitemap and CI workflow; P1.3 adds Django-rendered share pages. `seed_demo` creates `traveler` / `opuscule-demo` on this host; the
-> password is demo-only and can be overridden with `--password` or
-> `OPUSCULE_DEMO_PASSWORD`. SQLite is local-only; production uses Postgres
-> (ADR-0010).
+完整路由以 `config/urls.py` 为准，主要分组：
+
+- 认证与资料：`/api/auth/{csrf,session,login,register,logout,password}/`、`/api/profile/`、`/api/u/<username>/`
+- 世界：`/api/worlds/`、`/api/worlds/<slug>/`、成员、邀请、trash、audit、导出/导入、transfer-ownership
+- 设定集：`/api/worlds/<slug>/collections/`、`/cards/`、`/cards/by-slug/<slug>/`
+- 世界概念：`/concept/`（读）、`/concept/edit/`（编辑器草稿读写）、`/concept/publish/`、`/concept/revisions/`、`/concept/comments/`
+- 卡片评论与通知：`/cards/<id>/comments/`、`/api/notifications/`
+- 时间线与地图：`/timelines/`、`/timelines/<id>/`、`/map/`、`/map/markers/`、`/map/background/`、`/map/terrain/`
+- 搜索与发现：`/api/search/`、`/api/explore/`
+- 公开面：`/feed.xml`、`/w/<slug>/feed.xml`、`/robots.txt`、`/sitemap.xml`、`/share/...`
+- 健康：`/api/health/`、`/healthz`
+
+## 权限与约定
+
+- Django session + CSRF；世界内角色 `owner` / `editor` / `viewer`。
+- 读用 `get_world_for_read`，写用 `get_world_for_write`；owner-only 操作见仓库根 `AGENTS.md`。
+- 分层由 `importlinter`（`backend/pyproject.toml`）约束：models 不得 import serializers/views。
+
+## 生产
+
+当前线上是 SQLite + gunicorn；Postgres 迁移尚未做。部署与内容同步见
+`deploy/README.md` 与 `AGENTS.md`。

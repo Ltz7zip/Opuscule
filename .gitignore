@@ -24,6 +24,9 @@ frontend/.playwright/
 frontend/.playwright-browsers/
 frontend/.auth/
 
+# Deployment secrets (server-side only)
+deploy/.env
+
 # Local scratch
 frontend/.npm-cache/
 a.html
