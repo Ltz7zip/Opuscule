@@ -86,6 +86,7 @@ urlpatterns = [
     path("share/u/<str:username>/", profile_share, name="share-profile"),
     path("admin/", admin.site.urls),
     path("api/health/", HealthView.as_view(), name="health"),
+    path("healthz", HealthView.as_view(), name="healthz"),
     path("api/auth/csrf/", CsrfView.as_view(), name="auth-csrf"),
     path("api/auth/session/", SessionView.as_view(), name="auth-session"),
     path("api/auth/login/", LoginView.as_view(), name="auth-login"),

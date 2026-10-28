@@ -45,6 +45,11 @@ class CardApiTests(APITestCase):
         self.assertEqual(response.data["status"], "ok")
         self.assertEqual(response.data["database"], "ok")
 
+    def test_healthz_is_the_same_probe(self):
+        response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], "ok")
+
     def test_health_reports_database_failure(self):
         from unittest.mock import patch
 
