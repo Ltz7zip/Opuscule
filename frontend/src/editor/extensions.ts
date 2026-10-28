@@ -7,6 +7,7 @@ import { Mention } from "@tiptap/extension-mention";
 import type { CardSummary } from "../types";
 import { createCardMentionSuggestion } from "./mention";
 import { CardLinks } from "./cardLinks";
+import { MarkdownPaste } from "./markdownPaste";
 import { MarkdownShortcuts } from "./markdownShortcuts";
 import { MentionAuto } from "./mentionAuto";
 import {
@@ -36,6 +37,7 @@ export function buildDocumentExtensions({
   return [
     StarterKit,
     MarkdownShortcuts,
+    MarkdownPaste,
     Callout,
     ImageBlock,
     BookmarkBlock,
