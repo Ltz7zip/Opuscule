@@ -1,0 +1,2004 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opuscule · 手机与平板适配设计稿</title>
+<style>
+/* ============================================================
+   Tokens — same monochrome scale as frontend/src/styles/tokens.css
+   ============================================================ */
+:root {
+  --bg: #0b0b0c;
+  --bg-soft: #101013;
+  --card: #17171a;
+  --muted: #1e1e21;
+  --raised: #1b1b1e;
+  --fg: #f4f4f5;
+  --fg-2: #d4d4d8;
+  --mfg: #a1a1aa;
+  --mfg-2: #71717a;
+  --border: #2a2a2e;
+  --strong: #52525b;
+  --on-primary: #0b0b0c;
+  --danger: #f4f4f5;
+  --overlay: rgba(0, 0, 0, .58);
+  --serif: "DM Serif Display", "Songti SC", "Noto Serif SC", Georgia, "Times New Roman", serif;
+  --sans: "Geist", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .28);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, .45);
+  --shadow-lg: 0 20px 50px -20px rgba(0, 0, 0, .65);
+  --shadow-frame: 0 40px 90px -40px rgba(0, 0, 0, .95), 0 0 0 1px rgba(255, 255, 255, .06);
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --doc-bg: #09090b;
+  --doc-card: rgba(255, 255, 255, .022);
+  --doc-line: rgba(255, 255, 255, .09);
+  --doc-mute: #8d8d96;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-soft: #fafafa;
+  --card: #ffffff;
+  --muted: #f4f4f5;
+  --raised: #fafafa;
+  --fg: #18181b;
+  --fg-2: #3f3f46;
+  --mfg: #52525b;
+  --mfg-2: #71717a;
+  --border: #e4e4e7;
+  --strong: #a1a1aa;
+  --on-primary: #fafafa;
+  --overlay: rgba(0, 0, 0, .38);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .05);
+  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, .16);
+  --shadow-lg: 0 20px 50px -24px rgba(0, 0, 0, .22);
+  --shadow-frame: 0 40px 90px -44px rgba(0, 0, 0, .35), 0 0 0 1px rgba(0, 0, 0, .09);
+  --doc-bg: #f7f7f8;
+  --doc-card: rgba(0, 0, 0, .022);
+  --doc-line: rgba(0, 0, 0, .1);
+  --doc-mute: #5f5f68;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--doc-bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(900px 520px at 50% -120px, rgba(255, 255, 255, .06), transparent 70%),
+    linear-gradient(var(--doc-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--doc-line) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+  opacity: .5;
+  mask-image: linear-gradient(to bottom, #000 0, rgba(0,0,0,.55) 42%, transparent 78%);
+}
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(900px 520px at 50% -120px, rgba(0, 0, 0, .05), transparent 70%),
+    linear-gradient(var(--doc-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--doc-line) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: inherit; }
+svg { display: block; }
+.ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+::selection { background: var(--strong); color: #fafafa; }
+
+/* ============================================================
+   Document chrome
+   ============================================================ */
+.doc-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 62px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--doc-line);
+  background: color-mix(in srgb, var(--doc-bg) 82%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+.doc-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.doc-mark {
+  width: 26px; height: 26px; flex: none; border-radius: 8px;
+  border: 1px solid var(--strong);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,.55), transparent 42%),
+    repeating-radial-gradient(ellipse at 60% 70%, transparent 0 5px, rgba(255,255,255,.25) 5px 6px, transparent 6px 12px),
+    var(--card);
+}
+.doc-brand b { font-size: 14px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.doc-brand span {
+  padding-left: 11px; border-left: 1px solid var(--doc-line);
+  color: var(--doc-mute); font-size: 11px; font-family: var(--mono);
+  letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+}
+.doc-tabs { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--doc-line); border-radius: var(--r-pill); background: var(--doc-card); }
+.doc-tabs button {
+  height: 30px; padding: 0 16px; border: 0; border-radius: var(--r-pill);
+  background: transparent; color: var(--doc-mute); font-size: 12px;
+  transition: background .18s, color .18s;
+}
+.doc-tabs button:hover { color: var(--fg); }
+.doc-tabs button.active { background: var(--fg); color: var(--on-primary); font-weight: 600; }
+.doc-meta { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.doc-meta .ver { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .06em; }
+.doc-ghost {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px;
+  border: 1px solid var(--doc-line); border-radius: var(--r-pill);
+  background: transparent; color: var(--doc-mute); font-size: 11px;
+}
+.doc-ghost:hover { color: var(--fg); border-color: var(--strong); }
+.doc-ghost .ico { width: 14px; height: 14px; }
+
+main { position: relative; z-index: 1; }
+.view { display: none; padding: 44px 0 96px; }
+.view.active { display: block; animation: viewin .32s var(--ease); }
+@keyframes viewin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ============================================================
+   Overview
+   ============================================================ */
+.ov-wrap { width: min(1120px, calc(100% - 56px)); margin: 0 auto; }
+.ov-hero { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 56px; align-items: end; padding: 18px 0 44px; border-bottom: 1px solid var(--doc-line); }
+.ov-eyebrow { display: flex; align-items: center; gap: 8px; color: var(--doc-mute); font: 10px var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+.ov-eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--strong); }
+.ov-hero h1 {
+  margin: 14px 0 16px; max-width: 760px;
+  font-family: var(--serif); font-weight: 400;
+  font-size: clamp(42px, 5.2vw, 68px); line-height: .98; letter-spacing: -.02em;
+}
+.ov-hero h1 em { font-style: italic; color: var(--mfg); }
+.ov-lead { margin: 0; max-width: 620px; color: var(--mfg); font-size: 14px; line-height: 1.8; }
+.ov-hero-side { padding-bottom: 4px; }
+.ov-meta-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.ov-meta-list li { display: flex; justify-content: space-between; gap: 14px; padding-bottom: 9px; border-bottom: 1px dashed var(--doc-line); font-size: 11px; color: var(--doc-mute); }
+.ov-meta-list b { color: var(--fg); font-weight: 500; font-family: var(--mono); font-size: 10px; letter-spacing: .04em; }
+
+.ov-section { padding: 56px 0 0; }
+.ov-section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+.ov-section-head .num { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .1em; }
+.ov-section-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.ov-section-head p { margin: 0 0 0 auto; color: var(--doc-mute); font-size: 12px; max-width: 380px; text-align: right; }
+.ov-principles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--doc-line); border: 1px solid var(--doc-line); border-radius: var(--r-lg); overflow: hidden; }
+.ov-principle { padding: 24px 22px 26px; background: var(--doc-bg); }
+.ov-principle .idx { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .1em; }
+.ov-principle h3 { margin: 18px 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.ov-principle p { margin: 0; color: var(--mfg); font-size: 12px; line-height: 1.75; }
+.ov-principle .rule { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 4px 9px; border: 1px solid var(--doc-line); border-radius: var(--r-pill); font: 10px var(--mono); color: var(--mfg-2); }
+
+.ov-table-wrap { border: 1px solid var(--doc-line); border-radius: var(--r-lg); overflow: hidden; }
+.ov-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ov-table th, .ov-table td { padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--doc-line); vertical-align: top; }
+.ov-table th { background: var(--doc-card); color: var(--doc-mute); font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; }
+.ov-table tr:last-child td { border-bottom: 0; }
+.ov-table td:first-child { color: var(--fg); font-weight: 500; white-space: nowrap; }
+.ov-table td { color: var(--mfg); }
+.ov-table td b { color: var(--fg); font-weight: 500; }
+.ov-table code { padding: 2px 5px; border: 1px solid var(--doc-line); border-radius: 4px; font: 10px var(--mono); color: var(--fg-2); background: var(--doc-card); }
+
+.ov-models { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ov-model { padding: 18px; border: 1px solid var(--doc-line); border-radius: var(--r-lg); background: var(--doc-card); }
+.ov-model h3 { margin: 0 0 3px; font-size: 13px; font-weight: 600; }
+.ov-model .bp { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .06em; }
+.model-art { height: 176px; margin: 16px 0 14px; display: flex; align-items: center; justify-content: center; }
+.model-note { margin: 0; color: var(--mfg); font-size: 11px; line-height: 1.7; }
+/* phone diagram */
+.m-phone { width: 92px; height: 150px; border: 1px solid var(--strong); border-radius: 14px; padding: 5px; display: flex; flex-direction: column; gap: 3px; background: var(--bg); }
+.m-phone .bar { height: 10px; border-radius: 3px; background: var(--muted); }
+.m-phone .body { flex: 1; border-radius: 4px; border: 1px dashed var(--strong); }
+.m-phone .foot { height: 14px; border-radius: 4px; background: var(--muted); display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 2px; }
+.m-phone .foot i { background: var(--strong); border-radius: 1px; opacity: .5; }
+/* tablet diagram */
+.m-tablet { width: 176px; height: 126px; border: 1px solid var(--strong); border-radius: 10px; padding: 5px; display: flex; gap: 3px; background: var(--bg); }
+.m-tablet .side { width: 34px; border-radius: 4px; background: var(--muted); }
+.m-tablet .main { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.m-tablet .main .bar { height: 9px; border-radius: 3px; background: var(--muted); }
+.m-tablet .main .body { flex: 1; border: 1px dashed var(--strong); border-radius: 4px; }
+/* desktop diagram */
+.m-desk { width: 198px; height: 118px; border: 1px solid var(--strong); border-radius: 8px; padding: 5px; display: flex; gap: 3px; background: var(--bg); }
+.m-desk .side { width: 46px; border-radius: 3px; background: var(--muted); }
+.m-desk .main { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.m-desk .main .bar { height: 8px; border-radius: 2px; background: var(--muted); }
+.m-desk .main .body { flex: 1; border: 1px dashed var(--strong); border-radius: 3px; }
+
+.ov-tokens { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ov-token { padding: 18px 16px; border: 1px solid var(--doc-line); border-radius: var(--r); }
+.ov-token .k { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .08em; text-transform: uppercase; }
+.ov-token .v { margin-top: 8px; font-size: 26px; line-height: 1; font-family: var(--serif); }
+.ov-token .d { margin-top: 7px; color: var(--mfg); font-size: 11px; }
+.ov-scope { display: flex; gap: 14px; align-items: flex-start; margin-top: 28px; padding: 16px 18px; border-left: 2px solid var(--strong); background: var(--doc-card); color: var(--mfg); font-size: 11px; line-height: 1.75; }
+.ov-scope b { display: block; margin-bottom: 3px; color: var(--fg); font-weight: 500; }
+.ov-scope div { flex: 1; }
+
+/* ============================================================
+   Device gallery + frames
+   ============================================================ */
+.gallery-head { width: min(1500px, calc(100% - 56px)); margin: 0 auto 10px; display: flex; align-items: flex-end; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--doc-line); }
+.gallery-head .gh-num { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .12em; }
+.gallery-head h1 { margin: 8px 0 0; font-family: var(--serif); font-size: clamp(30px, 3.4vw, 46px); font-weight: 400; line-height: 1; letter-spacing: -.02em; }
+.gallery-head p { margin: 0 0 2px auto; max-width: 420px; color: var(--mfg); font-size: 12px; line-height: 1.75; text-align: right; }
+.gallery { --s: 1; width: min(1500px, calc(100% - 56px)); margin: 34px auto 0; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 60px 44px; }
+.gallery.tablets { --s: .7; gap: 54px 48px; }
+.device-card { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
+.device-card.wide { width: 100%; align-items: center; }
+.device-cap { display: flex; align-items: baseline; gap: 10px; }
+.device-cap .n { font: 10px var(--mono); color: var(--doc-mute); letter-spacing: .1em; }
+.device-cap h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.device-cap .tag { margin-left: auto; font: 9px var(--mono); color: var(--mfg-2); letter-spacing: .08em; text-transform: uppercase; }
+.device-note { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; max-width: 404px; }
+.device-note li { position: relative; padding-left: 13px; color: var(--mfg); font-size: 11px; line-height: 1.65; }
+.device-note li::before { content: ""; position: absolute; left: 0; top: 7px; width: 4px; height: 1px; background: var(--strong); }
+.device-note b { color: var(--fg-2); font-weight: 500; }
+
+.phone-slot { position: relative; width: calc(404px * var(--s)); height: calc(858px * var(--s)); flex: none; }
+.phone {
+  width: 404px; height: 858px; flex: none; position: relative;
+  border: 7px solid #242427; border-radius: 46px; background: #050506;
+  box-shadow: var(--shadow-frame);
+  transform: scale(var(--s)); transform-origin: top left;
+}
+.phone-inner { position: relative; height: 100%; border-radius: 39px; overflow: hidden; background: var(--bg); }
+.phone .island { position: absolute; z-index: 90; top: 8px; left: 50%; transform: translateX(-50%); width: 92px; height: 25px; border-radius: 13px; background: #000; }
+.phone .statusbar { height: 36px; padding: 0 22px 3px; align-items: flex-end; }
+.phone .homebar { width: 118px; height: 4px; bottom: 6px; }
+.phone .side-key { position: absolute; right: -9px; top: 170px; width: 2px; height: 56px; border-radius: 2px; background: #2f2f33; }
+
+.tablet-slot { position: relative; width: calc(1024px * var(--s)); height: calc(768px * var(--s)); flex: none; }
+.tablet-slot.portrait { width: calc(834px * var(--s)); height: calc(1112px * var(--s)); }
+.tablet {
+  width: 1024px; height: 768px; flex: none; position: relative;
+  border: 8px solid #242427; border-radius: 26px; background: #050506;
+  box-shadow: var(--shadow-frame);
+  transform: scale(var(--s)); transform-origin: top left;
+}
+.tablet.portrait { width: 834px; height: 1112px; }
+.tablet-inner { height: 100%; border-radius: 18px; overflow: hidden; background: var(--bg); position: relative; }
+.tablet .statusbar { height: 30px; padding: 0 26px; }
+.tablet .homebar { width: 138px; height: 4px; bottom: 5px; }
+
+.statusbar { display: flex; align-items: center; justify-content: space-between; flex: none; color: var(--fg); font: 600 11px var(--mono); letter-spacing: .02em; }
+.statusbar .right { display: flex; align-items: center; gap: 5px; color: var(--fg); }
+.statusbar .ico { width: 14px; height: 11px; stroke-width: 1.4; }
+.homebar { position: absolute; left: 50%; transform: translateX(-50%); border-radius: 2px; background: var(--fg); opacity: .55; z-index: 60; }
+
+/* ============================================================
+   In-device UI primitives (u-*)
+   ============================================================ */
+.screen {
+  height: 100%; display: flex; flex-direction: column; position: relative;
+  background: var(--bg); color: var(--fg); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; overflow: hidden;
+}
+.u-head {
+  flex: none; min-height: 52px; display: flex; align-items: center; gap: 4px;
+  padding: 0 6px; border-bottom: 1px solid var(--border); background: var(--bg); position: relative; z-index: 20;
+}
+.u-head.plain { border-bottom-color: transparent; }
+.u-head.glass { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); }
+.u-head .grow { flex: 1; min-width: 0; }
+.u-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.u-sub { font: 9px var(--mono); color: var(--mfg-2); letter-spacing: .08em; text-transform: uppercase; }
+.u-ib {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+  border: 0; border-radius: 10px; background: transparent; color: var(--mfg);
+}
+.u-ib .ico { width: 20px; height: 20px; }
+.u-ib.on { background: var(--muted); color: var(--fg); }
+.u-ib.sm { width: 36px; height: 36px; }
+.u-ib.sm .ico { width: 17px; height: 17px; }
+.u-btn {
+  height: 40px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--muted);
+  color: var(--fg); font-size: 12px; font-weight: 500; text-decoration: none; white-space: nowrap;
+}
+.u-btn .ico { width: 15px; height: 15px; }
+.u-btn.primary { background: var(--fg); color: var(--on-primary); border-color: var(--fg); }
+.u-btn.ghost { background: transparent; }
+.u-btn.block { width: 100%; }
+.u-chip {
+  height: 28px; padding: 0 11px; display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  background: var(--card); color: var(--mfg); font-size: 11px; white-space: nowrap;
+}
+.u-chip.active { background: var(--fg); border-color: var(--fg); color: var(--on-primary); font-weight: 600; }
+.u-chip .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .7; }
+.u-badge { height: 22px; padding: 0 7px; display: inline-flex; align-items: center; gap: 4px; border-radius: 5px; background: var(--muted); border: 1px solid var(--border); color: var(--mfg); font: 9px var(--mono); letter-spacing: .04em; }
+.u-badge.solid { background: var(--fg); border-color: var(--fg); color: var(--on-primary); }
+.u-kicker { display: flex; align-items: center; gap: 6px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.u-muted { color: var(--mfg); }
+.u-mono { font-family: var(--mono); }
+.u-sep { width: 1px; height: 18px; background: var(--border); flex: none; }
+.u-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+.u-body.fade::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 38px; background: linear-gradient(to top, var(--bg), transparent); pointer-events: none; z-index: 3; }
+.u-callout {
+  margin: 14px 0; padding: 11px 13px; border: 1px solid var(--border); border-left: 2px solid var(--fg);
+  border-radius: var(--r-sm); background: var(--card); font-size: 13px; line-height: 1.7; color: var(--fg-2);
+}
+.u-contour {
+  position: relative; overflow: hidden; background:
+    radial-gradient(120% 100% at 28% 18%, rgba(255, 255, 255, .07), transparent 58%),
+    repeating-radial-gradient(ellipse at 62% 72%, transparent 0 7px, rgba(255, 255, 255, .075) 7px 8px, transparent 8px 15px),
+    repeating-radial-gradient(ellipse at 18% 28%, transparent 0 9px, rgba(255, 255, 255, .05) 9px 10px, transparent 10px 19px),
+    var(--muted);
+}
+[data-theme="light"] .u-contour {
+  background:
+    radial-gradient(120% 100% at 28% 18%, rgba(0, 0, 0, .05), transparent 58%),
+    repeating-radial-gradient(ellipse at 62% 72%, transparent 0 7px, rgba(0, 0, 0, .1) 7px 8px, transparent 8px 15px),
+    repeating-radial-gradient(ellipse at 18% 28%, transparent 0 9px, rgba(0, 0, 0, .065) 9px 10px, transparent 10px 19px),
+    var(--muted);
+}
+.u-contour::after { content: ""; position: absolute; inset: 0; background: linear-gradient(155deg, rgba(255, 255, 255, .08), transparent 46%); }
+[data-theme="light"] .u-contour::after { background: linear-gradient(155deg, rgba(255, 255, 255, .5), transparent 46%); }
+.u-glyph { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--serif); color: color-mix(in srgb, var(--fg) 78%, transparent); z-index: 1; }
+
+.u-tabbar {
+  flex: none; height: 64px; display: grid; grid-template-columns: repeat(4, 1fr);
+  padding-bottom: 14px; border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+}
+.u-tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--mfg-2); font-size: 10px; text-decoration: none; }
+.u-tabbar .ico { width: 20px; height: 20px; }
+.u-tabbar a.active { color: var(--fg); }
+.u-tabbar a.active .ico { stroke-width: 1.9; }
+
+.u-subnav {
+  flex: none; height: 44px; display: flex; align-items: center; gap: 3px;
+  padding: 0 12px; border-bottom: 1px solid var(--border); overflow: hidden; position: relative;
+}
+.u-subnav::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 26px; background: linear-gradient(to left, var(--bg), transparent); pointer-events: none; }
+.u-subnav a {
+  height: 30px; padding: 0 11px; display: inline-flex; align-items: center;
+  border-radius: var(--r-pill); color: var(--mfg); font-size: 12px; text-decoration: none; white-space: nowrap;
+}
+.u-subnav a.active { background: var(--muted); color: var(--fg); font-weight: 600; }
+
+.u-search {
+  height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--muted); color: var(--mfg-2);
+}
+.u-search .ico { width: 16px; height: 16px; flex: none; }
+.u-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; }
+.u-search input::placeholder { color: var(--mfg-2); }
+.u-search .hint { font: 9px var(--mono); color: var(--mfg-2); }
+
+.u-doc-head { flex: none; padding: 15px 16px 12px; border-bottom: 1px solid var(--border); }
+.u-doc-title { margin: 8px 0 6px; font-size: 26px; line-height: 1.12; font-weight: 600; letter-spacing: -.025em; }
+.u-doc-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: var(--mfg-2); font-size: 10px; font-family: var(--mono); }
+.u-doc-body { padding: 15px 16px 20px; flex: 1; min-height: 0; overflow: hidden; }
+.u-prose { font-size: 15px; line-height: 1.76; color: var(--fg-2); }
+.u-prose p { margin: 0 0 12px; }
+.u-prose h2 { margin: 18px 0 8px; color: var(--fg); font-size: 17px; line-height: 1.35; font-weight: 600; }
+.u-prose .link { color: var(--fg); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.u-prose blockquote { margin: 14px 0; padding: 0 0 0 12px; border-left: 2px solid var(--strong); color: var(--mfg); font-style: italic; }
+.u-prose ul { margin: 0 0 12px; padding-left: 18px; }
+.u-prose li { margin-bottom: 4px; }
+
+.u-dock {
+  flex: none; display: flex; align-items: center; gap: 2px;
+  padding: 6px 8px 15px; border-top: 1px solid var(--border); background: var(--card);
+}
+.u-dock .t {
+  width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 9px;
+  background: transparent; color: var(--mfg); font-size: 12px; font-weight: 600;
+}
+.u-dock .t .ico { width: 18px; height: 18px; }
+.u-dock .t.on { background: var(--muted); color: var(--fg); }
+.u-dock .t.bold { font-weight: 800; }
+.u-dock .t.ital { font-family: var(--serif); font-style: italic; font-size: 15px; }
+.u-dock .t.under { text-decoration: underline; text-underline-offset: 2px; }
+.u-dock .u-sep { margin: 0 3px; }
+.u-dock .insert {
+  margin-left: auto; height: 36px; padding: 0 13px; display: inline-flex; align-items: center; gap: 4px;
+  border: 0; border-radius: var(--r-pill); background: var(--fg); color: var(--on-primary);
+  font-size: 12px; font-weight: 600;
+}
+.u-dock .insert .ico { width: 14px; height: 14px; }
+
+.u-scrim { position: absolute; inset: 36px 0 0; z-index: 45; background: var(--overlay); }
+.u-drawer {
+  position: absolute; top: 36px; bottom: 0; left: 0; z-index: 50; width: 86%;
+  display: flex; flex-direction: column; padding: 8px; border-right: 1px solid var(--border);
+  border-radius: 0 18px 18px 0; background: var(--card); box-shadow: 30px 0 70px -40px #000;
+}
+.u-drawer-head { display: flex; align-items: center; gap: 4px; padding: 2px 2px 8px 8px; }
+.u-drawer-title { font-size: 15px; font-weight: 600; }
+.u-drawer-sub { font: 9px var(--mono); color: var(--mfg-2); letter-spacing: .06em; margin-top: 1px; }
+.u-drawer .u-search { margin: 2px 4px 9px; }
+.u-concept {
+  height: 44px; margin: 0 4px; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--bg); color: var(--fg); font-size: 12px;
+}
+.u-concept .ico { width: 16px; height: 16px; color: var(--mfg); }
+.u-concept em { margin-left: auto; font-style: normal; font: 9px var(--mono); color: var(--mfg-2); }
+.u-tree-label { padding: 11px 10px 5px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.u-tree { flex: 1; min-height: 0; overflow: hidden; padding: 0 0 6px; }
+.u-row {
+  height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  border-radius: 8px; color: var(--mfg); font-size: 13px;
+}
+.u-row .ico { width: 16px; height: 16px; flex: none; }
+.u-row .count { margin-left: auto; font: 9px var(--mono); color: var(--mfg-2); }
+.u-row.active { background: var(--muted); color: var(--fg); font-weight: 600; }
+.u-row.indent { padding-left: 30px; }
+.u-drawer-foot { flex: none; padding: 8px 4px 2px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
+.u-drawer-tools { display: flex; align-items: center; gap: 4px; }
+
+.u-hero { padding: 20px 16px 2px; }
+.u-hero h1 { margin: 8px 0 10px; font-family: var(--serif); font-size: 40px; font-weight: 400; line-height: 1; letter-spacing: -.01em; }
+.u-hero p { margin: 0; max-width: 34ch; color: var(--mfg); font-size: 13px; line-height: 1.7; }
+.u-hero-cover { height: 148px; margin: 15px 16px 0; border: 1px solid var(--border); border-radius: var(--r); }
+.u-stats { padding: 13px 16px 0; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .04em; }
+.u-inline-search { height: 44px; margin: 14px 16px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--card); }
+.u-inline-search .ico { width: 15px; height: 15px; color: var(--mfg-2); }
+.u-inline-search span { flex: 1; color: var(--mfg-2); font-size: 12px; }
+.u-inline-search button { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--fg); color: var(--on-primary); font-size: 11px; font-weight: 600; }
+.u-era-row { display: flex; gap: 6px; padding: 0 16px; overflow: hidden; }
+.u-era { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--muted); color: var(--fg-2); font-size: 11px; white-space: nowrap; }
+.u-era:nth-child(2) { background: rgba(255,255,255,.09); }
+[data-theme="light"] .u-era:nth-child(2) { background: rgba(0,0,0,.07); }
+.u-section { padding: 20px 16px 0; }
+.u-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.u-section-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.u-section-head span { font: 9px var(--mono); color: var(--mfg-2); }
+.u-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.u-tile { border: 1px solid var(--border); border-radius: var(--r); background: var(--card); overflow: hidden; }
+.u-tile-cover { height: 82px; border-bottom: 1px solid var(--border); }
+.u-tile-info { padding: 8px 10px 10px; }
+.u-tile-kind { font: 8px var(--mono); letter-spacing: .1em; color: var(--mfg-2); text-transform: uppercase; }
+.u-tile-name { margin-top: 3px; font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
+
+.u-article { padding: 18px 16px 44px; }
+.u-crumbs { display: flex; align-items: center; gap: 6px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .06em; }
+.u-article h1 { margin: 11px 0 7px; font-family: var(--serif); font-size: 32px; font-weight: 400; line-height: 1.08; letter-spacing: -.01em; }
+.u-kindline { display: flex; align-items: center; gap: 7px; color: var(--mfg-2); font-size: 10px; }
+.u-cover-band { height: 118px; margin: 15px 0 17px; border: 1px solid var(--border); border-radius: var(--r); }
+.u-backlink { margin-top: 22px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--card); }
+.u-backlink .label { font: 8px var(--mono); letter-spacing: .12em; color: var(--mfg-2); text-transform: uppercase; }
+.u-backlink p { margin: 7px 0 9px; font-size: 12px; line-height: 1.65; color: var(--fg-2); }
+.u-backlink a { display: flex; align-items: center; gap: 5px; color: var(--fg); font-size: 11px; text-decoration: none; }
+.u-fab {
+  position: absolute; right: 14px; bottom: 22px; z-index: 25;
+  height: 44px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(10px);
+  color: var(--fg); font-size: 11px; box-shadow: var(--shadow-lg);
+}
+.u-fab .ico { width: 15px; height: 15px; }
+
+/* map */
+.u-map { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #0d0e10; }
+[data-theme="light"] .u-map { background: #ececee; }
+.u-map svg.map-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-coast { fill: color-mix(in srgb, var(--fg) 4%, transparent); stroke: color-mix(in srgb, var(--fg) 22%, transparent); stroke-width: 1; }
+.map-contour { fill: none; stroke: color-mix(in srgb, var(--fg) 11%, transparent); stroke-width: 1; }
+.map-contour.dim { stroke: color-mix(in srgb, var(--fg) 7%, transparent); }
+.map-route { fill: none; stroke: color-mix(in srgb, var(--fg) 55%, transparent); stroke-width: 1.3; stroke-dasharray: 4 5; }
+.map-shoal { fill: color-mix(in srgb, var(--fg) 3%, transparent); stroke: color-mix(in srgb, var(--fg) 13%, transparent); stroke-width: .8; stroke-dasharray: 2 4; }
+.u-map-top {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 15; height: 58px;
+  display: flex; align-items: center; gap: 4px; padding: 0 6px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 94%, transparent), transparent);
+}
+.u-map-top .u-sub { font-size: 8px; }
+.u-map-tools {
+  position: absolute; right: 12px; top: 74px; z-index: 16; display: flex; flex-direction: column;
+  border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden;
+  background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow-md);
+}
+.u-map-tools button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--fg); }
+.u-map-tools button:last-child { border-bottom: 0; }
+.u-map-tools .ico { width: 18px; height: 18px; }
+.u-pin { position: absolute; z-index: 14; display: flex; align-items: center; gap: 6px; transform: translate(-50%, -50%); }
+.u-pin-dot { width: 13px; height: 13px; flex: none; border-radius: 50%; background: var(--fg); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--fg); }
+.u-pin-label { height: 24px; padding: 0 8px; display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: 6px; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(8px); color: var(--fg); font: 9px var(--mono); letter-spacing: .04em; white-space: nowrap; }
+.u-pin.active .u-pin-dot { box-shadow: 0 0 0 6px rgba(244, 244, 245, .16), 0 0 0 1px var(--fg); }
+.u-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; flex-direction: column;
+  height: 288px; padding: 0 16px; border-top: 1px solid var(--border-strong);
+  border-radius: 18px 18px 0 0; background: var(--card); box-shadow: 0 -20px 50px -30px #000;
+  transition: height .3s var(--ease);
+}
+.u-sheet.expanded { height: 566px; }
+.u-grabber { width: 40px; height: 4px; flex: none; margin: 9px auto 8px; border: 0; border-radius: 2px; background: var(--strong); cursor: pointer; }
+.u-sheet-head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 11px; }
+.u-sheet-head h3 { margin: 0; font-family: var(--serif); font-size: 20px; font-weight: 400; line-height: 1.1; }
+.u-sheet-head p { margin: 3px 0 0; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .04em; }
+.u-marker-list { display: none; flex-direction: column; overflow: hidden; padding-top: 6px; border-top: 1px solid var(--border); }
+.u-sheet.expanded .u-marker-list { display: flex; }
+.u-marker-row { height: 46px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+.u-marker-row .n { width: 18px; color: var(--mfg-2); font: 9px var(--mono); }
+.u-marker-row .name { font-size: 12px; }
+.u-marker-row small { margin-left: auto; color: var(--mfg-2); font: 9px var(--mono); }
+.u-sheet-actions { display: flex; gap: 8px; margin-top: auto; padding: 11px 0 22px; }
+.u-sheet-actions .u-btn { flex: 1; height: 42px; }
+
+/* timeline */
+.u-tl { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.u-tl-filters { flex: none; display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--border); overflow: hidden; }
+.u-tl-filters .u-chip { height: 30px; }
+.u-tl-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; background: linear-gradient(180deg, var(--bg-soft), var(--bg)); }
+.u-era-band { position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--border); background: rgba(255, 255, 255, .018); }
+[data-theme="light"] .u-era-band { background: rgba(0, 0, 0, .018); }
+.u-era-band.b2 { background: rgba(255, 255, 255, .045); }
+[data-theme="light"] .u-era-band.b2 { background: rgba(0, 0, 0, .045); }
+.u-tl-axis { position: absolute; left: 0; right: 0; top: 38%; height: 1px; background: var(--strong); }
+.u-tick { position: absolute; top: calc(38% - 18px); transform: translateX(-50%); color: var(--mfg-2); font: 8px var(--mono); letter-spacing: .04em; }
+.u-tick::after { content: ""; position: absolute; left: 50%; top: 18px; width: 1px; height: 7px; background: var(--border-strong); }
+.u-event { position: absolute; transform: translateX(-50%); }
+.u-event .dot { width: 11px; height: 11px; margin: 0 auto; border-radius: 50%; border: 2px solid var(--fg); background: var(--bg); }
+.u-event-card { position: absolute; left: 50%; top: 17px; transform: translateX(-50%); min-width: 124px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font-size: 10px; line-height: 1.5; }
+.u-event.up .u-event-card { top: auto; bottom: 19px; }
+.u-event-card b { display: block; color: var(--fg); font-weight: 600; font-size: 11px; }
+.u-event-card small { color: var(--mfg-2); font: 8px var(--mono); }
+.u-event.active .u-event-card { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+.u-tl-zoom { position: absolute; left: 12px; bottom: 12px; display: flex; border: 1px solid var(--border-strong); border-radius: 9px; overflow: hidden; background: var(--card); box-shadow: var(--shadow-md); }
+.u-tl-zoom button { width: 42px; height: 42px; display: grid; place-items: center; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--fg); }
+.u-tl-zoom button:last-child { border-right: 0; }
+.u-tl-zoom .ico { width: 16px; height: 16px; }
+.u-tl-sheet { flex: none; height: 238px; margin-top: -18px; z-index: 6; padding: 0 16px; display: flex; flex-direction: column; border-top: 1px solid var(--border); border-radius: 18px 18px 0 0; background: var(--card); box-shadow: 0 -18px 40px -30px #000; }
+.u-tl-year { font-family: var(--serif); font-size: 42px; line-height: 1; }
+.u-tl-sheet h3 { margin: 4px 0 6px; font-size: 15px; font-weight: 600; }
+.u-tl-sheet p { margin: 0; font-size: 12px; line-height: 1.65; color: var(--mfg); }
+.u-tl-tags { display: flex; gap: 5px; margin-top: 10px; }
+
+/* global list pages */
+.u-page-pad { padding: 14px 16px 0; }
+.u-page-title { margin: 4px 0 7px; font-family: var(--serif); font-size: 34px; font-weight: 400; line-height: 1.02; letter-spacing: -.01em; }
+.u-page-lead { margin: 0 0 13px; color: var(--mfg); font-size: 12px; line-height: 1.65; }
+.u-world-card { margin-bottom: 11px; border: 1px solid var(--border); border-radius: var(--r); background: var(--card); overflow: hidden; }
+.u-world-cover { height: 96px; border-bottom: 1px solid var(--border); }
+.u-world-body { padding: 11px 13px 13px; }
+.u-world-title { margin-top: 2px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.u-world-desc { margin: 3px 0 9px; color: var(--mfg); font-size: 11px; line-height: 1.65; }
+.u-world-meta { display: flex; align-items: center; gap: 7px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .03em; }
+.u-world-meta .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--mfg-2); }
+.u-filter-row { display: flex; gap: 6px; padding: 0 16px 12px; overflow: hidden; }
+
+.u-profile { display: flex; align-items: center; gap: 13px; padding: 16px 16px 12px; }
+.u-avatar { width: 64px; height: 64px; flex: none; display: grid; place-items: center; border-radius: 18px; background: var(--fg); color: var(--on-primary); font-family: var(--serif); font-size: 30px; }
+.u-profile-name { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.u-profile-handle { margin-top: 2px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .05em; }
+.u-stats3 { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.u-stat { padding: 11px 8px; text-align: center; border-right: 1px solid var(--border); }
+.u-stat:last-child { border-right: 0; }
+.u-stat b { display: block; font-family: var(--serif); font-size: 20px; font-weight: 400; }
+.u-stat span { color: var(--mfg-2); font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.u-seg { display: flex; gap: 3px; padding: 12px 16px 8px; }
+.u-seg .u-chip { height: 30px; }
+.u-new-world { margin: 10px 16px 0; height: 52px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--border-strong); border-radius: var(--r); color: var(--mfg); font-size: 11px; }
+
+/* ============================================================
+   Tablet-specific
+   ============================================================ */
+.tablet-screen { font-size: 14px; }
+.tablet-screen .u-head { min-height: 56px; padding: 0 12px; }
+.tablet-screen .u-title { font-size: 15px; }
+.t-site-head { height: 56px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.t-site-head .u-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.t-site-head .mark { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--fg); color: var(--on-primary); font-family: var(--serif); font-size: 16px; }
+.t-site-head .world-name { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.t-nav { display: flex; align-items: center; gap: 2px; margin-left: 14px; }
+.t-nav a { height: 34px; padding: 0 10px; display: inline-flex; align-items: center; border-radius: var(--r-pill); color: var(--mfg); font-size: 12px; text-decoration: none; }
+.t-nav a.active { background: var(--muted); color: var(--fg); font-weight: 600; }
+.t-head-search { margin-left: auto; width: 180px; height: 36px; border-radius: 8px; }
+.t-head-search .ico { width: 14px; height: 14px; }
+.t-head-search input { font-size: 11px; }
+
+.t-ws { display: grid; grid-template-columns: 248px minmax(0, 1fr); flex: 1; min-height: 0; }
+.t-sidebar { display: flex; flex-direction: column; gap: 8px; padding: 10px 8px; border-right: 1px solid var(--border); background: var(--card); min-height: 0; }
+.t-sidebar .u-search { height: 38px; }
+.t-sidebar .u-row { height: 40px; }
+.t-sidebar .u-tree { padding-bottom: 0; }
+.t-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.t-topbar { height: 52px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); }
+.t-crumbs { display: flex; align-items: center; gap: 6px; color: var(--mfg-2); font-size: 11px; }
+.t-crumbs b { color: var(--fg); font-weight: 500; }
+.t-topbar .save { margin-left: auto; }
+.t-ws-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+.t-editor-head { padding: 26px 48px 16px; border-bottom: 1px solid var(--border); }
+.t-editor-head .u-kicker { font-size: 9px; }
+.t-editor-title { margin: 9px 0 7px; font-size: 34px; line-height: 1.12; font-weight: 600; letter-spacing: -.025em; }
+.t-editor-meta { display: flex; align-items: center; gap: 8px; color: var(--mfg-2); font: 10px var(--mono); }
+.t-editor-body { padding: 22px 48px 32px; max-width: 800px; }
+.t-editor-body .u-prose { font-size: 15px; line-height: 1.85; }
+.t-gutter { position: absolute; left: 20px; top: 22px; display: flex; flex-direction: column; gap: 2px; color: var(--mfg-2); }
+.t-gutter span { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; }
+.t-savebar { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 48px; border-top: 1px solid var(--border); color: var(--mfg-2); font: 9px var(--mono); }
+.t-bubble { position: absolute; top: 238px; left: 330px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--card); box-shadow: var(--shadow-lg); z-index: 20; }
+.t-bubble b, .t-bubble span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 6px; color: var(--mfg); font-size: 11px; font-weight: 600; }
+.t-bubble .on { background: var(--muted); color: var(--fg); }
+.t-bubble .ico { width: 15px; height: 15px; }
+
+.t-article { display: grid; grid-template-columns: minmax(0, 1fr) 228px; gap: 44px; padding: 34px 44px 48px; flex: 1; min-height: 0; overflow: hidden; }
+.t-article-main { min-width: 0; }
+.t-article h1 { margin: 10px 0 8px; font-family: var(--serif); font-size: 44px; font-weight: 400; line-height: 1.02; letter-spacing: -.02em; }
+.t-article .u-cover-band { height: 198px; margin: 20px 0 22px; }
+.t-article .u-prose { font-size: 16px; line-height: 1.82; }
+.t-article .u-prose h2 { font-size: 21px; margin: 24px 0 10px; }
+.t-toc { padding-left: 20px; border-left: 1px solid var(--border); }
+.t-toc h4 { margin: 3px 0 10px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.t-toc a { display: flex; align-items: center; gap: 7px; height: 30px; color: var(--mfg); font-size: 11px; text-decoration: none; }
+.t-toc a.active { color: var(--fg); font-weight: 600; }
+.t-toc a .bar { width: 2px; height: 13px; background: var(--border); }
+.t-toc a.active .bar { background: var(--fg); }
+.t-toc .mini { margin-top: 20px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.t-toc .mini p { margin: 6px 0 0; color: var(--mfg); font-size: 10px; line-height: 1.6; }
+
+.t-map-layout { display: flex; flex: 1; min-height: 0; }
+.t-map-canvas { position: relative; flex: 1; min-width: 0; overflow: hidden; background: #0d0e10; }
+[data-theme="light"] .t-map-canvas { background: #ececee; }
+.t-map-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.t-map-top { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 15; display: flex; align-items: center; gap: 6px; padding: 5px; border: 1px solid var(--border-strong); border-radius: 12px; background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-md); }
+.t-map-top .grow { flex: 1; min-width: 0; }
+.t-map-zoom { position: absolute; right: 14px; bottom: 16px; z-index: 15; display: flex; flex-direction: column; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; background: var(--card); }
+.t-map-zoom button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--fg); }
+.t-map-zoom button:last-child { border-bottom: 0; }
+.t-map-zoom .ico { width: 18px; height: 18px; }
+.t-inspector { width: 320px; flex: none; display: flex; flex-direction: column; gap: 10px; padding: 13px; border-left: 1px solid var(--border); background: var(--card); min-height: 0; }
+.t-inspector h3 { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 400; }
+.t-inspector .meta { color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .04em; }
+.t-inspector .u-btn { height: 36px; }
+.t-inspector .field { display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--mfg); font-size: 11px; }
+.t-inspector .field b { color: var(--fg); font-weight: 500; }
+.t-inspector-list { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--border); }
+.t-inspector-list .u-marker-row { height: 42px; }
+.t-legend { position: absolute; left: 14px; bottom: 16px; z-index: 15; display: flex; align-items: center; gap: 10px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(10px); color: var(--mfg); font: 9px var(--mono); }
+.t-legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--fg); }
+
+.t-tl-layout { display: flex; flex: 1; min-height: 0; }
+.t-tl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.t-tl-head { height: 54px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.t-tl-head .u-chip { height: 30px; }
+.t-tl-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; background: linear-gradient(180deg, var(--bg-soft), var(--bg)); }
+.t-inspector .date { font-family: var(--serif); font-size: 44px; line-height: 1; }
+.t-inspector textarea { width: 100%; height: 72px; resize: none; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg-2); font: 11px/1.6 var(--sans); outline: 0; }
+.t-inspector .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+
+.t-explore { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 28px; padding: 28px 40px 40px; flex: 1; min-height: 0; overflow: hidden; }
+.t-filter-rail { padding-right: 20px; border-right: 1px solid var(--border); }
+.t-filter-rail h4 { margin: 0 0 10px; color: var(--mfg-2); font: 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.t-filter-rail a { display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 9px; border-radius: 7px; color: var(--mfg); font-size: 11px; text-decoration: none; }
+.t-filter-rail a.active { background: var(--muted); color: var(--fg); font-weight: 600; }
+.t-filter-rail a span { font: 9px var(--mono); color: var(--mfg-2); }
+.t-explore-main { min-width: 0; }
+.t-explore-main h1 { margin: 4px 0 7px; font-family: var(--serif); font-size: 40px; font-weight: 400; line-height: 1; }
+.t-explore-main .lead { margin: 0 0 14px; color: var(--mfg); font-size: 12px; }
+.t-explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.t-explore-grid .u-world-card { margin: 0; }
+.t-explore-grid .u-world-cover { height: 88px; }
+
+/* ============================================================
+   Responsive document
+   ============================================================ */
+@media (max-width: 1100px) {
+  .ov-hero { grid-template-columns: minmax(0, 1fr) 240px; gap: 32px; }
+  .ov-principles { grid-template-columns: 1fr 1fr; }
+  .ov-principles .ov-principle:last-child { grid-column: 1 / -1; }
+  .ov-models { grid-template-columns: 1fr 1fr; }
+  .ov-tokens { grid-template-columns: repeat(2, 1fr); }
+  .ov-section-head p { display: none; }
+}
+@media (max-width: 780px) {
+  .doc-bar { gap: 12px; padding: 0 16px; height: 56px; }
+  .doc-brand span { display: none; }
+  .doc-meta .ver { display: none; }
+  .doc-tabs button { padding: 0 11px; font-size: 11px; }
+  .view { padding-top: 28px; }
+  .ov-wrap, .gallery-head, .gallery { width: calc(100% - 32px); }
+  .ov-hero { grid-template-columns: 1fr; }
+  .ov-hero-side { display: none; }
+  .ov-principles { grid-template-columns: 1fr; }
+  .ov-principles .ov-principle:last-child { grid-column: auto; }
+  .ov-models { grid-template-columns: 1fr; }
+  .gallery { --s: .82; gap: 46px 32px; }
+  .gallery.tablets { --s: .5; }
+  .gallery-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .gallery-head p { text-align: left; margin-left: 0; }
+  .device-note { max-width: 360px; }
+}
+@media (max-width: 560px) {
+  .gallery { --s: .7; }
+  .gallery.tablets { --s: .33; }
+  .ov-section { padding-top: 40px; }
+  .ov-hero h1 { font-size: 38px; }
+  .doc-tabs button { padding: 0 9px; }
+  .doc-brand b { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4a13 13 0 0 1 0 16 13 13 0 0 1 0-16"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="17" r="1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m3 16 5-4 4 3 3-2 6 5"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-quote" viewBox="0 0 24 24"><path d="M6 10h4v5H5v-3a3 3 0 0 1 3-3M15 10h4v5h-5v-3a3 3 0 0 1 3-3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="m14 6 4 4"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/></symbol>
+  <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.6-3.6"/></symbol>
+  <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.6-3.6"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m15 9-2 4-4 2 2-4z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.3-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+  <symbol id="i-signal" viewBox="0 0 24 24"><path d="M4 17v-3M9 17v-6M14 17V7M19 17V4"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0 1 20 0M6 12.5a9 9 0 0 1 12 0M9.5 16a4 4 0 0 1 5 0"/><circle cx="12" cy="19" r=".8" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-battery" viewBox="0 0 24 24"><rect x="3" y="8" width="17" height="8" rx="2"/><path d="M22 11v2"/><rect x="5" y="10" width="11" height="4" rx="1" fill="currentColor" stroke="none"/></symbol>
+</svg>
+
+<header class="doc-bar">
+  <div class="doc-brand">
+    <span class="doc-mark" aria-hidden="true"></span>
+    <b>Opuscule</b>
+    <span>Mobile &amp; Tablet</span>
+  </div>
+  <div class="doc-tabs" role="tablist" aria-label="设计稿视图">
+    <button type="button" class="active" data-view="overview">概览</button>
+    <button type="button" data-view="phone">手机 · 8 屏</button>
+    <button type="button" data-view="tablet">平板 · 5 屏</button>
+  </div>
+  <div class="doc-meta">
+    <span class="ver">v0.10.2-dev.7 · 2026-10-27</span>
+    <button type="button" class="doc-ghost" id="themeBtn" aria-label="切换明暗主题">
+      <svg class="ico"><use href="#i-moon"/></svg>
+      <span id="themeLabel">深色</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- 概览 -->
+  <section class="view active" id="view-overview">
+    <div class="ov-wrap">
+      <header class="ov-hero">
+        <div>
+          <p class="ov-eyebrow">Adaptation spec · 0.10</p>
+          <h1>让世界在掌心<br>也能被<em>书写</em></h1>
+          <p class="ov-lead">当前前端只有 640 / 900 两个零散断点，导航、编辑器、地图与时间线仍按桌面尺寸等比缩小。这份稿子把手机与平板拆成两套明确的布局：手机先解决可达性与编辑连续性，平板先解决空间利用率与阅读节奏。</p>
+        </div>
+        <aside class="ov-hero-side">
+          <ul class="ov-meta-list">
+            <li><span>手机基准</span><b>390 × 844</b></li>
+            <li><span>平板基准</span><b>1024 × 768 / 834 × 1112</b></li>
+            <li><span>触控目标</span><b>≥ 44 px</b></li>
+            <li><span>默认主题</span><b>DARK</b></li>
+            <li><span>设计语言</span><b>MONO / SERIF</b></li>
+          </ul>
+        </aside>
+      </header>
+
+      <section class="ov-section">
+        <div class="ov-section-head">
+          <span class="num">01</span>
+          <h2>三条适配主线</h2>
+          <p>不是把桌面压扁，而是为触屏重新安排层级。</p>
+        </div>
+        <div class="ov-principles">
+          <article class="ov-principle">
+            <span class="idx">01 / REACH</span>
+            <h3>单手可达</h3>
+            <p>主导航移到底部四格，世界内页面用横向子导航。抽屉、底部面板与工具栏都落在拇指区，页面主操作不再挤在右上角。</p>
+            <span class="rule">bottom bar · sheet · 44px</span>
+          </article>
+          <article class="ov-principle">
+            <span class="idx">02 / READ</span>
+            <h3>阅读优先</h3>
+            <p>公开页从多列卡片收成单列叙事，正文 15 / 1.76，保留衬线标题。目录从右栏变成浮球 + 底部面板，不打断长文阅读。</p>
+            <span class="rule">single column · floating toc</span>
+          </article>
+          <article class="ov-principle">
+            <span class="idx">03 / WRITE</span>
+            <h3>编辑不缩水</h3>
+            <p>工作区保留完整 Tiptap 能力：键盘上沿吸附格式条，斜杠菜单改为底部面板，块操作走长按菜单；保存状态常驻顶栏，不再依赖底部保存条。</p>
+            <span class="rule">keyboard dock · block sheet</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="ov-section">
+        <div class="ov-section-head">
+          <span class="num">02</span>
+          <h2>断点约定</h2>
+          <p>沿用现有 640 手机断点，新增 1024 平板边界，替换零散的 900 规则。</p>
+        </div>
+        <div class="ov-table-wrap">
+          <table class="ov-table">
+            <thead>
+              <tr><th>区间</th><th>宽度</th><th>导航</th><th>内容策略</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>手机</td><td><code>≤ 640px</code></td><td>顶部栏 + 底部四格 + 抽屉</td><td>单列；页面边距 16；正文 15px</td></tr>
+              <tr><td>平板</td><td><code>641 – 1024px</code></td><td>顶部一栏；工作区常驻侧栏</td><td>双列 / 主栏 + 检查器；边距 24–44</td></tr>
+              <tr><td>桌面</td><td><code>≥ 1025px</code></td><td>保持现状</td><td>1100 内容宽；不做视觉改动</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ov-section">
+        <div class="ov-section-head">
+          <span class="num">03</span>
+          <h2>导航模型</h2>
+          <p>手机是“页面 + 底部去处”，平板是“常驻侧栏 + 主画布”。</p>
+        </div>
+        <div class="ov-models">
+          <article class="ov-model">
+            <h3>手机</h3>
+            <span class="bp">≤ 640 · PORTRAIT</span>
+            <div class="model-art">
+              <div class="m-phone">
+                <span class="bar"></span>
+                <span class="body"></span>
+                <span class="foot"><i></i><i></i><i></i><i></i></span>
+              </div>
+            </div>
+            <p class="model-note">全局页：顶栏 + 内容 + 底部四格。<br>世界页：顶栏 + 横滑子导航；地图 / 时间线用底部面板承载详情。工作区隐藏底栏，改用抽屉 + 编辑工具条。</p>
+          </article>
+          <article class="ov-model">
+            <h3>平板</h3>
+            <span class="bp">641 – 1024 · BOTH</span>
+            <div class="model-art">
+              <div class="m-tablet">
+                <span class="side"></span>
+                <span class="main"><span class="bar"></span><span class="body"></span></span>
+              </div>
+            </div>
+            <p class="model-note">工作区把 268 侧栏收成 248，编辑区保持单栏但加大留白；地图与时间线使用“画布 + 320 检查器”，避免在画布上叠弹窗。</p>
+          </article>
+          <article class="ov-model">
+            <h3>桌面</h3>
+            <span class="bp">≥ 1025 · UNCHANGED</span>
+            <div class="model-art">
+              <div class="m-desk">
+                <span class="side"></span>
+                <span class="main"><span class="bar"></span><span class="body"></span></span>
+              </div>
+            </div>
+            <p class="model-note">现有浮层侧栏、右栏目录、hover 工具条全部保留。移动端规则只在 ≤1024 生效，不回写桌面布局。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="ov-section">
+        <div class="ov-section-head">
+          <span class="num">04</span>
+          <h2>组件对照</h2>
+          <p>同一组件在三种宽度下如何换形态。</p>
+        </div>
+        <div class="ov-table-wrap">
+          <table class="ov-table">
+            <thead>
+              <tr><th>组件</th><th>手机 ≤640</th><th>平板 641–1024</th><th>桌面 ≥1025</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>工作区导航</td><td>左滑抽屉，宽 86%</td><td>常驻 248px 侧栏</td><td>268px 浮层侧栏</td></tr>
+              <tr><td>文档树</td><td>44px 行高，底部新建</td><td>40px 行高，底部工具</td><td>44px 行高</td></tr>
+              <tr><td>编辑器工具</td><td>键盘上沿 56px 工具条</td><td>选区浮条 + 键盘工具条</td><td>选区浮条 + gutter</td></tr>
+              <tr><td>斜杠菜单</td><td>底部面板，单列</td><td>浮层 276px</td><td>浮层 276px</td></tr>
+              <tr><td>目录 / 大纲</td><td>浮球 → 底部面板</td><td>右侧 228px 粘性栏</td><td>右侧栏</td></tr>
+              <tr><td>地图详情</td><td>底部抽屉，可展开</td><td>右侧 320px 检查器</td><td>右侧检查器</td></tr>
+              <tr><td>时间线详情</td><td>底部抽屉</td><td>右侧检查器</td><td>右侧检查器</td></tr>
+              <tr><td>弹窗</td><td>底部面板 / 全屏</td><td>居中 dialog</td><td>居中 dialog</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ov-section">
+        <div class="ov-section-head">
+          <span class="num">05</span>
+          <h2>移动端令牌</h2>
+          <p>新增的尺寸全部落在既有 token 体系内，不引入新色相。</p>
+        </div>
+        <div class="ov-tokens">
+          <article class="ov-token"><span class="k">Tap target</span><div class="v">44 px</div><p class="d">所有图标按钮、树行、工具栏按钮。</p></article>
+          <article class="ov-token"><span class="k">Page gutter</span><div class="v">16 / 24</div><p class="d">手机 16，平板 24–44。</p></article>
+          <article class="ov-token"><span class="k">Body type</span><div class="v">15 / 1.76</div><p class="d">正文；平板升到 16–17。</p></article>
+          <article class="ov-token"><span class="k">Sheet motion</span><div class="v">300 ms</div><p class="d">cubic-bezier(.22,1,.36,1)，尊重减少动效。</p></article>
+        </div>
+        <div class="ov-scope">
+          <div><b>本期范围</b>手机竖屏 390×844、平板横屏 1024×768 与竖屏 834×1112；覆盖工作区、Wiki、地图、时间线、探索、个人主页。</div>
+          <div><b>暂不在稿内</b>手机横屏、折叠屏、离线草稿、原生 App 手势；键盘弹起高度按 iOS 336 / Android 300 预留。</div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- 手机 -->
+  <section class="view" id="view-phone">
+    <div class="gallery-head">
+      <div>
+        <span class="gh-num">PHONE / 390 × 844 · 8 SCREENS</span>
+        <h1>手机</h1>
+      </div>
+      <p>底部四格负责“去哪儿”，横向子导航负责“在世界里的哪儿”。工作区是唯一的例外：底栏让位给编辑，导航收进抽屉。</p>
+    </div>
+    <div class="gallery" id="phoneGallery">
+      <!-- 01 工作区 · 编辑 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">01</span><h2>工作区 · 编辑</h2><span class="tag">WRITE</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <button class="u-ib" aria-label="打开导航"><svg class="ico"><use href="#i-menu"/></svg></button>
+                  <div class="grow">
+                    <div class="u-title">雾海纪年 <span class="u-muted" style="font-weight:400">/ 静默海峡</span></div>
+                    <div class="u-sub">WORKSPACE · 9 CARDS</div>
+                  </div>
+                  <span class="u-badge" style="height:24px"><span class="dot" style="width:5px;height:5px;border-radius:50%;background:var(--fg)"></span>已保存</span>
+                  <button class="u-ib" aria-label="更多"><svg class="ico"><use href="#i-more"/></svg></button>
+                </header>
+                <div class="u-doc-head">
+                  <div class="u-kicker"><span>地点</span><span>·</span><span>公开</span><span>·</span><span>灯塔纪</span></div>
+                  <h1 class="u-doc-title">静默海峡</h1>
+                  <div class="u-doc-meta"><span>128 字</span><span>·</span><span>3 天前更新</span><span>·</span><span>2 条评论</span></div>
+                </div>
+                <div class="u-doc-body">
+                  <div class="u-prose">
+                    <p>海峡在退潮时露出第二层礁脊。守夜人沿着盐雾议会留下的白漆标记向南，只有看见三块倒扣的船骨，才算真正进入静默水道。</p>
+                    <h2>航道与潮汐</h2>
+                    <p>主航道宽约两百步，最窄处只能容两艘灯船并行。每年灰潮纪结束后，礁脊会整体北移，旧海图上的安全线随之作废。</p>
+                    <div class="u-callout">只有退潮后的四十分钟，灯船才能通过第二道礁脊。错过窗口，就要在雾里等到下一个潮汐。</div>
+                    <p>盐雾议会把这段窗口称作「白窗」，并在两岸各设一座<strong style="color:var(--fg);font-weight:500">灯桩</strong>。</p>
+                  </div>
+                </div>
+                <div class="u-dock" aria-label="格式工具条">
+                  <button class="t bold">B</button>
+                  <button class="t ital">I</button>
+                  <button class="t under">U</button>
+                  <button class="t">H1</button>
+                  <span class="u-sep"></span>
+                  <button class="t" aria-label="列表"><svg class="ico"><use href="#i-list"/></svg></button>
+                  <button class="t" aria-label="链接"><svg class="ico"><use href="#i-link"/></svg></button>
+                  <button class="t" aria-label="图片"><svg class="ico"><use href="#i-image"/></svg></button>
+                  <button class="insert"><svg class="ico"><use href="#i-plus"/></svg>插入</button>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>保存状态前置</b>：顶栏 24px chip 替代底部保存条，键盘弹起时仍可见。</li>
+          <li><b>格式条 56px</b>：吸附键盘上沿，按钮 38×38，高频操作留在一排。</li>
+          <li><b>正文 15 / 1.76</b>：标题 26px，页面边距 16；callout 与正文同一列。</li>
+        </ul>
+      </article>
+
+      <!-- 02 工作区 · 导航抽屉 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">02</span><h2>工作区 · 导航抽屉</h2><span class="tag">NAV</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <button class="u-ib on" aria-label="导航已展开"><svg class="ico"><use href="#i-menu"/></svg></button>
+                  <div class="grow"><div class="u-title">静默海峡</div><div class="u-sub">WORKSPACE</div></div>
+                  <button class="u-ib" aria-label="更多"><svg class="ico"><use href="#i-more"/></svg></button>
+                </header>
+                <div class="u-doc-head">
+                  <div class="u-kicker"><span>地点</span><span>·</span><span>公开</span></div>
+                  <h1 class="u-doc-title">静默海峡</h1>
+                </div>
+                <div class="u-doc-body">
+                  <div class="u-prose">
+                    <p>海峡在退潮时露出第二层礁脊。守夜人沿着盐雾议会留下的白漆标记向南，只有看见三块倒扣的船骨，才算真正进入静默水道。</p>
+                    <h2>航道与潮汐</h2>
+                    <p>主航道宽约两百步，最窄处只能容两艘灯船并行。</p>
+                  </div>
+                </div>
+                <div class="u-scrim" aria-hidden="true"></div>
+                <aside class="u-drawer" aria-label="工作区导航">
+                  <div class="u-drawer-head">
+                    <div class="grow"><div class="u-drawer-title">雾海纪年</div><div class="u-drawer-sub">工作区 · 9 张卡片</div></div>
+                    <button class="u-ib" aria-label="关闭导航"><svg class="ico"><use href="#i-x"/></svg></button>
+                  </div>
+                  <div class="u-search"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索文档…" aria-label="搜索文档"></div>
+                  <div class="u-concept"><svg class="ico"><use href="#i-book"/></svg>世界概念<em>已发布</em></div>
+                  <div class="u-tree-label">内容</div>
+                  <div class="u-tree">
+                    <div class="u-row"><svg class="ico"><use href="#i-folder"/></svg>地理<span class="count">3</span></div>
+                    <div class="u-row indent active"><svg class="ico"><use href="#i-file"/></svg>静默海峡</div>
+                    <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>潮汐历法</div>
+                    <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>盐雾议会</div>
+                    <div class="u-row"><svg class="ico"><use href="#i-folder"/></svg>人物<span class="count">2</span></div>
+                    <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>灯塔守夜人</div>
+                    <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>抄经人</div>
+                    <div class="u-row"><svg class="ico"><use href="#i-file"/></svg>未归类<span class="count">1</span></div>
+                  </div>
+                  <div class="u-drawer-foot">
+                    <a class="u-btn primary block" href="#"><svg class="ico"><use href="#i-plus"/></svg>新建文档</a>
+                    <div class="u-drawer-tools">
+                      <button class="u-ib sm" aria-label="地图"><svg class="ico"><use href="#i-map"/></svg></button>
+                      <button class="u-ib sm" aria-label="时间线"><svg class="ico"><use href="#i-clock"/></svg></button>
+                      <button class="u-ib sm" aria-label="评论"><svg class="ico"><use href="#i-message"/></svg></button>
+                      <span class="u-sep" style="margin:0 2px"></span>
+                      <button class="u-ib sm" aria-label="世界设置"><svg class="ico"><use href="#i-settings"/></svg></button>
+                    </div>
+                  </div>
+                </aside>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>86% 宽抽屉</b>：保留右侧编辑上下文，遮罩可点关闭；状态栏不遮挡。</li>
+          <li><b>树行 44px</b>：分组和文档同层级可点，底部固定新建与工具入口。</li>
+          <li><b>替代桌面浮层侧栏</b>：不在手机复刻 hover 展开，也不横向压缩树。</li>
+        </ul>
+      </article>
+
+      <!-- 03 世界 Wiki · 词条 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">03</span><h2>世界 Wiki · 词条</h2><span class="tag">READ</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <span class="u-head-brand" style="width:30px;height:30px;margin-left:6px;display:grid;place-items:center;border-radius:8px;background:var(--fg);color:var(--on-primary);font-family:var(--serif);font-size:17px">雾</span>
+                  <div class="grow" style="margin-left:8px"><div class="u-title">雾海纪年</div><div class="u-sub">OPEN WORLD · 28 文档</div></div>
+                  <button class="u-ib" aria-label="搜索"><svg class="ico"><use href="#i-search"/></svg></button>
+                  <button class="u-ib" aria-label="世界导航"><svg class="ico"><use href="#i-menu"/></svg></button>
+                </header>
+                <nav class="u-subnav" aria-label="世界导航">
+                  <a href="#">世界</a><a href="#" class="active">设定</a><a href="#">时间线</a><a href="#">地图</a><a href="#">工作区</a>
+                </nav>
+                <div class="u-body">
+                  <article class="u-article">
+                    <div class="u-crumbs"><span>雾海纪年</span><svg class="ico" style="width:10px;height:10px"><use href="#i-chev-r"/></svg><span>地理</span><svg class="ico" style="width:10px;height:10px"><use href="#i-chev-r"/></svg><span>静默海峡</span></div>
+                    <h1>静默海峡</h1>
+                    <div class="u-kindline"><span>地点</span><span>·</span><span>灯塔纪 487</span><span>·</span><span>3 天前更新</span></div>
+                    <div class="u-contour u-cover-band"><span class="u-glyph" style="font-size:30px">峡</span></div>
+                    <div class="u-prose">
+                      <p>海峡在退潮时露出第二层礁脊。守夜人沿着盐雾议会留下的白漆标记向南，只有看见三块倒扣的船骨，才算真正进入静默水道。</p>
+                      <h2>航道与潮汐</h2>
+                      <p>主航道宽约两百步，最窄处只能容两艘灯船并行。每年灰潮纪结束后，礁脊会整体北移，旧海图上的安全线随之作废。</p>
+                      <div class="u-callout">只有退潮后的四十分钟，灯船才能通过第二道礁脊。</div>
+                      <blockquote>「灯不灭，峡就还在。」——灯塔守夜人第三训</blockquote>
+                      <p>盐雾议会把这段窗口称作「白窗」，并在两岸各设一座灯桩。灯桩由<strong style="color:var(--fg);font-weight:500">盐雾议会</strong>直接管辖，守夜人只负责点灯与记录。</p>
+                    </div>
+                    <div class="u-backlink">
+                      <div class="label">被引用 4 次</div>
+                      <p>世界概念、潮汐历法、灯塔守夜人都在正文里引用了这张词条。</p>
+                      <a href="#"><svg class="ico" style="width:13px;height:13px"><use href="#i-link"/></svg>查看全部反链</a>
+                    </div>
+                  </article>
+                  <button class="u-fab" aria-label="打开目录"><svg class="ico"><use href="#i-list"/></svg>目录 · 4</button>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>世界子导航横滑</b>：世界 / 设定 / 时间线 / 地图 / 工作区，5 项可滑动不换行。</li>
+          <li><b>单列正文</b>：32px 衬线标题、15px 正文；封面压到 118px，先读到字。</li>
+          <li><b>目录浮球</b>：右下 44px 常驻，点击从底部拉起目录面板，不占正文宽度。</li>
+        </ul>
+      </article>
+
+      <!-- 04 世界 Wiki · 首页 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">04</span><h2>世界 Wiki · 首页</h2><span class="tag">WORLD</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <span class="u-head-brand" style="width:30px;height:30px;margin-left:6px;display:grid;place-items:center;border-radius:8px;background:var(--fg);color:var(--on-primary);font-family:var(--serif);font-size:17px">雾</span>
+                  <div class="grow" style="margin-left:8px"><div class="u-title">雾海纪年</div><div class="u-sub">OPEN WORLD · 28 文档</div></div>
+                  <button class="u-ib" aria-label="搜索"><svg class="ico"><use href="#i-search"/></svg></button>
+                  <button class="u-ib" aria-label="世界导航"><svg class="ico"><use href="#i-menu"/></svg></button>
+                </header>
+                <nav class="u-subnav" aria-label="世界导航">
+                  <a href="#" class="active">世界</a><a href="#">设定</a><a href="#">时间线</a><a href="#">地图</a><a href="#">工作区</a>
+                </nav>
+                <div class="u-body fade">
+                  <div class="u-hero">
+                    <div class="u-kicker"><span>WORLD SURVEY</span><span>·</span><span>公开</span></div>
+                    <h1>雾海纪年</h1>
+                    <p>潮汐退去后，礁脊与旧灯桩重新显形。这是一部关于航海、盐雾与守夜人的编年史。</p>
+                  </div>
+                  <div class="u-contour u-hero-cover"><span class="u-glyph" style="font-size:44px">雾</span></div>
+                  <div class="u-stats">28 文档 · 3 分区 · 4 位创作者 · 更新于 2 小时前</div>
+                  <div class="u-inline-search"><svg class="ico"><use href="#i-search"/></svg><span>搜索这个世界…</span><button>搜索</button></div>
+                  <div class="u-era-row">
+                    <span class="u-era">灰潮纪 412–470</span>
+                    <span class="u-era">灯塔纪 470–520</span>
+                    <span class="u-era">裂隙纪 520–</span>
+                  </div>
+                  <section class="u-section">
+                    <div class="u-section-head"><h2>地理</h2><span>3 DOCS</span></div>
+                    <div class="u-grid2">
+                      <article class="u-tile"><div class="u-contour u-tile-cover"><span class="u-glyph" style="font-size:24px">峡</span></div><div class="u-tile-info"><div class="u-tile-kind">地点</div><div class="u-tile-name">静默海峡</div></div></article>
+                      <article class="u-tile"><div class="u-contour u-tile-cover"><span class="u-glyph" style="font-size:24px">潮</span></div><div class="u-tile-info"><div class="u-tile-kind">概念</div><div class="u-tile-name">潮汐历法</div></div></article>
+                      <article class="u-tile"><div class="u-contour u-tile-cover"><span class="u-glyph" style="font-size:24px">议</span></div><div class="u-tile-info"><div class="u-tile-kind">组织</div><div class="u-tile-name">盐雾议会</div></div></article>
+                      <article class="u-tile"><div class="u-contour u-tile-cover"><span class="u-glyph" style="font-size:24px">灯</span></div><div class="u-tile-info"><div class="u-tile-kind">地点</div><div class="u-tile-name">第二礁脊</div></div></article>
+                    </div>
+                  </section>
+                  <section class="u-section">
+                    <div class="u-section-head"><h2>人物</h2><span>2 DOCS</span></div>
+                    <div class="u-grid2">
+                      <article class="u-tile"><div class="u-contour u-tile-cover"><span class="u-glyph" style="font-size:24px">守</span></div><div class="u-tile-info"><div class="u-tile-kind">人物</div><div class="u-tile-name">灯塔守夜人</div></div></article>
+                      <article class="u-tile"><div class="u-contour u-tile-cover"><span class="u-glyph" style="font-size:24px">抄</span></div><div class="u-tile-info"><div class="u-tile-kind">人物</div><div class="u-tile-name">抄经人</div></div></article>
+                    </div>
+                  </section>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>世界首页不套卡片流</b>：先给封面与一句话，再给搜索、纪元、分区。</li>
+          <li><b>信息密度控制</b>：词条用两列小卡，每行 2 张；超出部分自然滚动。</li>
+          <li><b>不重复导航</b>：世界内所有页面共用同一排横滑子导航。</li>
+        </ul>
+      </article>
+      <!-- 05 世界地图 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">05</span><h2>世界地图</h2><span class="tag">MAP</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <div class="u-map">
+                  <svg class="map-art" viewBox="0 0 376 772" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                    <path class="map-coast" d="M-30 122 C 40 82, 106 108, 148 148 C 190 188, 150 232, 184 274 C 222 320, 190 368, 130 390 C 72 412, 20 382, -30 402 Z"/>
+                    <path class="map-contour dim" d="M-14 152 C 44 118, 96 138, 132 172 C 166 204, 134 240, 162 274 C 192 310, 166 348, 120 364 C 74 380, 34 356, -14 372"/>
+                    <path class="map-contour" d="M4 180 C 50 154, 88 170, 116 198 C 142 224, 118 252, 142 282 C 164 310, 144 336, 110 348 C 76 360, 44 342, 4 354"/>
+                    <path class="map-coast" d="M300 150 C 340 138, 386 168, 400 220 C 414 274, 362 302, 330 280 C 298 258, 284 198, 300 150 Z"/>
+                    <path class="map-contour dim" d="M310 170 C 338 162, 370 184, 382 222 C 392 262, 356 282, 334 264 C 312 246, 300 196, 310 170"/>
+                    <path class="map-coast" d="M-24 620 C 58 588, 108 640, 168 620 C 228 600, 282 642, 400 628 L 400 800 L -24 800 Z"/>
+                    <path class="map-contour dim" d="M-12 654 C 54 628, 104 670, 160 652 C 216 634, 272 674, 400 662"/>
+                    <path class="map-contour" d="M0 690 C 62 668, 108 704, 164 688 C 220 672, 276 706, 400 696"/>
+                    <ellipse class="map-shoal" cx="212" cy="454" rx="58" ry="24"/>
+                    <ellipse class="map-shoal" cx="242" cy="484" rx="34" ry="14"/>
+                    <ellipse class="map-shoal" cx="152" cy="536" rx="44" ry="18"/>
+                    <path class="map-route" d="M166 214 C 196 268, 224 316, 254 330 C 286 344, 274 402, 232 424"/>
+                    <circle cx="166" cy="214" r="2.4" fill="currentColor" opacity=".55"/>
+                    <circle cx="254" cy="330" r="2.4" fill="currentColor" opacity=".55"/>
+                  </svg>
+                  <div class="u-map-top">
+                    <button class="u-ib" aria-label="返回世界"><svg class="ico"><use href="#i-left"/></svg></button>
+                    <div class="grow"><div class="u-title">雾海纪年 · 地图</div><div class="u-sub">2 个标记 · 背景 手绘海图</div></div>
+                    <button class="u-ib" aria-label="搜索标记"><svg class="ico"><use href="#i-search"/></svg></button>
+                    <button class="u-ib" aria-label="更多"><svg class="ico"><use href="#i-more"/></svg></button>
+                  </div>
+                  <div class="u-map-tools">
+                    <button aria-label="放大"><svg class="ico"><use href="#i-zoom-in"/></svg></button>
+                    <button aria-label="缩小"><svg class="ico"><use href="#i-zoom-out"/></svg></button>
+                    <button aria-label="回到中心"><svg class="ico"><use href="#i-compass"/></svg></button>
+                    <button aria-label="图层"><svg class="ico"><use href="#i-layers"/></svg></button>
+                  </div>
+                  <div class="u-pin active" style="left:52%;top:27%"><span class="u-pin-dot"></span><span class="u-pin-label">灯塔</span></div>
+                  <div class="u-pin" style="left:68%;top:42%"><span class="u-pin-dot"></span><span class="u-pin-label">盐雾议会</span></div>
+                  <div class="u-pin" style="left:36%;top:52%"><span class="u-pin-dot"></span><span class="u-pin-label">静默海峡</span></div>
+                  <div class="u-pin" style="left:60%;top:19%"><span class="u-pin-dot"></span></div>
+                  <div class="u-sheet">
+                    <button class="u-grabber" data-sheet-toggle aria-label="展开标记列表"></button>
+                    <div class="u-sheet-head">
+                      <div class="grow">
+                        <h3>灯塔</h3>
+                        <p>47.2°N · 12.8°E · 地点</p>
+                      </div>
+                      <span class="u-badge solid">已发布</span>
+                    </div>
+                    <p style="margin:0;color:var(--mfg);font-size:12px;line-height:1.7">静默海峡北岸仅存的灯桩，塔身由盐雾议会第七次修缮，夜间可见约九海里。</p>
+                    <div class="u-marker-list">
+                      <div class="u-marker-row"><span class="n">01</span><span class="name">灯塔</span><small>地点</small></div>
+                      <div class="u-marker-row"><span class="n">02</span><span class="name">盐雾议会</span><small>组织</small></div>
+                      <div class="u-marker-row"><span class="n">03</span><span class="name">静默海峡</span><small>地点</small></div>
+                    </div>
+                    <div class="u-sheet-actions">
+                      <button class="u-btn primary">打开卡片</button>
+                      <button class="u-btn ghost"><svg class="ico"><use href="#i-pencil"/></svg>编辑</button>
+                    </div>
+                  </div>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>地图满屏</b>：顶栏悬浮在画布上，缩放 / 定位 / 图层竖排在右手拇指区。</li>
+          <li><b>底部抽屉 288px</b>：先给选中标记详情；上滑展开 566px 显示完整标记列表。</li>
+          <li><b>手势</b>：双指缩放 1–3×、单指拖动、点击标记切换选中；不需要 hover。</li>
+        </ul>
+      </article>
+
+      <!-- 06 时间线 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">06</span><h2>时间线</h2><span class="tag">TIMELINE</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <button class="u-ib" aria-label="返回世界"><svg class="ico"><use href="#i-left"/></svg></button>
+                  <div class="grow"><div class="u-title">时间线</div><div class="u-sub">雾海纪年 · 主时间线</div></div>
+                  <button class="u-ib" aria-label="切换时间线"><svg class="ico"><use href="#i-layers"/></svg></button>
+                  <button class="u-ib" aria-label="更多"><svg class="ico"><use href="#i-more"/></svg></button>
+                </header>
+                <div class="u-tl">
+                  <div class="u-tl-filters">
+                    <span class="u-chip">全部</span>
+                    <span class="u-chip">灰潮纪</span>
+                    <span class="u-chip active">灯塔纪</span>
+                    <span class="u-chip">裂隙纪</span>
+                  </div>
+                  <div class="u-tl-canvas">
+                    <div class="u-era-band" style="left:0;width:34%"></div>
+                    <div class="u-era-band b2" style="left:34%;width:32%"></div>
+                    <div class="u-era-band" style="left:66%;width:34%"></div>
+                    <span style="position:absolute;left:10px;top:10px;font:8px var(--mono);letter-spacing:.1em;color:var(--mfg-2)">灰潮纪</span>
+                    <span style="position:absolute;left:37%;top:10px;font:8px var(--mono);letter-spacing:.1em;color:var(--mfg-2)">灯塔纪</span>
+                    <span style="position:absolute;left:69%;top:10px;font:8px var(--mono);letter-spacing:.1em;color:var(--mfg-2)">裂隙纪</span>
+                    <div class="u-tl-axis"></div>
+                    <span class="u-tick" style="left:22%">430</span>
+                    <span class="u-tick" style="left:38%">460</span>
+                    <span class="u-tick" style="left:54%">490</span>
+                    <span class="u-tick" style="left:70%">520</span>
+                    <span class="u-tick" style="left:86%">550</span>
+                    <div class="u-event up" style="left:20%;top:calc(38% - 5px)">
+                      <span class="dot"></span>
+                      <div class="u-event-card"><b>灰潮退去</b><small>452 · 自然</small></div>
+                    </div>
+                    <div class="u-event active" style="left:40%;top:calc(38% - 5px)">
+                      <span class="dot"></span>
+                      <div class="u-event-card"><b>灯塔熄灭</b><small>487 · 事件</small></div>
+                    </div>
+                    <div class="u-event up" style="left:62%;top:calc(38% - 5px)">
+                      <span class="dot"></span>
+                      <div class="u-event-card"><b>议会迁址</b><small>512 · 组织</small></div>
+                    </div>
+                    <div class="u-event" style="left:83%;top:calc(38% - 5px)">
+                      <span class="dot"></span>
+                      <div class="u-event-card"><b>裂隙开启</b><small>540 · 事件</small></div>
+                    </div>
+                    <div class="u-tl-zoom">
+                      <button aria-label="缩小"><svg class="ico"><use href="#i-zoom-out"/></svg></button>
+                      <button aria-label="适应宽度"><svg class="ico"><use href="#i-expand"/></svg></button>
+                      <button aria-label="放大"><svg class="ico"><use href="#i-zoom-in"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="u-tl-sheet" style="height:260px">
+                    <button class="u-grabber" aria-label="收起详情"></button>
+                    <div class="u-kicker">时间线条目 · 已发布</div>
+                    <div style="display:flex;align-items:flex-end;gap:10px;margin-top:10px"><span class="u-tl-year">487</span><span class="u-badge">灯塔纪</span></div>
+                    <h3>灯塔熄灭</h3>
+                    <p>守夜人记录：潮位高于刻度线两指，灯芯在第四次换油后仍未能点亮。此后四十分钟，海峡进入完全静默。</p>
+                    <div class="u-tl-tags"><span class="u-chip">事件</span><span class="u-chip">海峡</span><span class="u-chip">灯塔</span></div>
+                    <div class="u-sheet-actions">
+                      <button class="u-btn primary"><svg class="ico"><use href="#i-pencil"/></svg>编辑条目</button>
+                      <button class="u-btn ghost">查看关联</button>
+                    </div>
+                  </div>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>画布横滑</b>：年份刻度 + 纪元色带；上下交替卡片避免 390 宽内重叠。</li>
+          <li><b>筛选固定在画布上方</b>：纪元 chip 30px，单手可点，不占用底部详情。</li>
+          <li><b>详情底部抽屉</b>：年份 42px 衬线，标签与操作常驻；编辑进入全屏编辑器。</li>
+        </ul>
+      </article>
+
+      <!-- 07 探索 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">07</span><h2>探索 · 公开世界</h2><span class="tag">EXPLORE</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <span style="width:30px;height:30px;margin-left:6px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--strong);background:var(--card);font-family:var(--serif);font-size:15px">O</span>
+                  <div class="grow" style="margin-left:8px"><div class="u-title">Opuscule</div><div class="u-sub">PUBLIC WORLDS</div></div>
+                  <button class="u-ib" aria-label="搜索"><svg class="ico"><use href="#i-search"/></svg></button>
+                  <span style="width:30px;height:30px;margin-right:6px;display:grid;place-items:center;border-radius:50%;background:var(--muted);border:1px solid var(--border);font-size:11px;font-weight:600">L</span>
+                </header>
+                <div class="u-body fade">
+                  <div class="u-page-pad">
+                    <div class="u-kicker">DISCOVER · 12 WORLDS</div>
+                    <h1 class="u-page-title">公开世界</h1>
+                    <p class="u-page-lead">12 个世界正在被书写。找一个入口，从它的第一条词条开始。</p>
+                  </div>
+                  <div style="padding:0 16px"><div class="u-search"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索世界、词条或创作者…" aria-label="搜索"><span class="hint">⌘K</span></div></div>
+                  <div class="u-filter-row" style="padding-top:10px">
+                    <span class="u-chip active">全部</span>
+                    <span class="u-chip">开放</span>
+                    <span class="u-chip">最近更新</span>
+                    <span class="u-chip">最多文档</span>
+                  </div>
+                  <div style="padding:0 16px">
+                    <article class="u-world-card">
+                      <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:30px">雾</span></div>
+                      <div class="u-world-body">
+                        <div class="u-kicker" style="font-size:8px">OPEN · FANTASY</div>
+                        <div class="u-world-title">雾海纪年</div>
+                        <p class="u-world-desc">潮汐退去后，礁脊与旧灯桩重新显形。一部关于航海、盐雾与守夜人的编年史。</p>
+                        <div class="u-world-meta"><span>28 文档</span><span class="sep"></span><span>4 创作者</span><span class="sep"></span><span>2 小时前</span></div>
+                      </div>
+                    </article>
+                    <article class="u-world-card">
+                      <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:30px">砂</span></div>
+                      <div class="u-world-body">
+                        <div class="u-kicker" style="font-size:8px">OPEN · HISTORY</div>
+                        <div class="u-world-title">砂之档案</div>
+                        <p class="u-world-desc">一座在沙暴中反复重建的城，与它从未被同一人读完的七座图书馆。</p>
+                        <div class="u-world-meta"><span>41 文档</span><span class="sep"></span><span>7 创作者</span><span class="sep"></span><span>昨天</span></div>
+                      </div>
+                    </article>
+                    <article class="u-world-card">
+                      <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:30px">星</span></div>
+                      <div class="u-world-body">
+                        <div class="u-kicker" style="font-size:8px">OPEN · SCI-FI</div>
+                        <div class="u-world-title">第十三次静默</div>
+                        <p class="u-world-desc">所有殖民地的钟表都慢了一分钟，而只有一个人记得原来的时间。</p>
+                        <div class="u-world-meta"><span>16 文档</span><span class="sep"></span><span>2 创作者</span><span class="sep"></span><span>3 天前</span></div>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+                <nav class="u-tabbar" aria-label="主导航">
+                  <a href="#"><svg class="ico"><use href="#i-globe"/></svg>世界</a>
+                  <a href="#" class="active"><svg class="ico"><use href="#i-compass"/></svg>探索</a>
+                  <a href="#"><svg class="ico"><use href="#i-search"/></svg>搜索</a>
+                  <a href="#"><svg class="ico"><use href="#i-user"/></svg>我的</a>
+                </nav>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>单列世界卡</b>：封面 96px + 标题 + 一句话 + 元数据，扫读优先。</li>
+          <li><b>顶部搜索 + 筛选 chips</b>：筛选不常驻侧栏，避免手机出现第二套导航。</li>
+          <li><b>底部四格</b>：世界 / 探索 / 搜索 / 我的，全局页面共用，激活态清晰。</li>
+        </ul>
+      </article>
+
+      <!-- 08 我的 -->
+      <article class="device-card">
+        <div class="device-cap"><span class="n">08</span><h2>我的 · 世界列表</h2><span class="tag">PROFILE</span></div>
+        <div class="phone-slot">
+          <div class="phone">
+            <span class="island" aria-hidden="true"></span>
+            <span class="side-key" aria-hidden="true"></span>
+            <div class="phone-inner">
+              <div class="screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <header class="u-head">
+                  <div class="grow" style="margin-left:10px"><div class="u-title">我的</div><div class="u-sub">3 WORLDS · 4 LEFT</div></div>
+                  <button class="u-ib" aria-label="通知"><svg class="ico"><use href="#i-bell"/></svg></button>
+                  <button class="u-ib" aria-label="设置"><svg class="ico"><use href="#i-settings"/></svg></button>
+                </header>
+                <div class="u-body">
+                  <div class="u-profile">
+                    <span class="u-avatar">L</span>
+                    <div class="grow">
+                      <div class="u-profile-name">林知</div>
+                      <div class="u-profile-handle">@linzhi · 2025 年加入</div>
+                      <div class="u-profile-handle" style="margin-top:6px">写海，也写退潮后的岸。</div>
+                    </div>
+                    <button class="u-ib" aria-label="编辑资料"><svg class="ico"><use href="#i-pencil"/></svg></button>
+                  </div>
+                  <div class="u-stats3">
+                    <div class="u-stat"><b>3</b><span>世界</span></div>
+                    <div class="u-stat"><b>28</b><span>文档</span></div>
+                    <div class="u-stat"><b>12</b><span>收藏</span></div>
+                  </div>
+                  <div class="u-seg">
+                    <span class="u-chip active">我的世界</span>
+                    <span class="u-chip">草稿 4</span>
+                    <span class="u-chip">活动</span>
+                  </div>
+                  <div style="padding:0 16px">
+                    <article class="u-world-card">
+                      <div class="u-contour u-world-cover" style="height:64px"><span class="u-glyph" style="font-size:24px">雾</span></div>
+                      <div class="u-world-body" style="padding:10px 12px 12px">
+                        <div style="display:flex;align-items:center;gap:6px"><span class="u-badge solid">OWNER</span><span class="u-badge">公开</span><span class="u-world-meta" style="margin-left:auto">28 文档</span></div>
+                        <div class="u-world-title" style="font-size:15px">雾海纪年</div>
+                        <div class="u-world-meta" style="margin-top:4px">最后编辑 · 2 小时前</div>
+                      </div>
+                    </article>
+                    <article class="u-world-card">
+                      <div class="u-contour u-world-cover" style="height:64px"><span class="u-glyph" style="font-size:24px">砂</span></div>
+                      <div class="u-world-body" style="padding:10px 12px 12px">
+                        <div style="display:flex;align-items:center;gap:6px"><span class="u-badge">EDITOR</span><span class="u-badge"><svg class="ico" style="width:9px;height:9px"><use href="#i-lock"/></svg>私人</span><span class="u-world-meta" style="margin-left:auto">9 文档</span></div>
+                        <div class="u-world-title" style="font-size:15px">砂之档案</div>
+                        <div class="u-world-meta" style="margin-top:4px">最后编辑 · 昨天</div>
+                      </div>
+                    </article>
+                    <div class="u-new-world"><svg class="ico" style="width:14px;height:14px"><use href="#i-plus"/></svg>创建世界 · 还剩 4 个名额</div>
+                  </div>
+                </div>
+                <nav class="u-tabbar" aria-label="主导航">
+                  <a href="#"><svg class="ico"><use href="#i-globe"/></svg>世界</a>
+                  <a href="#"><svg class="ico"><use href="#i-compass"/></svg>探索</a>
+                  <a href="#"><svg class="ico"><use href="#i-search"/></svg>搜索</a>
+                  <a href="#" class="active"><svg class="ico"><use href="#i-user"/></svg>我的</a>
+                </nav>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note">
+          <li><b>资料区压缩</b>：64px 头像 + 两行简介，统计三项一行，不堆设置项。</li>
+          <li><b>世界卡带角色</b>：owner / editor、公开 / 私人用 22px badge 直接标在标题上方。</li>
+          <li><b>配额可见</b>：创建入口写明剩余 4 个名额，触达 7 世界上限前就提示。</li>
+        </ul>
+      </article>
+    </div>
+
+  </section>
+
+  <!-- 平板 -->
+  <section class="view" id="view-tablet">
+    <div class="gallery-head">
+      <div>
+        <span class="gh-num">TABLET / 1024 × 768 · 5 SCREENS</span>
+        <h1>平板</h1>
+      </div>
+      <p>平板不复制手机，也不只是放大的桌面：侧栏常驻、画布与检查器并排，触控目标保持 44px。</p>
+    </div>
+    <div class="gallery tablets" id="tabletGallery">
+      <!-- T1 工作区 -->
+      <article class="device-card wide">
+        <div class="device-cap"><span class="n">T1</span><h2>工作区 · 编辑</h2><span class="tag">1024 × 768 · LANDSCAPE</span></div>
+        <div class="tablet-slot">
+          <div class="tablet">
+            <div class="tablet-inner">
+              <div class="screen tablet-screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <div class="t-ws">
+                  <aside class="t-sidebar" aria-label="工作区导航">
+                    <div style="display:flex;align-items:center;gap:4px;padding:2px 2px 4px 8px">
+                      <div class="grow"><div class="u-title">雾海纪年</div><div class="u-sub">WORKSPACE · 9 CARDS</div></div>
+                      <button class="u-ib sm" aria-label="收起侧栏"><svg class="ico"><use href="#i-panel"/></svg></button>
+                    </div>
+                    <div class="u-search"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索文档…" aria-label="搜索文档"></div>
+                    <div class="u-concept"><svg class="ico"><use href="#i-book"/></svg>世界概念<em>已发布</em></div>
+                    <div class="u-tree-label">内容</div>
+                    <div class="u-tree">
+                      <div class="u-row"><svg class="ico"><use href="#i-folder"/></svg>地理<span class="count">3</span></div>
+                      <div class="u-row indent active"><svg class="ico"><use href="#i-file"/></svg>静默海峡</div>
+                      <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>潮汐历法</div>
+                      <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>盐雾议会</div>
+                      <div class="u-row"><svg class="ico"><use href="#i-folder"/></svg>人物<span class="count">2</span></div>
+                      <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>灯塔守夜人</div>
+                      <div class="u-row indent"><svg class="ico"><use href="#i-file"/></svg>抄经人</div>
+                    </div>
+                    <div style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
+                      <a class="u-btn block" href="#" style="height:36px"><svg class="ico"><use href="#i-plus"/></svg>新建文档</a>
+                      <div style="display:flex;align-items:center;gap:4px;margin-top:6px">
+                        <button class="u-ib sm" aria-label="地图"><svg class="ico"><use href="#i-map"/></svg></button>
+                        <button class="u-ib sm" aria-label="时间线"><svg class="ico"><use href="#i-clock"/></svg></button>
+                        <button class="u-ib sm" aria-label="评论"><svg class="ico"><use href="#i-message"/></svg></button>
+                        <span class="u-sep" style="margin:0 2px"></span>
+                        <button class="u-ib sm" aria-label="设置"><svg class="ico"><use href="#i-settings"/></svg></button>
+                      </div>
+                    </div>
+                  </aside>
+                  <div class="t-main">
+                    <div class="t-topbar">
+                      <div class="t-crumbs"><span>雾海纪年</span><svg class="ico" style="width:11px;height:11px"><use href="#i-chev-r"/></svg><span>地理</span><svg class="ico" style="width:11px;height:11px"><use href="#i-chev-r"/></svg><b>静默海峡</b></div>
+                      <span class="u-badge save" style="height:24px"><span style="width:5px;height:5px;border-radius:50%;background:var(--fg)"></span>已保存</span>
+                      <div style="margin-left:auto;display:flex;align-items:center;gap:2px">
+                        <button class="u-ib sm" aria-label="搜索"><svg class="ico"><use href="#i-search"/></svg></button>
+                        <button class="u-ib sm" aria-label="通知"><svg class="ico"><use href="#i-bell"/></svg></button>
+                        <span class="u-sep" style="margin:0 4px"></span>
+                        <button class="u-btn" style="height:34px">预览</button>
+                        <button class="u-btn primary" style="height:34px">发布</button>
+                      </div>
+                    </div>
+                    <div class="t-ws-body">
+                      <div class="t-editor-head">
+                        <div class="u-kicker"><span>地点</span><span>·</span><span>公开</span><span>·</span><span>灯塔纪 487</span></div>
+                        <h1 class="t-editor-title">静默海峡</h1>
+                        <div class="t-editor-meta"><span>128 字</span><span>·</span><span>3 天前更新</span><span>·</span><span>2 条评论</span><span>·</span><span>4 处反链</span></div>
+                      </div>
+                      <div class="t-editor-body">
+                        <div class="u-prose">
+                          <p>海峡在退潮时露出第二层礁脊。守夜人沿着盐雾议会留下的白漆标记向南，只有看见三块倒扣的船骨，才算真正进入静默水道。</p>
+                          <h2>航道与潮汐</h2>
+                          <p>主航道宽约两百步，最窄处只能容两艘灯船并行。每年灰潮纪结束后，礁脊会整体北移，旧海图上的安全线随之作废。守夜人会在<span style="background:var(--muted);border-radius:3px;padding:1px 2px;color:var(--fg)">第一次换油后重画北线</span>，并把旧线留在海图背面。</p>
+                          <div class="u-callout">只有退潮后的四十分钟，灯船才能通过第二道礁脊。错过窗口，就要在雾里等到下一个潮汐。</div>
+                          <p>盐雾议会把这段窗口称作「白窗」，并在两岸各设一座灯桩。灯桩由盐雾议会直接管辖，守夜人只负责点灯与记录。</p>
+                          <div class="u-contour" style="height:112px;margin:18px 0 8px;border:1px solid var(--border);border-radius:10px"><span class="u-glyph" style="font-size:26px">海图 · 第二礁脊</span></div>
+                          <p style="font-size:11px;color:var(--mfg-2);font-family:var(--mono)">图 02 · 灰潮纪后的北线修订，487</p>
+                        </div>
+                      </div>
+                      <div class="t-gutter" aria-hidden="true"><span>⠿</span><span>+</span><span>⠿</span></div>
+                      <div class="t-bubble" aria-label="选区工具">
+                        <span class="on bold">B</span><span class="ital">I</span><span class="under">U</span>
+                        <span class="u-sep"></span>
+                        <span><svg class="ico"><use href="#i-link"/></svg></span>
+                        <span><svg class="ico"><use href="#i-quote"/></svg></span>
+                      </div>
+                    </div>
+                    <div class="t-savebar"><span>自动保存于 14:36</span><span style="color:var(--border-strong)">·</span><span>草稿已同步</span><span style="flex:1"></span><span>⌘ S 手动保存</span></div>
+                  </div>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note" style="max-width:720px">
+          <li><b>248px 常驻侧栏</b>：不再 hover 展开；树行 40px，滚动与编辑互不打断。</li>
+          <li><b>编辑区单栏 800px</b>：左侧 22px block gutter，右侧留白 96px，避免行宽过长。</li>
+          <li><b>选区浮条</b>：32px 按钮 + 4px 内边距，触控命中 40px；外接键盘时仍可用快捷键。</li>
+        </ul>
+      </article>
+
+      <!-- T2 Wiki 词条 -->
+      <article class="device-card wide">
+        <div class="device-cap"><span class="n">T2</span><h2>世界 Wiki · 词条</h2><span class="tag">834 × 1112 · PORTRAIT</span></div>
+        <div class="tablet-slot portrait">
+          <div class="tablet portrait">
+            <div class="tablet-inner">
+              <div class="screen tablet-screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <div class="t-site-head">
+                  <div class="u-brand">
+                    <span class="mark">雾</span>
+                    <span class="world-name">雾海纪年</span>
+                    <span class="u-badge" style="height:20px">公开</span>
+                  </div>
+                  <nav class="t-nav" aria-label="世界导航">
+                    <a href="#">世界</a><a href="#" class="active">设定</a><a href="#">时间线</a><a href="#">地图</a><a href="#">工作区</a>
+                  </nav>
+                  <div class="u-search t-head-search"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索世界…" aria-label="搜索世界"></div>
+                  <button class="u-ib sm" aria-label="切换主题"><svg class="ico"><use href="#i-moon"/></svg></button>
+                  <span style="width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:var(--muted);border:1px solid var(--border);font-size:11px;font-weight:600;margin-right:6px">L</span>
+                </div>
+                <div class="t-article">
+                  <article class="t-article-main">
+                    <div class="u-crumbs"><span>雾海纪年</span><svg class="ico" style="width:11px;height:11px"><use href="#i-chev-r"/></svg><span>地理</span><svg class="ico" style="width:11px;height:11px"><use href="#i-chev-r"/></svg><span>静默海峡</span></div>
+                    <h1>静默海峡</h1>
+                    <div class="u-kindline"><span>地点</span><span>·</span><span>灯塔纪 487</span><span>·</span><span>3 天前更新</span><span>·</span><span>4 处反链</span></div>
+                    <div class="u-contour u-cover-band"><span class="u-glyph" style="font-size:48px">峡</span></div>
+                    <div class="u-prose">
+                      <p>海峡在退潮时露出第二层礁脊。守夜人沿着盐雾议会留下的白漆标记向南，只有看见三块倒扣的船骨，才算真正进入静默水道。</p>
+                      <h2>航道与潮汐</h2>
+                      <p>主航道宽约两百步，最窄处只能容两艘灯船并行。每年灰潮纪结束后，礁脊会整体北移，旧海图上的安全线随之作废。</p>
+                      <div class="u-callout">只有退潮后的四十分钟，灯船才能通过第二道礁脊。错过窗口，就要在雾里等到下一个潮汐。</div>
+                      <blockquote>「灯不灭，峡就还在。」——灯塔守夜人第三训</blockquote>
+                      <p>盐雾议会把这段窗口称作「白窗」，并在两岸各设一座灯桩。灯桩由盐雾议会直接管辖，守夜人只负责点灯与记录。每年冬至，议会会在北岸灯塔举行一次不公开的点灯仪式。</p>
+                    </div>
+                    <div class="u-backlink" style="margin-top:26px">
+                      <div class="label">被引用 4 次</div>
+                      <p>世界概念、潮汐历法、灯塔守夜人、盐雾议会都在这张词条里留下了链接。</p>
+                      <a href="#"><svg class="ico" style="width:13px;height:13px"><use href="#i-link"/></svg>查看全部反链</a>
+                    </div>
+                  </article>
+                  <aside class="t-toc">
+                    <h4>目录</h4>
+                    <a href="#" class="active"><span class="bar"></span>航道与潮汐</a>
+                    <a href="#"><span class="bar"></span>白窗与灯桩</a>
+                    <a href="#"><span class="bar"></span>守夜人记录</a>
+                    <a href="#"><span class="bar"></span>反链</a>
+                    <div class="mini">
+                      <div class="u-kicker" style="font-size:8px">WORLD CONCEPT</div>
+                      <p>这张词条是「雾海纪年」世界概念的 4 个核心节点之一。</p>
+                    </div>
+                    <div class="mini">
+                      <div class="u-kicker" style="font-size:8px">LAST EDIT</div>
+                      <p>林知 · 3 天前<br>128 字 · 2 条评论</p>
+                    </div>
+                  </aside>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note" style="max-width:720px">
+          <li><b>主栏 + 目录</b>：正文 16 / 1.82，右侧 228px 粘性目录，保留桌面阅读节奏。</li>
+          <li><b>顶部完整导航</b>：平板有足够横向空间，不再使用手机的子导航 chips。</li>
+          <li><b>封面 198px</b>：比手机大一档，但不占满首屏；标题仍是第一视觉。</li>
+        </ul>
+      </article>
+      <!-- T3 地图 -->
+      <article class="device-card wide">
+        <div class="device-cap"><span class="n">T3</span><h2>世界地图 · 画布 + 检查器</h2><span class="tag">1024 × 768 · LANDSCAPE</span></div>
+        <div class="tablet-slot">
+          <div class="tablet">
+            <div class="tablet-inner">
+              <div class="screen tablet-screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <div class="t-map-layout">
+                  <div class="t-map-canvas">
+                    <svg viewBox="0 0 376 772" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                      <path class="map-coast" d="M-30 122 C 40 82, 106 108, 148 148 C 190 188, 150 232, 184 274 C 222 320, 190 368, 130 390 C 72 412, 20 382, -30 402 Z"/>
+                      <path class="map-contour dim" d="M-14 152 C 44 118, 96 138, 132 172 C 166 204, 134 240, 162 274 C 192 310, 166 348, 120 364 C 74 380, 34 356, -14 372"/>
+                      <path class="map-contour" d="M4 180 C 50 154, 88 170, 116 198 C 142 224, 118 252, 142 282 C 164 310, 144 336, 110 348 C 76 360, 44 342, 4 354"/>
+                      <path class="map-coast" d="M300 150 C 340 138, 386 168, 400 220 C 414 274, 362 302, 330 280 C 298 258, 284 198, 300 150 Z"/>
+                      <path class="map-contour dim" d="M310 170 C 338 162, 370 184, 382 222 C 392 262, 356 282, 334 264 C 312 246, 300 196, 310 170"/>
+                      <path class="map-coast" d="M-24 620 C 58 588, 108 640, 168 620 C 228 600, 282 642, 400 628 L 400 800 L -24 800 Z"/>
+                      <path class="map-contour dim" d="M-12 654 C 54 628, 104 670, 160 652 C 216 634, 272 674, 400 662"/>
+                      <path class="map-contour" d="M0 690 C 62 668, 108 704, 164 688 C 220 672, 276 706, 400 696"/>
+                      <ellipse class="map-shoal" cx="212" cy="454" rx="58" ry="24"/>
+                      <ellipse class="map-shoal" cx="242" cy="484" rx="34" ry="14"/>
+                      <ellipse class="map-shoal" cx="152" cy="536" rx="44" ry="18"/>
+                      <path class="map-route" d="M166 214 C 196 268, 224 316, 254 330 C 286 344, 274 402, 232 424"/>
+                    </svg>
+                    <div class="t-map-top">
+                      <button class="u-ib sm" aria-label="返回"><svg class="ico"><use href="#i-left"/></svg></button>
+                      <div class="grow"><div class="u-title">雾海纪年 · 地图</div><div class="u-sub">手绘海图 · 1.0× · 4 个标记</div></div>
+                      <div class="u-search" style="width:190px;height:36px"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索标记…" aria-label="搜索标记"></div>
+                      <button class="u-ib sm" aria-label="图层"><svg class="ico"><use href="#i-layers"/></svg></button>
+                      <button class="u-btn primary" style="height:34px"><svg class="ico"><use href="#i-plus"/></svg>新建标记</button>
+                    </div>
+                    <div class="u-pin active" style="left:44%;top:28%"><span class="u-pin-dot"></span><span class="u-pin-label">灯塔</span></div>
+                    <div class="u-pin" style="left:66%;top:45%"><span class="u-pin-dot"></span><span class="u-pin-label">盐雾议会</span></div>
+                    <div class="u-pin" style="left:27%;top:54%"><span class="u-pin-dot"></span><span class="u-pin-label">静默海峡</span></div>
+                    <div class="u-pin" style="left:58%;top:18%"><span class="u-pin-dot"></span><span class="u-pin-label">第二礁脊</span></div>
+                    <div class="u-pin" style="left:78%;top:66%"><span class="u-pin-dot"></span></div>
+                    <div class="t-map-zoom">
+                      <button aria-label="放大"><svg class="ico"><use href="#i-zoom-in"/></svg></button>
+                      <button aria-label="缩小"><svg class="ico"><use href="#i-zoom-out"/></svg></button>
+                      <button aria-label="回到中心"><svg class="ico"><use href="#i-compass"/></svg></button>
+                    </div>
+                    <div class="t-legend"><i></i>地点<i style="opacity:.4"></i>组织<i style="opacity:.25"></i>未归类</div>
+                  </div>
+                  <aside class="t-inspector">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <div class="u-kicker">标记详情</div>
+                      <button class="u-ib sm" aria-label="关闭检查器"><svg class="ico"><use href="#i-x"/></svg></button>
+                    </div>
+                    <div>
+                      <h3>灯塔</h3>
+                      <div class="meta">地点 · 灯塔纪 487 · 公开</div>
+                    </div>
+                    <div style="display:grid;gap:6px">
+                      <div class="field">坐标 <b>47.2°N · 12.8°E</b></div>
+                      <div class="field">所属分区 <b>地理 / 北岸</b></div>
+                      <div class="field">关联词条 <b>静默海峡</b></div>
+                      <div class="field">可见性 <b>公开</b></div>
+                    </div>
+                    <p style="margin:2px 0 0;color:var(--mfg);font-size:11px;line-height:1.7">静默海峡北岸仅存的灯桩，塔身由盐雾议会第七次修缮，夜间可见约九海里。</p>
+                    <div class="tags"><span class="u-chip">灯塔</span><span class="u-chip">北岸</span><span class="u-chip">守夜人</span></div>
+                    <div style="display:flex;gap:6px">
+                      <button class="u-btn primary" style="flex:1">打开卡片</button>
+                      <button class="u-btn" style="flex:1"><svg class="ico"><use href="#i-pencil"/></svg>编辑</button>
+                    </div>
+                    <div class="t-inspector-list">
+                      <div class="u-tree-label" style="padding:8px 0 4px">附近标记</div>
+                      <div class="u-marker-row"><span class="n">01</span><span class="name">灯塔</span><small>地点</small></div>
+                      <div class="u-marker-row"><span class="n">02</span><span class="name">盐雾议会</span><small>组织</small></div>
+                      <div class="u-marker-row"><span class="n">03</span><span class="name">静默海峡</span><small>地点</small></div>
+                      <div class="u-marker-row"><span class="n">04</span><span class="name">第二礁脊</span><small>地点</small></div>
+                    </div>
+                  </aside>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note" style="max-width:720px">
+          <li><b>画布 + 320px 检查器</b>：选中标记不再弹窗，详情、字段、关联列表常驻右侧。</li>
+          <li><b>触控工具</b>：缩放 / 定位竖排 44px；新建标记是顶栏唯一主操作。</li>
+          <li><b>同一套地图组件</b>：背景图、标记坐标与桌面一致，只是容器宽度变化。</li>
+        </ul>
+      </article>
+
+      <!-- T4 时间线 -->
+      <article class="device-card wide">
+        <div class="device-cap"><span class="n">T4</span><h2>时间线 · 画布 + 检查器</h2><span class="tag">1024 × 768 · LANDSCAPE</span></div>
+        <div class="tablet-slot">
+          <div class="tablet">
+            <div class="tablet-inner">
+              <div class="screen tablet-screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <div class="t-tl-layout">
+                  <div class="t-tl-main">
+                    <div class="t-tl-head">
+                      <button class="u-ib sm" aria-label="返回"><svg class="ico"><use href="#i-left"/></svg></button>
+                      <div><div class="u-title">时间线</div><div class="u-sub">雾海纪年 · 主时间线</div></div>
+                      <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+                        <span class="u-chip active">全部</span>
+                        <span class="u-chip">灰潮纪</span>
+                        <span class="u-chip">灯塔纪</span>
+                        <span class="u-chip">裂隙纪</span>
+                        <button class="u-btn" style="height:34px"><svg class="ico"><use href="#i-plus"/></svg>新建条目</button>
+                      </div>
+                    </div>
+                    <div class="t-tl-canvas">
+                      <div class="u-era-band" style="left:0;width:34%"></div>
+                      <div class="u-era-band b2" style="left:34%;width:32%"></div>
+                      <div class="u-era-band" style="left:66%;width:34%"></div>
+                      <span style="position:absolute;left:16px;top:14px;font:9px var(--mono);letter-spacing:.1em;color:var(--mfg-2)">灰潮纪 412–470</span>
+                      <span style="position:absolute;left:37%;top:14px;font:9px var(--mono);letter-spacing:.1em;color:var(--mfg-2)">灯塔纪 470–520</span>
+                      <span style="position:absolute;left:69%;top:14px;font:9px var(--mono);letter-spacing:.1em;color:var(--mfg-2)">裂隙纪 520–</span>
+                      <div class="u-tl-axis" style="top:45%"></div>
+                      <span class="u-tick" style="left:14%;top:calc(45% - 18px)">430</span>
+                      <span class="u-tick" style="left:30%;top:calc(45% - 18px)">450</span>
+                      <span class="u-tick" style="left:46%;top:calc(45% - 18px)">470</span>
+                      <span class="u-tick" style="left:62%;top:calc(45% - 18px)">490</span>
+                      <span class="u-tick" style="left:78%;top:calc(45% - 18px)">520</span>
+                      <span class="u-tick" style="left:92%;top:calc(45% - 18px)">550</span>
+                      <div class="u-event up" style="left:12%;top:calc(45% - 5px)">
+                        <span class="dot"></span>
+                        <div class="u-event-card"><b>灰潮退去</b><small>452 · 自然</small></div>
+                      </div>
+                      <div class="u-event" style="left:26%;top:calc(45% - 5px)">
+                        <span class="dot"></span>
+                        <div class="u-event-card"><b>第一座灯桩</b><small>468 · 建造</small></div>
+                      </div>
+                      <div class="u-event up" style="left:42%;top:calc(45% - 5px)">
+                        <span class="dot"></span>
+                        <div class="u-event-card"><b>白窗协定</b><small>481 · 组织</small></div>
+                      </div>
+                      <div class="u-event active" style="left:58%;top:calc(45% - 5px)">
+                        <span class="dot"></span>
+                        <div class="u-event-card"><b>灯塔熄灭</b><small>487 · 事件</small></div>
+                      </div>
+                      <div class="u-event up" style="left:74%;top:calc(45% - 5px)">
+                        <span class="dot"></span>
+                        <div class="u-event-card"><b>议会迁址</b><small>512 · 组织</small></div>
+                      </div>
+                      <div class="u-event" style="left:88%;top:calc(45% - 5px)">
+                        <span class="dot"></span>
+                        <div class="u-event-card"><b>裂隙开启</b><small>540 · 事件</small></div>
+                      </div>
+                      <div class="u-tl-zoom" style="bottom:18px">
+                        <button aria-label="缩小"><svg class="ico"><use href="#i-zoom-out"/></svg></button>
+                        <button aria-label="适应宽度"><svg class="ico"><use href="#i-expand"/></svg></button>
+                        <button aria-label="放大"><svg class="ico"><use href="#i-zoom-in"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                  <aside class="t-inspector">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <div class="u-kicker">条目详情</div>
+                      <button class="u-ib sm" aria-label="关闭检查器"><svg class="ico"><use href="#i-x"/></svg></button>
+                    </div>
+                    <div>
+                      <div class="date">487</div>
+                      <h3 style="margin-top:6px">灯塔熄灭</h3>
+                      <div class="meta">灯塔纪 · 事件 · 已发布</div>
+                    </div>
+                    <div style="display:grid;gap:6px">
+                      <div class="field">纪元 <b>灯塔纪</b></div>
+                      <div class="field">类型 <b>事件</b></div>
+                      <div class="field">地点 <b>静默海峡 · 北岸</b></div>
+                    </div>
+                    <textarea aria-label="条目描述">守夜人记录：潮位高于刻度线两指，灯芯在第四次换油后仍未能点亮。此后四十分钟，海峡进入完全静默。</textarea>
+                    <div class="tags"><span class="u-chip">灯塔</span><span class="u-chip">海峡</span><span class="u-chip">守夜人</span></div>
+                    <button class="u-btn primary block" style="height:36px">保存条目</button>
+                    <div class="t-inspector-list">
+                      <div class="u-tree-label" style="padding:8px 0 4px">关联条目</div>
+                      <div class="u-marker-row"><span class="n">01</span><span class="name">静默海峡</span><small>地点</small></div>
+                      <div class="u-marker-row"><span class="n">02</span><span class="name">灯塔守夜人</span><small>人物</small></div>
+                      <div class="u-marker-row"><span class="n">03</span><span class="name">白窗协定</span><small>事件</small></div>
+                    </div>
+                  </aside>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note" style="max-width:720px">
+          <li><b>画布铺满剩余宽度</b>：纪元色带、刻度、上下交替事件卡，触控平移与缩放。</li>
+          <li><b>右侧检查器直接编辑</b>：年份、标题、描述、关联条目无需跳页，保存即关闭。</li>
+          <li><b>筛选在同一行</b>：和“新建条目”并列，减少一条工具栏高度。</li>
+        </ul>
+      </article>
+
+      <!-- T5 探索 -->
+      <article class="device-card wide">
+        <div class="device-cap"><span class="n">T5</span><h2>探索 · 公开世界</h2><span class="tag">834 × 1112 · PORTRAIT</span></div>
+        <div class="tablet-slot portrait">
+          <div class="tablet portrait">
+            <div class="tablet-inner">
+              <div class="screen tablet-screen">
+                <div class="statusbar"><span>14:38</span><span class="right"><svg class="ico"><use href="#i-signal"/></svg><svg class="ico"><use href="#i-wifi"/></svg><svg class="ico"><use href="#i-battery"/></svg></span></div>
+                <div class="t-site-head">
+                  <div class="u-brand">
+                    <span class="mark" style="background:transparent;border:1px solid var(--strong);color:var(--fg)">O</span>
+                    <span class="world-name">Opuscule</span>
+                  </div>
+                  <nav class="t-nav" aria-label="主导航">
+                    <a href="#" class="active">公开世界</a><a href="#">我的世界</a><a href="#">搜索</a>
+                  </nav>
+                  <div class="u-search t-head-search"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索世界、词条或创作者…" aria-label="搜索"></div>
+                  <button class="u-ib sm" aria-label="通知"><svg class="ico"><use href="#i-bell"/></svg></button>
+                  <span style="width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:var(--muted);border:1px solid var(--border);font-size:11px;font-weight:600;margin-right:6px">L</span>
+                </div>
+                <div class="t-explore">
+                  <aside class="t-filter-rail">
+                    <h4>筛选</h4>
+                    <a href="#" class="active">全部世界<span>12</span></a>
+                    <a href="#">开放世界<span>9</span></a>
+                    <a href="#">私人世界<span>3</span></a>
+                    <a href="#">最近更新<span>5</span></a>
+                    <h4 style="margin-top:18px">排序</h4>
+                    <a href="#" class="active">最近更新<span>↓</span></a>
+                    <a href="#">文档最多<span></span></a>
+                    <a href="#">名称 A–Z<span></span></a>
+                    <div class="mini" style="margin-top:20px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--card)">
+                      <div class="u-kicker" style="font-size:8px">THIS MONTH</div>
+                      <p style="margin:6px 0 0;color:var(--mfg);font-size:10px;line-height:1.6">本月新增 3 个公开世界，共 41 位创作者在写。</p>
+                    </div>
+                  </aside>
+                  <div class="t-explore-main">
+                    <div class="u-kicker">DISCOVER · 12 WORLDS</div>
+                    <h1>公开世界</h1>
+                    <p class="lead">12 个世界正在被书写。找一个入口，从它的第一条词条开始。</p>
+                    <div style="display:flex;gap:8px;margin-bottom:12px">
+                      <div class="u-search" style="flex:1"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="搜索世界、词条或创作者…" aria-label="搜索"><span class="hint">⌘K</span></div>
+                      <button class="u-btn primary" style="height:44px">搜索</button>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-bottom:14px">
+                      <span class="u-chip active">全部</span><span class="u-chip">奇幻</span><span class="u-chip">历史</span><span class="u-chip">科幻</span><span class="u-chip">悬疑</span>
+                    </div>
+                    <div class="t-explore-grid">
+                      <article class="u-world-card">
+                        <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:28px">雾</span></div>
+                        <div class="u-world-body"><div class="u-kicker" style="font-size:8px">OPEN · FANTASY</div><div class="u-world-title">雾海纪年</div><p class="u-world-desc">潮汐退去后，礁脊与旧灯桩重新显形。</p><div class="u-world-meta"><span>28 文档</span><span class="u-world-meta" style="margin-left:auto">2 小时前</span></div></div>
+                      </article>
+                      <article class="u-world-card">
+                        <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:28px">砂</span></div>
+                        <div class="u-world-body"><div class="u-kicker" style="font-size:8px">OPEN · HISTORY</div><div class="u-world-title">砂之档案</div><p class="u-world-desc">一座在沙暴中反复重建的城，与七座图书馆。</p><div class="u-world-meta"><span>41 文档</span><span class="u-world-meta" style="margin-left:auto">昨天</span></div></div>
+                      </article>
+                      <article class="u-world-card">
+                        <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:28px">星</span></div>
+                        <div class="u-world-body"><div class="u-kicker" style="font-size:8px">OPEN · SCI-FI</div><div class="u-world-title">第十三次静默</div><p class="u-world-desc">所有殖民地的钟表都慢了一分钟。</p><div class="u-world-meta"><span>16 文档</span><span class="u-world-meta" style="margin-left:auto">3 天前</span></div></div>
+                      </article>
+                      <article class="u-world-card">
+                        <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:28px">铁</span></div>
+                        <div class="u-world-body"><div class="u-kicker" style="font-size:8px">OPEN · HISTORY</div><div class="u-world-title">铁与麦</div><p class="u-world-desc">王国最后的铁匠，与一场没有敌人的战争。</p><div class="u-world-meta"><span>33 文档</span><span class="u-world-meta" style="margin-left:auto">4 天前</span></div></div>
+                      </article>
+                      <article class="u-world-card">
+                        <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:28px">环</span></div>
+                        <div class="u-world-body"><div class="u-kicker" style="font-size:8px">OPEN · SCI-FI</div><div class="u-world-title">环形海</div><p class="u-world-desc">一片没有岸的环形海洋，与它的十二座浮城。</p><div class="u-world-meta"><span>21 文档</span><span class="u-world-meta" style="margin-left:auto">6 天前</span></div></div>
+                      </article>
+                      <article class="u-world-card">
+                        <div class="u-contour u-world-cover"><span class="u-glyph" style="font-size:28px">昼</span></div>
+                        <div class="u-world-body"><div class="u-kicker" style="font-size:8px">OPEN · MYSTERY</div><div class="u-world-title">白昼图书馆</div><p class="u-world-desc">只在正午开放，且从不收藏同一本书两次。</p><div class="u-world-meta"><span>12 文档</span><span class="u-world-meta" style="margin-left:auto">1 周前</span></div></div>
+                      </article>
+                    </div>
+                    <button class="u-btn block" style="height:42px;margin-top:14px">加载更多 · 还有 6 个世界</button>
+                  </div>
+                </div>
+                <span class="homebar" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="device-note" style="max-width:720px">
+          <li><b>筛选栏 + 两列网格</b>：834 宽刚好容纳 196 侧栏与两张 280 卡片，不浪费横向空间。</li>
+          <li><b>搜索与筛选分离</b>：搜索在内容顶部，筛选项固定在左栏，滚动时保持可见。</li>
+          <li><b>6 张卡一屏</b>：封面 88px、描述一行，信息密度高于手机但低于桌面三列。</li>
+        </ul>
+      </article>
+    </div>
+
+
+  </section>
+</main>
+
+<script>
+const tabs = document.querySelectorAll('.doc-tabs button');
+const views = {
+  overview: document.getElementById('view-overview'),
+  phone: document.getElementById('view-phone'),
+  tablet: document.getElementById('view-tablet'),
+};
+tabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    tabs.forEach((item) => item.classList.toggle('active', item === tab));
+    Object.entries(views).forEach(([key, node]) => node.classList.toggle('active', key === tab.dataset.view));
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  });
+});
+
+const root = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+const themeLabel = document.getElementById('themeLabel');
+themeBtn.addEventListener('click', () => {
+  const light = root.dataset.theme === 'light';
+  root.dataset.theme = light ? 'dark' : 'light';
+  themeLabel.textContent = light ? '深色' : '浅色';
+  themeBtn.querySelector('use').setAttribute('href', light ? '#i-moon' : '#i-sun');
+});
+
+document.querySelectorAll('[data-sheet-toggle]').forEach((el) => {
+  el.addEventListener('click', () => {
+    el.closest('.u-sheet').classList.toggle('expanded');
+  });
+});
+</script>
+</body>
+</html>

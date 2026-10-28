@@ -7,6 +7,7 @@ import "./styles/app.css";
 import "./styles/auth.css";
 import "./styles/legacy-workspace.css";
 import "./styles/controls.css";
+import "./styles/world-concept.css";
 
 bootMotionChrome();
 

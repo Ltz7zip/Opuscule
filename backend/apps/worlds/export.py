@@ -12,7 +12,7 @@ from django.utils import timezone
 from apps.cards.models import Card
 from apps.collections.models import Collection
 
-from .models import World
+from .models import World, WorldConcept
 
 
 def _iso(value) -> str | None:
@@ -26,6 +26,26 @@ def build_world_export(world: World) -> bytes:
     markers = list(world.map_markers.select_related("card").order_by("id"))
     background_path = ""
     background_meta = None
+    concept = WorldConcept.objects.filter(world=world).first()
+    concept_payload = None
+    if concept is not None and (concept.body_json or concept.draft_json):
+        concept_payload = {
+            "draft_json": concept.draft_json or {},
+            "draft_text": concept.draft_text,
+            "body_json": concept.body_json or {},
+            "body_text": concept.body_text,
+            "published_at": _iso(concept.published_at),
+            "revision": concept.revision,
+            "revisions": [
+                {
+                    "revision": snapshot.revision,
+                    "body_json": snapshot.body_json,
+                    "body_text": snapshot.body_text,
+                    "published_at": _iso(snapshot.published_at),
+                }
+                for snapshot in concept.revisions.order_by("revision")
+            ],
+        }
     if world.map_background:
         suffix = Path(world.map_background.name).suffix.lower() or ".png"
         background_path = f"map/background{suffix}"
@@ -72,6 +92,7 @@ def build_world_export(world: World) -> bytes:
             }
             for card in cards
         ],
+        "concept": concept_payload,
         "map_markers": [
             {
                 "label": marker.label,
@@ -90,8 +111,9 @@ def build_world_export(world: World) -> bytes:
         f"- slug: `{world.slug}`\n"
         f"- 集合: {len(collections)}\n"
         f"- 卡片: {len(cards)}\n"
-        f"- 地图标记: {len(markers)}\n\n"
-        "`world.json` 保留结构化数据；`wiki/*.md` 是纯文本可读副本。\n"
+        f"- 地图标记: {len(markers)}\n"
+        f"- 世界概念: {'有' if concept_payload else '无'}\n\n"
+        "`world.json` 保留结构化数据；`concept.md` 与 `wiki/*.md` 是纯文本可读副本。\n"
     )
 
     buffer = io.BytesIO()
@@ -101,6 +123,16 @@ def build_world_export(world: World) -> bytes:
         if background_path:
             with world.map_background.open("rb") as background:
                 archive.writestr(background_path, background.read())
+        if concept_payload:
+            body = (concept_payload["body_text"] or concept_payload["draft_text"]).strip()
+            archive.writestr(
+                "concept.md",
+                "# 世界概念\n\n"
+                f"- revision: {concept_payload['revision']}\n"
+                f"- published_at: {concept_payload['published_at'] or '未发布'}\n"
+                f"- 历史版本: {len(concept_payload['revisions'])}\n\n"
+                f"{body or '（还没有正文。）'}\n",
+            )
         for card in cards:
             body = card.body_text.strip() or "（这张卡片还没有正文。）"
             archive.writestr(

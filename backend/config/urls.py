@@ -8,7 +8,6 @@ from apps.cards.views import (
     CardCommentDetailView,
     CardCommentListCreateView,
     CardDetailView,
-    CardImageUploadView,
     CardListCreateView,
     CardPurgeView,
     CardRestoreView,
@@ -46,6 +45,10 @@ from apps.identity.views import (
     SessionView,
 )
 from apps.worlds.views import (
+    WorldConceptRevisionListView,
+    WorldConceptRevisionRestoreView,
+    WorldConceptRevisionView,
+    WorldMediaDeleteView,
     WorldAuditExportView,
     WorldExportView,
     ExploreView,
@@ -61,6 +64,12 @@ from apps.worlds.views import (
     WorldInviteListCreateView,
     WorldListView,
     WorldAuditView,
+    WorldConceptCommentDetailView,
+    WorldConceptCommentListCreateView,
+    WorldConceptEditView,
+    WorldConceptPublishView,
+    WorldConceptView,
+    WorldMediaUploadView,
     WorldMemberDetailView,
     WorldMemberListCreateView,
     WorldRestoreView,
@@ -107,6 +116,56 @@ urlpatterns = [
         "api/worlds/<slug:world_slug>/transfer-ownership/",
         OwnershipTransferView.as_view(),
         name="world-transfer-ownership",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/",
+        WorldConceptView.as_view(),
+        name="world-concept",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/comments/",
+        WorldConceptCommentListCreateView.as_view(),
+        name="world-concept-comment-list",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/comments/<int:comment_id>/",
+        WorldConceptCommentDetailView.as_view(),
+        name="world-concept-comment-detail",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/edit/",
+        WorldConceptEditView.as_view(),
+        name="world-concept-edit",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/publish/",
+        WorldConceptPublishView.as_view(),
+        name="world-concept-publish",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/revisions/",
+        WorldConceptRevisionListView.as_view(),
+        name="world-concept-revisions",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/revisions/<int:revision>/",
+        WorldConceptRevisionView.as_view(),
+        name="world-concept-revision",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/concept/revisions/<int:revision>/restore/",
+        WorldConceptRevisionRestoreView.as_view(),
+        name="world-concept-revision-restore",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/media/",
+        WorldMediaUploadView.as_view(),
+        name="world-media",
+    ),
+    path(
+        "api/worlds/<slug:world_slug>/media/<int:media_id>/",
+        WorldMediaDeleteView.as_view(),
+        name="world-media-delete",
     ),
     path("api/worlds/<slug:slug>/", WorldDetailView.as_view(), name="world-detail"),
     path(
@@ -271,16 +330,6 @@ urlpatterns = [
         "api/worlds/<slug:world_slug>/cards/<int:pk>/comments/<int:comment_id>/",
         CardCommentDetailView.as_view(),
         name="card-comment-detail",
-    ),
-    path(
-        "api/worlds/<slug:world_slug>/cards/<int:pk>/images/",
-        CardImageUploadView.as_view(),
-        name="card-image-upload",
-    ),
-    path(
-        "api/worlds/<slug:world_slug>/cards/<int:pk>/images/<int:image_id>/",
-        CardImageUploadView.as_view(),
-        name="card-image-detail",
     ),
     path(
         "api/worlds/<slug:world_slug>/cards/<int:pk>/",

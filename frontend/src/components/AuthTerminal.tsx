@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 
+import pkg from "../../package.json";
 import { login, register } from "../api";
 import { useVtTarget } from "../lib/viewTransition";
 import { BrandMark } from "./BrandMark";
@@ -16,7 +17,7 @@ interface AuthTerminalProps {
   onLogin: (session: SessionState) => void;
 }
 
-const VERSION = "0.1.0-dev";
+const VERSION = pkg.version;
 const WORLD_LABEL = "World Workspace";
 
 const captions = {

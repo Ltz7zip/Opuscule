@@ -45,6 +45,9 @@ const WikiPage = lazy(() =>
 const Workspace = lazy(() =>
   import("../components/Workspace").then((module) => ({ default: module.Workspace })),
 );
+const WorldConceptPage = lazy(() =>
+  import("../components/WorldConceptPage").then((module) => ({ default: module.WorldConceptPage })),
+);
 
 interface RouteViewProps {
   route: Route;
@@ -90,17 +93,27 @@ export function RouteView({ route, session, onLogin, onLogout }: RouteViewProps)
       page = <ProfilePage username={route.username} session={session} onLogout={onLogout} />;
       break;
     case "wiki":
-      page = (
+      page = route.cardSlug || route.mode === "cards" ? (
         <WikiPage
           worldSlug={route.worldSlug}
           cardSlug={route.cardSlug}
           session={session}
           onLogout={onLogout}
+          mode={route.mode ?? "read"}
         />
+      ) : (
+        <WorldConceptPage worldSlug={route.worldSlug} session={session} onLogout={onLogout} />
       );
       break;
     case "workspace":
-      page = <Workspace worldSlug={route.worldSlug} session={session} onLogout={onLogout} />;
+      page = (
+        <Workspace
+          worldSlug={route.worldSlug}
+          session={session}
+          onLogout={onLogout}
+          conceptMode={route.concept}
+        />
+      );
       break;
     case "not-found":
       page = <StatusPage variant="404" />;

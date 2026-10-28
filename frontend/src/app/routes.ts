@@ -10,8 +10,8 @@ export type Route =
   | { kind: "map"; worldSlug: string }
   | { kind: "timeline"; worldSlug: string }
   | { kind: "profile"; username: string }
-  | { kind: "wiki"; worldSlug: string; cardSlug?: string }
-  | { kind: "workspace"; worldSlug: string }
+  | { kind: "wiki"; worldSlug: string; cardSlug?: string; mode?: "read" | "cards" }
+  | { kind: "workspace"; worldSlug: string; concept?: boolean }
   | { kind: "not-found" };
 
 export function readRoute(pathname = window.location.pathname): Route {
@@ -34,10 +34,13 @@ export function readRoute(pathname = window.location.pathname): Route {
     if (parts[2] === "map") return { kind: "map", worldSlug };
     if (parts[2] === "timeline") return { kind: "timeline", worldSlug };
     if (parts[2] === "wiki") {
+      if (parts[3] === "edit") return { kind: "workspace", worldSlug, concept: true };
+      if (parts[3] === "cards") return { kind: "wiki", worldSlug, mode: "cards" };
       return {
         kind: "wiki",
         worldSlug,
         cardSlug: parts[3] ? decodeURIComponent(parts[3]) : undefined,
+        mode: "read",
       };
     }
     return { kind: "workspace", worldSlug };

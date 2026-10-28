@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  BookOpen,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -34,6 +35,9 @@ import { ContextMenu, type ContextMenuEntry, type ContextMenuModel } from "./Con
 interface SidebarProps {
   world: WorldDetail;
   selectedCardId: number | null;
+  conceptActive?: boolean;
+  conceptStatus?: "none" | "draft" | "published";
+  onSelectConcept?: () => void;
   open: boolean;
   onClose: () => void;
   onSelectCard: (card: CardSummary) => void;
@@ -235,6 +239,9 @@ function item(
 export function Sidebar({
   world,
   selectedCardId,
+  conceptActive = false,
+  conceptStatus = "none",
+  onSelectConcept,
   open,
   onClose,
   onSelectCard,
@@ -465,6 +472,21 @@ export function Sidebar({
           aria-label="搜索文档"
         />
       </div>
+
+      {canEdit && onSelectConcept && (
+        <button
+          type="button"
+          className={`concept-entry${conceptActive ? " active" : ""}`}
+          onClick={() => {
+            onClose();
+            onSelectConcept();
+          }}
+        >
+          <BookOpen size={16} />
+          <span>世界概念</span>
+          <em>{conceptStatus === "published" ? "已发布" : conceptStatus === "draft" ? "草稿" : "未写"}</em>
+        </button>
+      )}
 
       <div className="sidebar-section-label">{query ? "搜索结果" : "内容"}</div>
       <nav

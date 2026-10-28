@@ -23,7 +23,12 @@ import type {
   WorldInvite,
   WorldMember,
   TiptapDoc,
+  WorldConcept,
+  WorldConceptEdit,
+  WorldConceptRevisionDetail,
+  WorldConceptRevisionSummary,
   WorldDetail,
+  WorldMediaAsset,
   WorldSummary,
 } from "./types";
 
@@ -557,27 +562,6 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
 }
 
-export async function uploadCardImage(
-  slug: string,
-  cardId: number,
-  file: File,
-): Promise<{ id: number; url: string }> {
-  const body = new FormData();
-  body.append("file", file);
-  const headers: Record<string, string> = { "X-CSRFToken": csrfToken ?? (await fetchCsrfToken()) };
-  const response = await fetch(`${BASE}/worlds/${encodeURIComponent(slug)}/cards/${cardId}/images/`, {
-    method: "POST",
-    body,
-    credentials: "same-origin",
-    headers,
-  });
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new ApiError(response.status, data, messageFrom(data, response.status));
-  }
-  return data as { id: number; url: string };
-}
-
 
 export async function createEra(slug: string, input: {
   name: string;
@@ -608,8 +592,117 @@ export async function deleteEra(slug: string, id: number): Promise<void> {
 }
 
 
-export async function listCardImages(slug: string, cardId: number): Promise<import("./types").CardImageAsset[]> {
-  return request<import("./types").CardImageAsset[]>(`/worlds/${encodeURIComponent(slug)}/cards/${cardId}/images/`);
+export async function fetchWorldConceptComments(slug: string): Promise<import("./types").WorldConceptComment[]> {
+  return request<import("./types").WorldConceptComment[]>(
+    `/worlds/${encodeURIComponent(slug)}/concept/comments/`,
+  );
+}
+
+export async function createWorldConceptComment(
+  slug: string,
+  input: { body: string; quote?: string; anchor_id?: string; parent?: number },
+): Promise<import("./types").WorldConceptComment> {
+  return request<import("./types").WorldConceptComment>(
+    `/worlds/${encodeURIComponent(slug)}/concept/comments/`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export async function updateWorldConceptComment(
+  slug: string,
+  commentId: number,
+  input: { resolved?: boolean; body?: string },
+): Promise<import("./types").WorldConceptComment> {
+  return request<import("./types").WorldConceptComment>(
+    `/worlds/${encodeURIComponent(slug)}/concept/comments/${commentId}/`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export async function deleteWorldConceptComment(slug: string, commentId: number): Promise<void> {
+  await request<void>(`/worlds/${encodeURIComponent(slug)}/concept/comments/${commentId}/`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchWorldConcept(slug: string): Promise<WorldConcept> {
+  return request<WorldConcept>(`/worlds/${encodeURIComponent(slug)}/concept/`);
+}
+
+export function fetchWorldConceptEdit(slug: string): Promise<WorldConceptEdit> {
+  return request<WorldConceptEdit>(`/worlds/${encodeURIComponent(slug)}/concept/edit/`);
+}
+
+export function saveWorldConceptDraft(
+  slug: string,
+  bodyJson: TiptapDoc,
+  expectedUpdatedAt?: string | null,
+): Promise<WorldConceptEdit> {
+  return request<WorldConceptEdit>(`/worlds/${encodeURIComponent(slug)}/concept/`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      body_json: bodyJson,
+      ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
+    }),
+  });
+}
+
+export function fetchWorldConceptRevisions(slug: string): Promise<WorldConceptRevisionSummary[]> {
+  return request<WorldConceptRevisionSummary[]>(
+    `/worlds/${encodeURIComponent(slug)}/concept/revisions/`,
+  );
+}
+
+export function fetchWorldConceptRevision(
+  slug: string,
+  revision: number,
+): Promise<WorldConceptRevisionDetail> {
+  return request<WorldConceptRevisionDetail>(
+    `/worlds/${encodeURIComponent(slug)}/concept/revisions/${revision}/`,
+  );
+}
+
+export function restoreWorldConceptRevision(
+  slug: string,
+  revision: number,
+): Promise<WorldConceptEdit> {
+  return request<WorldConceptEdit>(
+    `/worlds/${encodeURIComponent(slug)}/concept/revisions/${revision}/restore/`,
+    { method: "POST", body: "{}" },
+  );
+}
+
+export function publishWorldConcept(slug: string): Promise<WorldConcept> {
+  return request<WorldConcept>(`/worlds/${encodeURIComponent(slug)}/concept/publish/`, {
+    method: "POST",
+  });
+}
+
+export function fetchWorldMedia(slug: string): Promise<WorldMediaAsset[]> {
+  return request<WorldMediaAsset[]>(`/worlds/${encodeURIComponent(slug)}/media/`);
+}
+
+export async function deleteWorldMedia(slug: string, mediaId: number): Promise<void> {
+  await request<void>(`/worlds/${encodeURIComponent(slug)}/media/${mediaId}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function uploadWorldMedia(slug: string, file: File): Promise<WorldMediaAsset> {
+  const body = new FormData();
+  body.append("file", file);
+  const headers: Record<string, string> = { "X-CSRFToken": csrfToken ?? (await fetchCsrfToken()) };
+  const response = await fetch(`${BASE}/worlds/${encodeURIComponent(slug)}/media/`, {
+    method: "POST",
+    body,
+    credentials: "same-origin",
+    headers,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(response.status, data, messageFrom(data, response.status));
+  }
+  return data as WorldMediaAsset;
 }
 
 

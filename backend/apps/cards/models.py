@@ -3,30 +3,8 @@ from django.db import models
 
 from apps.collections.models import Collection
 from apps.common.models import TimeStampedModel
+from apps.common.tiptap import plain_text
 from apps.worlds.models import World
-
-
-def plain_text(node: object) -> str:
-    """Flatten a Tiptap JSON document into searchable text.
-
-    Walks the tree iteratively so a deeply nested document cannot exhaust the
-    Python call stack (the JSON body is user-controlled).
-    """
-    if not isinstance(node, dict):
-        return ""
-    parts: list[str] = []
-    stack: list[object] = [node]
-    while stack:
-        current = stack.pop()
-        if not isinstance(current, dict):
-            continue
-        text = current.get("text")
-        if isinstance(text, str):
-            parts.append(text)
-        children = current.get("content")
-        if isinstance(children, list):
-            stack.extend(reversed(children))
-    return " ".join(part for part in parts if part).strip()
 
 
 class ActiveCardManager(models.Manager):
@@ -130,24 +108,6 @@ class CardRevision(models.Model):
 
     def __str__(self) -> str:
         return f"{self.card.title} · v{self.index}"
-
-
-class CardImage(TimeStampedModel):
-    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name="images")
-    file = models.FileField(upload_to="card-images/")
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="card_images",
-    )
-
-    class Meta:
-        ordering = ["id"]
-
-    def __str__(self) -> str:
-        return f"{self.card.title}: {self.file.name}"
 
 
 class CardComment(TimeStampedModel):

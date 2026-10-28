@@ -2,7 +2,7 @@ import { createReadStream, readFileSync, statSync } from "node:fs";
 import http from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 
-import { renderExplore, renderHome, renderProfile, renderStatus, renderWiki } from "./dist-ssr/entry-server.js";
+import { renderExplore, renderHome, renderProfile, renderStatus, renderWiki, renderWorldConcept } from "./dist-ssr/entry-server.js";
 
 const PORT = Number(process.env.SSR_PORT ?? 5175);
 const API = process.env.API_BASE ?? "http://127.0.0.1:8000/api";
@@ -35,8 +35,11 @@ function safeJson(value) {
   return JSON.stringify(value).replaceAll("<", "\\u003c");
 }
 
-async function fetchJson(path) {
-  const response = await fetch(`${API}${path}`, { headers: { Accept: "application/json" } });
+async function fetchJson(path, { cookie } = {}) {
+  const headers = { Accept: "application/json" };
+  // Forward the member session so per-world reads can see private worlds.
+  if (cookie) headers.Cookie = cookie;
+  const response = await fetch(`${API}${path}`, { headers });
   if (!response.ok) return null;
   return response.json();
 }
@@ -90,6 +93,20 @@ function sendHtml(response, status, html) {
     "Cache-Control": "no-cache",
   });
   response.end(body);
+}
+
+/** Serve the built SPA shell for routes the client must resolve. */
+function serveSpaShell(response, { theme = "dark" } = {}) {
+  const index = join(dist, "index.html");
+  try {
+    const html = readFileSync(index, "utf8")
+      .replace('data-theme="dark"', `data-theme="${theme}"`)
+      .replace('content="#18181b"', `content="${theme === "light" ? "#ffffff" : "#18181b"}"`);
+    sendHtml(response, 200, html);
+  } catch {
+    response.writeHead(500);
+    response.end("Missing dist/index.html");
+  }
 }
 
 function sendStatus(response, { status, variant, title, description, canonical, theme }) {
@@ -257,13 +274,14 @@ const server = http.createServer(async (request, response) => {
   }
 
   const match = url.pathname.match(/^\/w\/([^/]+)\/wiki(?:\/([^/]+))?\/?$/);
-  if (!match && /\.[a-z0-9]+$/i.test(url.pathname)) {
+  const isEditor = Boolean(match && match[2] === "edit");
+  if (!isEditor && !match && /\.[a-z0-9]+$/i.test(url.pathname)) {
     response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     response.end("Not found");
     return;
   }
 
-  if (!match && !SPA_ROUTE.test(url.pathname)) {
+  if (!isEditor && !match && !SPA_ROUTE.test(url.pathname)) {
     await sendStatus(response, {
       status: 404,
       variant: "404",
@@ -275,39 +293,96 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (!match) {
-    const index = join(dist, "index.html");
-    try {
-      const html = readFileSync(index, "utf8")
-        .replace('data-theme="dark"', `data-theme="${theme}"`)
-        .replace('content="#18181b"', `content="${theme === "light" ? "#ffffff" : "#18181b"}"`);
-      sendHtml(response, 200, html);
-    } catch {
-      response.writeHead(500);
-      response.end("Missing dist/index.html");
-    }
+  if (!match || isEditor) {
+    serveSpaShell(response, { theme });
     return;
   }
 
   const worldSlug = decodeURIComponent(match[1]);
-  const cardSlug = match[2] ? decodeURIComponent(match[2]) : undefined;
+  const sub = match[2] ? decodeURIComponent(match[2]) : undefined;
+  const isCards = sub === "cards";
+  const cardSlug = sub && sub !== "cards" ? sub : undefined;
   try {
-    const world = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/`);
-    if (!world || !world.is_public_read) {
+    const cookie = request.headers.cookie;
+    const world = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/`, { cookie });
+    if (!world) {
+      const session = await fetchJson("/auth/session/", { cookie });
+      if (session?.authenticated) {
+        // A member may be opening a private or not-yet-created world. The SPA
+        // owns that decision, so ship the shell instead of a server 404.
+        serveSpaShell(response, { theme });
+        return;
+      }
       await sendStatus(response, { status: 404, variant: "missing-world", title: "世界不存在 · Opuscule", description: "这个公开 Wiki 不存在。", canonical: `${url.origin}${url.pathname}`, theme });
       return;
     }
-    const card = cardSlug ? await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/cards/by-slug/${encodeURIComponent(cardSlug)}/`) : null;
-    if (cardSlug && !card) {
+    if (!world.is_public_read) {
+      // Private worlds are client-rendered: the SPA fetches member data with
+      // the session. SSR only covers public worlds.
+      serveSpaShell(response, { theme });
+      return;
+    }
+    if (isCards) {
+      const concept = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/concept/`);
+      const initial = { kind: "wiki", worldSlug, mode: "cards", world, concept: concept ?? undefined };
+      const body = renderWiki(initial);
+      sendHtml(response, 200, shell({
+        title: `设定集 · ${world.name}`,
+        description: (world.description || "按分区浏览这个世界里的全部设定。").slice(0, 180),
+        canonical: `${url.origin}/w/${worldSlug}/wiki/cards`,
+        body,
+        initial,
+        theme,
+        ssr: true,
+      }));
+      return;
+    }
+    if (!cardSlug) {
+      const concept = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/concept/`);
+      if (concept) {
+        const initial = { kind: "concept", worldSlug, world, concept };
+        const body = renderWorldConcept(initial);
+        sendHtml(response, 200, shell({
+          title: `${world.name} · 世界概念`,
+          description: (concept.body_text || world.description || "").slice(0, 180),
+          canonical: `${url.origin}/w/${worldSlug}/wiki`,
+          body,
+          initial,
+          theme,
+          ssr: true,
+        }));
+        return;
+      }
+      const initial = { kind: "wiki", worldSlug, mode: "read", world };
+      const body = renderWiki(initial);
+      sendHtml(response, 200, shell({
+        title: world.name,
+        description: (world.description || "").slice(0, 180),
+        canonical: `${url.origin}/w/${worldSlug}/wiki`,
+        body,
+        initial,
+        theme,
+        ssr: true,
+      }));
+      return;
+    }
+    const card = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/cards/by-slug/${encodeURIComponent(cardSlug)}/`);
+    if (!card) {
       await sendStatus(response, { status: 404, variant: "missing-card", title: "卡片不存在 · Opuscule", description: "这张公开 Wiki 卡片不存在。", canonical: `${url.origin}${url.pathname}`, theme });
       return;
     }
-    const initial = { kind: "wiki", worldSlug, cardSlug, world, card: card ?? undefined };
+    const concept = await fetchJson(`/worlds/${encodeURIComponent(worldSlug)}/concept/`);
+    const initial = { kind: "wiki", worldSlug, mode: "read", world, card, concept: concept ?? undefined };
     const body = renderWiki(initial);
-    const title = card ? `${card.title} · ${world.name}` : world.name;
-    const description = (card?.body_text || world.description || "").slice(0, 180);
-    const canonical = `${url.origin}/w/${worldSlug}/wiki${cardSlug ? `/${cardSlug}` : ""}`;
-    sendHtml(response, 200, shell({ title, description, canonical, body, initial, theme, ssr: true }));
+    sendHtml(response, 200, shell({
+      title: `${card.title} · ${world.name}`,
+      description: (card.body_text || world.description || "").slice(0, 180),
+      canonical: `${url.origin}/w/${worldSlug}/wiki/${cardSlug}`,
+      body,
+      initial,
+      theme,
+      ssr: true,
+    }));
   } catch (error) {
     console.error(error);
     await sendStatus(response, { status: 500, variant: "500", title: "500 · Opuscule", description: "页面渲染失败。", canonical: `${url.origin}${url.pathname}`, theme });

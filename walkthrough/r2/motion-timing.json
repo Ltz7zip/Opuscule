@@ -1,0 +1,37 @@
+{
+  "captured_at": "2026-10-25T02:40:00+08:00",
+  "theme": "dark/light",
+  "current_time_ms": 70,
+  "before_40ms_delay": {
+    "root_old_opacity": 0.126461,
+    "root_new_opacity": 0.266856,
+    "cover_old_opacity": 0.126461,
+    "cover_new_opacity": 0.266856,
+    "sum": 0.393317,
+    "verdict": "both snapshots are mostly gone at the midpoint; the page background dominates"
+  },
+  "after_linear_no_delay": {
+    "root_old_opacity": 0.5,
+    "root_new_opacity": 0.5,
+    "cover_old_opacity": 0.5625,
+    "cover_new_opacity": 0.4375,
+    "sum": 1.0,
+    "verdict": "both snapshots stay visible; the midpoint is a real cross-fade"
+  },
+  "animations": {
+    "root_group_ms": 140,
+    "root_old_ms": 140,
+    "root_new_ms": 140,
+    "cover_group_ms": 200,
+    "cover_old_ms": 160,
+    "cover_new_ms": 160,
+    "delay_ms": 0,
+    "blend_mode": "plus-lighter"
+  },
+  "frames": {
+    "dark_before": "walkthrough/r2/motion-dark/mid-before-delay.png",
+    "dark_after": "walkthrough/r2/motion-dark/mid-after.png",
+    "light_before": "walkthrough/r2/motion-light/mid-before-delay.png",
+    "light_after": "walkthrough/r2/motion-light/mid-after.png"
+  }
+}

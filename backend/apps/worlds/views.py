@@ -5,7 +5,7 @@ import json
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
 from django.db.models import Count, OuterRef, Q, Subquery
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -16,9 +16,22 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .access import get_world_for_owner
+from apps.common.images import validate_image_upload
+
+from apps.common.tiptap import plain_text
+
+from .access import get_world_for_owner, get_world_for_read, get_world_for_write
 from .audit import log_world_event
-from .models import World, WorldAuditEvent, WorldInvite, WorldMembership
+from .media_usage import media_references
+from .models import (
+    World,
+    WorldAuditEvent,
+    WorldConcept,
+    WorldConceptRevision,
+    WorldInvite,
+    WorldMedia,
+    WorldMembership,
+)
 from .serializers import (
     WorldCreateSerializer,
     WorldAuditEventSerializer,
@@ -31,10 +44,258 @@ from .serializers import (
     WorldSerializer,
     WorldUpdateSerializer,
     OwnershipTransferSerializer,
+    WorldConceptDraftSerializer,
+    WorldConceptEditSerializer,
+    WorldConceptPublicSerializer,
+    WorldConceptRevisionDetailSerializer,
+    WorldConceptCommentSerializer,
+    WorldConceptRevisionSummarySerializer,
 )
 from .export import build_world_export
 from .importing import WorldImportError, import_world
 from .services import create_world
+
+
+class WorldMediaUploadView(APIView):
+    """World-wide image library shared by cards and the concept editor."""
+
+    parser_classes = [MultiPartParser]
+
+    def get(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        rows = []
+        for media in world.media.all():
+            references = media_references(world, media)
+            rows.append(
+                {
+                    "id": media.id,
+                    "url": request.build_absolute_uri(media.file.url),
+                    "name": media.name or media.file.name.rsplit("/", 1)[-1],
+                    "created_at": media.created_at,
+                    "usage": len(references),
+                    "references": references,
+                }
+            )
+        return Response(rows)
+
+    def post(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        upload = request.FILES.get("file")
+        error = validate_image_upload(upload)
+        if error:
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+        name = upload.name.rsplit("/", 1)[-1]
+        media = WorldMedia.objects.create(
+            world=world,
+            file=upload,
+            name=name,
+            uploaded_by=request.user,
+        )
+        return Response(
+            {
+                "id": media.id,
+                "url": request.build_absolute_uri(media.file.url),
+                "name": media.name,
+                "created_at": media.created_at,
+                "usage": 0,
+                "references": [],
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class WorldMediaDeleteView(APIView):
+    """Delete one shared media asset only when no content still references it."""
+
+    def delete(self, request, world_slug: str, media_id: int):
+        world = get_world_for_write(request, world_slug)
+        media = get_object_or_404(WorldMedia, pk=media_id, world=world)
+        references = media_references(world, media)
+        if references:
+            return Response(
+                {
+                    "detail": "这张图片仍在被引用，不能删除。",
+                    "references": references,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        name = media.name or media.file.name.rsplit("/", 1)[-1]
+        media_name = media.file.name
+        media.file.delete(save=False)
+        media.delete()
+        log_world_event(
+            world,
+            request.user,
+            WorldAuditEvent.Action.MEDIA_DELETED,
+            metadata={"id": media_id, "name": name, "file": media_name},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+EMPTY_CONCEPT_DOC = {"type": "doc", "content": [{"type": "paragraph"}]}
+
+
+class WorldConceptView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, world_slug: str):
+        world = get_world_for_read(request, world_slug)
+        concept = get_object_or_404(
+            WorldConcept,
+            world=world,
+            published_at__isnull=False,
+        )
+        if not concept.body_json:
+            raise Http404("Concept not published")
+        return Response(WorldConceptPublicSerializer(concept).data)
+
+    def patch(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        serializer = WorldConceptDraftSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        body_json = serializer.validated_data["body_json"]
+        concept, created = WorldConcept.objects.get_or_create(
+            world=world,
+            defaults={"created_by": request.user},
+        )
+        expected_updated_at = serializer.validated_data.get("expected_updated_at")
+        if not created and expected_updated_at and concept.updated_at != expected_updated_at:
+            return Response(
+                {
+                    "detail": "草稿已在别处更新，请刷新后再保存。",
+                    "concept": WorldConceptEditSerializer(concept).data,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if created and concept.created_by_id is None:
+            concept.created_by = request.user
+        concept.draft_json = body_json
+        concept.draft_text = plain_text(body_json)
+        concept.updated_by = request.user
+        concept.save()
+        return Response(WorldConceptEditSerializer(concept).data)
+
+
+class WorldConceptEditView(APIView):
+    def get(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        concept = WorldConcept.objects.filter(world=world).first()
+        if concept is None:
+            concept = WorldConcept(
+                world=world,
+                draft_json=EMPTY_CONCEPT_DOC,
+                body_json=None,
+            )
+        return Response(WorldConceptEditSerializer(concept).data)
+
+
+class WorldConceptPublishView(APIView):
+    def post(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        concept = get_object_or_404(WorldConcept, world=world)
+        draft_text = plain_text(concept.draft_json)
+        if not draft_text.strip():
+            raise ValidationError({"detail": "先写一点内容再发布"})
+        with transaction.atomic():
+            concept.body_json = concept.draft_json
+            concept.body_text = draft_text
+            concept.draft_text = draft_text
+            concept.published_at = timezone.now()
+            concept.revision += 1
+            concept.updated_by = request.user
+            concept.save()
+            WorldConceptRevision.objects.create(
+                concept=concept,
+                revision=concept.revision,
+                body_json=concept.body_json,
+                body_text=concept.body_text,
+                published_at=concept.published_at,
+                created_by=request.user,
+            )
+            log_world_event(
+                world,
+                request.user,
+                WorldAuditEvent.Action.CONCEPT_PUBLISHED,
+                metadata={"revision": concept.revision},
+            )
+        return Response(WorldConceptPublicSerializer(concept).data)
+
+
+class WorldConceptRevisionListView(APIView):
+    def get(self, request, world_slug: str):
+        world = get_world_for_write(request, world_slug)
+        concept = get_object_or_404(WorldConcept, world=world)
+        revisions = concept.revisions.all()
+        return Response(WorldConceptRevisionSummarySerializer(revisions, many=True).data)
+
+
+class WorldConceptRevisionView(APIView):
+    def get(self, request, world_slug: str, revision: int):
+        world = get_world_for_write(request, world_slug)
+        concept = get_object_or_404(WorldConcept, world=world)
+        snapshot = get_object_or_404(WorldConceptRevision, concept=concept, revision=revision)
+        return Response(WorldConceptRevisionDetailSerializer(snapshot).data)
+
+
+class WorldConceptRevisionRestoreView(APIView):
+    def post(self, request, world_slug: str, revision: int):
+        world = get_world_for_write(request, world_slug)
+        concept = get_object_or_404(WorldConcept, world=world)
+        snapshot = get_object_or_404(WorldConceptRevision, concept=concept, revision=revision)
+        concept.draft_json = snapshot.body_json
+        concept.draft_text = snapshot.body_text
+        concept.updated_by = request.user
+        concept.save()
+        return Response(WorldConceptEditSerializer(concept).data)
+
+
+class WorldConceptCommentListCreateView(generics.ListCreateAPIView):
+    """Concept annotations are for members who can edit the world.
+
+    Mirrors the card comment permissions: reading and writing both require
+    world write access, so a public reader never sees private working notes.
+    """
+
+    serializer_class = WorldConceptCommentSerializer
+
+    def get_concept(self):
+        world = get_world_for_write(self.request, self.kwargs["world_slug"])
+        return get_object_or_404(WorldConcept, world=world)
+
+    def get_queryset(self):
+        return self.get_concept().comments.select_related("author", "parent")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["concept"] = self.get_concept()
+        return context
+
+    def perform_create(self, serializer):
+        serializer.save(concept=self.get_concept(), author=self.request.user)
+
+
+class WorldConceptCommentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = WorldConceptCommentSerializer
+    lookup_url_kwarg = "comment_id"
+
+    def get_concept(self):
+        world = get_world_for_write(self.request, self.kwargs["world_slug"])
+        return get_object_or_404(WorldConcept, world=world)
+
+    def get_queryset(self):
+        return self.get_concept().comments.select_related("author")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["concept"] = self.get_concept()
+        return context
+
+    def delete(self, request, *args, **kwargs):
+        comment = self.get_object()
+        world = get_world_for_write(request, self.kwargs["world_slug"])
+        if comment.author_id != request.user.id and world.role_for(request.user) != WorldMembership.Role.OWNER:
+            return Response({"detail": "只有作者或 owner 可以删除评论"}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
 
 
 class HealthView(APIView):

@@ -5,8 +5,17 @@ from apps.cards.models import Card
 from apps.cards.serializers import CardListSerializer
 from apps.collections.models import Collection
 from apps.collections.serializers import CollectionSerializer
+from apps.common.tiptap import MAX_BODY_DEPTH, json_depth
 
-from .models import World, WorldAuditEvent, WorldInvite, WorldMembership
+from .models import (
+    World,
+    WorldAuditEvent,
+    WorldConcept,
+    WorldConceptComment,
+    WorldConceptRevision,
+    WorldInvite,
+    WorldMembership,
+)
 
 _ROLE_MISSING = object()
 
@@ -204,3 +213,131 @@ class WorldAuditEventSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class WorldConceptAuthorsMixin:
+    created_by = serializers.SerializerMethodField()
+    updated_by = serializers.SerializerMethodField()
+
+    def get_created_by(self, obj) -> str | None:
+        return obj.created_by.username if obj.created_by_id and obj.created_by else None
+
+    def get_updated_by(self, obj) -> str | None:
+        return obj.updated_by.username if obj.updated_by_id and obj.updated_by else None
+
+
+class WorldConceptPublicSerializer(WorldConceptAuthorsMixin, serializers.ModelSerializer):
+    created_by = serializers.SerializerMethodField()
+    updated_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorldConcept
+        fields = [
+            "body_json",
+            "body_text",
+            "published_at",
+            "created_at",
+            "updated_at",
+            "revision",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = fields
+
+
+class WorldConceptEditSerializer(WorldConceptAuthorsMixin, serializers.ModelSerializer):
+    exists = serializers.SerializerMethodField()
+    body_json = serializers.SerializerMethodField()
+    created_by = serializers.SerializerMethodField()
+    updated_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorldConcept
+        fields = [
+            "exists",
+            "draft_json",
+            "draft_text",
+            "body_json",
+            "body_text",
+            "published_at",
+            "created_at",
+            "updated_at",
+            "revision",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = fields
+        extra_kwargs = {"body_json": {"allow_null": True}}
+
+    def get_exists(self, obj) -> bool:
+        return obj.pk is not None
+
+    def get_body_json(self, obj):
+        return obj.body_json if obj.published_at else None
+
+
+class WorldConceptRevisionSummarySerializer(serializers.ModelSerializer):
+    created_by = serializers.SerializerMethodField()
+    char_count = serializers.SerializerMethodField()
+    is_current = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorldConceptRevision
+        fields = ["revision", "published_at", "created_at", "created_by", "char_count", "is_current"]
+        read_only_fields = fields
+
+    def get_created_by(self, obj) -> str | None:
+        return obj.created_by.username if obj.created_by_id and obj.created_by else None
+
+    def get_char_count(self, obj) -> int:
+        return len("".join((obj.body_text or "").split()))
+
+    def get_is_current(self, obj) -> bool:
+        return obj.concept.revision == obj.revision
+
+
+class WorldConceptRevisionDetailSerializer(WorldConceptRevisionSummarySerializer):
+    class Meta(WorldConceptRevisionSummarySerializer.Meta):
+        fields = [*WorldConceptRevisionSummarySerializer.Meta.fields, "body_json", "body_text"]
+        read_only_fields = fields
+
+
+class WorldConceptDraftSerializer(serializers.Serializer):
+    body_json = serializers.JSONField()
+    expected_updated_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate_body_json(self, value):
+        if value and json_depth(value) > MAX_BODY_DEPTH:
+            raise serializers.ValidationError("正文嵌套层级过深")
+        return value
+
+
+class WorldConceptCommentSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.username", read_only=True, allow_null=True)
+
+    class Meta:
+        model = WorldConceptComment
+        fields = [
+            "id",
+            "body",
+            "quote",
+            "anchor_id",
+            "resolved",
+            "parent",
+            "author_name",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "author_name", "created_at", "updated_at"]
+        extra_kwargs = {"body": {"trim_whitespace": True}}
+
+    def validate_body(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("评论不能为空")
+        return value.strip()
+
+    def validate_parent(self, value):
+        concept = self.context.get("concept")
+        if value is not None and concept is not None and value.concept_id != concept.id:
+            raise serializers.ValidationError("回复的评论不属于这篇概念")
+        return value

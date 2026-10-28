@@ -322,3 +322,9 @@ a { color: inherit; }
   --legacy-map-character: #7fd6a5;
   --legacy-map-note: #c9a7ff;
 }
+
+/* Fixed dark splash used by the map loading screen. */
+:root {
+  --map-splash-bg: #070a12;
+  --map-splash-fg: #f4f7ff;
+}

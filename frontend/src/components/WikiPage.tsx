@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState, type CSSProperties, type Ref } from "react";
 
-import { fetchCardBySlug, fetchWorld, fetchWorldTimeline } from "../api";
+import { fetchCardBySlug, fetchWorld, fetchWorldConcept, fetchWorldTimeline } from "../api";
+import { collectConceptMentions, CONCEPT_TOP_SECTION } from "../lib/conceptMentions";
 import { typeLabel } from "../lib/labels";
 import { useDocumentMeta } from "../lib/meta";
 import { useSharedSource, useVtTarget } from "../lib/viewTransition";
 import { ContourPlate } from "./ContourPlate";
+import { CardPeek } from "./CardPeek";
 import type {
   CardDetail,
   CardSummary,
   SessionState,
   TimelineEra,
+  WorldConcept,
   WorldDetail,
 } from "../types";
 import { RichText } from "./RichText";
@@ -25,6 +28,12 @@ interface WikiPageProps {
   onLogout: () => void;
   initialWorld?: WorldDetail;
   initialCard?: CardDetail;
+  /** Optional published concept for citation counts/backlinks (SSR + client). */
+  initialConcept?: WorldConcept;
+  /** read = world concept landing, cards = the setting index. */
+  mode?: "read" | "cards";
+  /** Owner/editor CTA when the world has no published concept yet. */
+  conceptCta?: boolean;
   /** The legacy site's anonymous root renders the same world home at /. */
   home?: boolean;
 }
@@ -68,6 +77,37 @@ function Tile({ card, worldSlug }: { card: CardSummary; worldSlug: string }) {
   );
 }
 
+function WikiIndexCard({
+  card,
+  count,
+  onOpen,
+}: {
+  card: CardSummary;
+  count: number;
+  onOpen: () => void;
+}) {
+  return (
+    <button type="button" className="wiki-index-card" onClick={onOpen}>
+      <span
+        className="wiki-index-cover has-contour"
+        style={card.cover ? { backgroundImage: `url(${card.cover})` } : undefined}
+      >
+        {!card.cover && <ContourPlate seed={card.slug} />}
+        {!card.cover && <span className="cover-glyph">{card.title.trim().slice(0, 1)}</span>}
+      </span>
+      <span className="wiki-index-kind">{typeLabel(card.type_key)}</span>
+      <span className="wiki-index-title">{card.title}</span>
+      <span className="wiki-index-excerpt">{card.body_text || "这张词条还没有正文。"}</span>
+      <span className="wiki-index-foot">
+        <span>{typeLabel(card.type_key)}</span>
+        <span className={count > 0 ? "wiki-index-cited" : "wiki-index-orphan"}>
+          {count > 0 ? `被引用 ${count} 次` : "未被概念引用"}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /**
  * Legacy public Wiki: one 1040 column, no sidebar, one navigation row.
  * Index mirrors 0.8.1 site home; article mirrors site/page.html.
@@ -79,13 +119,19 @@ export function WikiPage({
   onLogout,
   initialWorld,
   initialCard,
+  initialConcept,
+  mode = "read",
+  conceptCta = false,
   home = false,
 }: WikiPageProps) {
   const [world, setWorld] = useState<WorldDetail | null>(initialWorld ?? null);
   const [card, setCard] = useState<CardDetail | null>(initialCard ?? null);
+  const [concept, setConcept] = useState<WorldConcept | null>(initialConcept ?? null);
   const [eras, setEras] = useState<TimelineEra[]>([]);
   const [loading, setLoading] = useState(!initialWorld);
   const [error, setError] = useState<string | null>(null);
+  const [indexFilter, setIndexFilter] = useState<number | "all" | "unclassified">("all");
+  const [peekSlug, setPeekSlug] = useState<string | null>(null);
   const heroCover = useVtTarget("cover", world?.slug ?? "");
   const heroMark = useVtTarget("icon", world?.slug ?? "");
   const articleCover = useVtTarget("cover", card?.slug ?? "");
@@ -95,10 +141,16 @@ export function WikiPage({
     title: card
       ? `${card.title} · ${world?.name ?? worldSlug}`
       : world
-        ? world.name
+        ? mode === "cards"
+          ? `设定集 · ${world.name}`
+          : world.name
         : "Wiki · Opuscule",
     description: card?.body_text?.slice(0, 180) || world?.description,
-    canonicalPath: home ? "/" : `/w/${worldSlug}/wiki${cardSlug ? `/${cardSlug}` : ""}`,
+    canonicalPath: home
+      ? "/"
+      : mode === "cards"
+        ? `/w/${worldSlug}/wiki/cards`
+        : `/w/${worldSlug}/wiki${cardSlug ? `/${cardSlug}` : ""}`,
     type: card ? "article" : "website",
   });
 
@@ -131,7 +183,7 @@ export function WikiPage({
   }, [cardSlug, initialWorld, worldSlug]);
 
   useEffect(() => {
-    if (cardSlug) return;
+    if (cardSlug || mode === "cards") return;
     let cancelled = false;
     fetchWorldTimeline(worldSlug)
       .then((data) => {
@@ -141,24 +193,76 @@ export function WikiPage({
     return () => {
       cancelled = true;
     };
-  }, [cardSlug, worldSlug]);
+  }, [cardSlug, mode, worldSlug]);
 
+  useEffect(() => {
+    if (initialConcept || (!cardSlug && mode !== "cards")) return;
+    let cancelled = false;
+    fetchWorldConcept(worldSlug)
+      .then((next) => {
+        if (!cancelled) setConcept(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [cardSlug, initialConcept, mode, worldSlug]);
+
+  const publicCards = useMemo(
+    () => world?.cards.filter((item) => item.is_public && !item.is_auxiliary) ?? [],
+    [world],
+  );
+  const conceptStats = useMemo(
+    () => collectConceptMentions(concept?.body_json, worldSlug),
+    [concept, worldSlug],
+  );
+  const citedCount = useMemo(
+    () => publicCards.filter((item) => (conceptStats.mentionCounts[item.slug] ?? 0) > 0).length,
+    [conceptStats, publicCards],
+  );
   const sections = useMemo(
     () =>
       world
         ? world.collections
             .map((collection) => ({
               collection,
-              cards: world.cards.filter((item) => item.home_collection === collection.id),
+              cards: publicCards.filter((item) => item.home_collection === collection.id),
             }))
             .filter((section) => section.cards.length > 0)
         : [],
-    [world],
+    [publicCards, world],
   );
   const unclassified = useMemo(
-    () => world?.cards.filter((item) => item.home_collection === null) ?? [],
-    [world],
+    () => publicCards.filter((item) => item.home_collection === null),
+    [publicCards],
   );
+  const indexCategories = useMemo(
+    () => [
+      { key: "all" as const, label: "全部", count: publicCards.length },
+      ...sections.map((section) => ({
+        key: section.collection.id,
+        label: section.collection.name,
+        count: section.cards.length,
+      })),
+      ...(unclassified.length > 0
+        ? [{ key: "unclassified" as const, label: "未分类", count: unclassified.length }]
+        : []),
+    ],
+    [publicCards.length, sections, unclassified.length],
+  );
+  const filteredCards = useMemo(() => {
+    if (indexFilter === "all") return publicCards;
+    if (indexFilter === "unclassified") return unclassified;
+    return sections.find((section) => section.collection.id === indexFilter)?.cards ?? [];
+  }, [indexFilter, publicCards, sections, unclassified]);
+  const peekAppeared = peekSlug ? (conceptStats.sectionsBySlug[peekSlug] ?? []) : [];
+  const indexCategoryCount = sections.length + (unclassified.length > 0 ? 1 : 0);
+
+  const goConceptSection = (id: string) => {
+    setPeekSlug(null);
+    const suffix = id === CONCEPT_TOP_SECTION ? "" : `#${id}`;
+    window.location.assign(`/w/${worldSlug}/wiki${suffix}`);
+  };
 
   return (
     <div className="site-page wiki-page">
@@ -167,7 +271,7 @@ export function WikiPage({
         worldName={world?.name}
         worldSlug={world?.slug ?? worldSlug}
         sections={world?.collections.map((item) => ({ name: item.name, slug: item.slug })) ?? []}
-        active={card ? undefined : "wiki"}
+        active={card || mode === "cards" ? "cards" : "world"}
         session={session}
         onLogout={onLogout}
         home={home}
@@ -183,17 +287,72 @@ export function WikiPage({
           </p>
         )}
 
-        {!loading && world && !card && (
+        {!loading && world && !card && mode === "cards" && (
+          <div className="wiki-index-wrap">
+            <header className="wiki-index-head">
+              <div>
+                <p className="wiki-index-kicker">INDEX · 设定集</p>
+                <h1>设定集</h1>
+                <p className="wiki-index-sub">
+                  {publicCards.length} 个词条 · {indexCategoryCount} 个分类 · 其中 {citedCount} 个被概念引用
+                </p>
+              </div>
+              <a className="wiki-index-back" href={`/w/${world.slug}/wiki`}>← 返回世界概念</a>
+            </header>
+            <div className="wiki-index-layout">
+              <aside className="wiki-index-tree" aria-label="设定分类">
+                <p className="concept-rail-label">分类</p>
+                <nav>
+                  {indexCategories.map((category) => (
+                    <button
+                      key={String(category.key)}
+                      type="button"
+                      className={`wiki-index-tree-btn${indexFilter === category.key ? " active" : ""}`}
+                      onClick={() => setIndexFilter(category.key)}
+                    >
+                      <span>{category.label}</span>
+                      <b>{category.count}</b>
+                    </button>
+                  ))}
+                </nav>
+              </aside>
+              <div className="wiki-index-main">
+                <div className="wiki-index-grid">
+                  {filteredCards.map((item) => (
+                    <WikiIndexCard
+                      key={item.id}
+                      card={item}
+                      count={conceptStats.mentionCounts[item.slug] ?? 0}
+                      onOpen={() => setPeekSlug(item.slug)}
+                    />
+                  ))}
+                </div>
+                {filteredCards.length === 0 && (
+                  <p className="wiki-index-empty">这个分类还没有词条。</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && world && !card && mode !== "cards" && (
           <>
             <section className="site-hero">
               <div className="site-hero-main">
-                <p className="site-hero-overline">WORLD SURVEY · {world.kind === "private" ? "PRIVATE" : "OPEN"}</p>
+                <p className="site-hero-overline">
+                  WORLD SURVEY · {world.kind === "private" ? "PRIVATE" : "OPEN"}
+                </p>
                 <h1>{world.name}</h1>
                 {world.description && <p className="site-hero-sub">{world.description}</p>}
                 <p className="site-hero-stats">
-                  {sections.length} 个分区 · 共 {world.cards.length} 份文档
+                  {sections.length} 个分区 · 共 {publicCards.length} 份文档
                   {world.kind === "private" ? " · 私人世界 · 公开只读" : " · 共建世界"}
                 </p>
+                {conceptCta && (
+                  <a className="site-hero-cta" href={`/w/${world.slug}/wiki/edit`}>
+                    写下第一篇世界概念 →
+                  </a>
+                )}
               </div>
               <div className="site-hero-aside" aria-hidden="true">
                 <WorldCover
@@ -267,7 +426,7 @@ export function WikiPage({
         {!loading && world && card && (
           <article className="site-article">
             <nav className="site-crumbs" aria-label="面包屑">
-              <a href={`/w/${world.slug}/wiki`}>首页</a> / <span>{typeLabel(card.type_key)}</span>
+              <a href={`/w/${world.slug}/wiki`}>世界</a> / <span>{typeLabel(card.type_key)}</span>
             </nav>
 
             <header className="site-page-head">
@@ -305,6 +464,32 @@ export function WikiPage({
                 <p className="site-empty">这张卡片还没有正文。</p>
               )}
             </div>
+
+            {concept && (
+              <aside className="wiki-card-cited" aria-label="世界概念反链">
+                <p className="wiki-index-kicker">WORLD CONCEPT · 反链</p>
+                <p className="wiki-card-cited-text">
+                  {(conceptStats.mentionCounts[card.slug] ?? 0) > 0
+                    ? `世界概念引用了这张词条 ${conceptStats.mentionCounts[card.slug]} 次。`
+                    : "世界概念还没有引用这张词条。"}
+                </p>
+                {(conceptStats.sectionsBySlug[card.slug] ?? []).length > 0 && (
+                  <div className="wiki-card-cited-sections">
+                    {(conceptStats.sectionsBySlug[card.slug] ?? []).map((section) => (
+                      <a
+                        key={section.id}
+                        href={`/w/${worldSlug}/wiki${section.id === CONCEPT_TOP_SECTION ? "" : `#${section.id}`}`}
+                      >
+                        {section.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <a className="wiki-card-cited-link" href={`/w/${worldSlug}/wiki`}>
+                  阅读世界概念 →
+                </a>
+              </aside>
+            )}
           </article>
         )}
       </main>
@@ -316,6 +501,14 @@ export function WikiPage({
           publishedAt={world.published_at}
         />
       )}
+
+      <CardPeek
+        worldSlug={worldSlug}
+        slug={peekSlug}
+        appeared={peekAppeared}
+        onClose={() => setPeekSlug(null)}
+        onGoSection={goConceptSection}
+      />
     </div>
   );
 }

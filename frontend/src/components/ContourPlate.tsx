@@ -66,12 +66,26 @@ export function ContourPlate({ seed, className = "", detail = false }: ContourPl
     };
 
     let frame = 0;
+    let lastKey = "";
+    let inView = false;
+    let dirty = true;
     const draw = () => {
       frame = 0;
+      if (!inView) return;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const width = host.clientWidth;
       const height = host.clientHeight;
       if (!width || !height) return;
+      const color = getComputedStyle(canvas).color || "currentColor";
+      // ResizeObserver and the theme MutationObserver can both fire for the
+      // same layout/theme. Skip the marching-squares pass when nothing that
+      // affects the plate actually changed.
+      const key = `${width}x${height}@${dpr}:${color}`;
+      if (key === lastKey) {
+        dirty = false;
+        return;
+      }
+      lastKey = key;
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
         canvas.width = Math.round(width * dpr);
         canvas.height = Math.round(height * dpr);
@@ -80,7 +94,6 @@ export function ContourPlate({ seed, className = "", detail = false }: ContourPl
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      const color = getComputedStyle(canvas).color || "currentColor";
       const cols = 66;
       const rows = 42;
       const values = new Float32Array(cols * rows);
@@ -159,6 +172,7 @@ export function ContourPlate({ seed, className = "", detail = false }: ContourPl
       ctx.lineTo(width / 2, height / 2 + 5);
       ctx.stroke();
       ctx.globalAlpha = 1;
+      dirty = false;
 
       if (detail) {
         ctx.globalAlpha = 0.72;
@@ -176,12 +190,29 @@ export function ContourPlate({ seed, className = "", detail = false }: ContourPl
     };
 
     const schedule = () => {
+      if (!inView || !dirty) return;
       if (!frame) frame = window.requestAnimationFrame(draw);
     };
-    schedule();
-    const observer = new ResizeObserver(schedule);
+    const intersection = new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting;
+        if (inView) schedule();
+      },
+      // Pre-render a few screens ahead so scrolling never reveals an empty
+      // plate; pages with many cards still avoid allocating every canvas at
+      // once.
+      { rootMargin: "0px 0px 300% 0px" },
+    );
+    intersection.observe(host);
+    const observer = new ResizeObserver(() => {
+      dirty = true;
+      schedule();
+    });
     observer.observe(host);
-    const themeObserver = new MutationObserver(schedule);
+    const themeObserver = new MutationObserver(() => {
+      dirty = true;
+      schedule();
+    });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
 
     const force = new URLSearchParams(window.location.search).get("motion") === "force";
@@ -205,6 +236,7 @@ export function ContourPlate({ seed, className = "", detail = false }: ContourPl
       host.addEventListener("pointerleave", onPointerLeave);
     }
     return () => {
+      intersection.disconnect();
       observer.disconnect();
       themeObserver.disconnect();
       if (canParallax) {

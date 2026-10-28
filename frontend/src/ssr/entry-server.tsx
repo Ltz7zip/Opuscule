@@ -5,13 +5,16 @@ import { ProfilePage } from "../components/ProfilePage";
 import { PublicHome } from "../components/PublicHome";
 import { StatusPage, type StatusVariant } from "../components/StatusPage";
 import { WikiPage } from "../components/WikiPage";
-import type { CardDetail, ProfileData, WorldDetail, WorldSummary } from "../types";
+import { WorldConceptPage } from "../components/WorldConceptPage";
+import type { CardDetail, ProfileData, WorldConcept, WorldDetail, WorldSummary } from "../types";
 
 export interface WikiSsrData {
   worldSlug: string;
   cardSlug?: string;
+  mode?: "read" | "cards";
   world: WorldDetail;
   card?: CardDetail;
+  concept?: WorldConcept;
 }
 
 export function renderWiki(data: WikiSsrData): string {
@@ -23,6 +26,27 @@ export function renderWiki(data: WikiSsrData): string {
       onLogout={() => undefined}
       initialWorld={data.world}
       initialCard={data.card}
+      initialConcept={data.concept}
+      mode={data.mode}
+    />,
+  );
+}
+
+
+export interface WorldConceptSsrData {
+  worldSlug: string;
+  world: WorldDetail;
+  concept: WorldConcept;
+}
+
+export function renderWorldConcept(data: WorldConceptSsrData): string {
+  return renderToString(
+    <WorldConceptPage
+      worldSlug={data.worldSlug}
+      session={null}
+      onLogout={() => undefined}
+      initialWorld={data.world}
+      initialConcept={data.concept}
     />,
   );
 }

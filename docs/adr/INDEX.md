@@ -35,6 +35,7 @@ ADR 只解释“为什么这样定”和“验收边界”，不复制整份设�
 | [0021](ADR-0021-map-module.md) | 地图作为独立 app/feature | Accepted | 2026-10-20 | §4.6 | 瓦片/缩放/编辑/SSR |
 | [0022](ADR-0022-ssr-public-routes.md) | SSR 公共路由扩展（Wiki + Explore） | Accepted | 2026-10-20 | §4.6 | 全站 SSR/部署 |
 | [0023](ADR-0023-timeline-module.md) | 世界时间线作为独立 app | Accepted | 2026-10-20 | §4.6 | 编辑/SSR/多时间线 |
+| [0024](ADR-0024-world-concept.md) | 世界概念、共享媒体库与成员协作 | Accepted（M1–M4） | 2026-10-27 | world-concept.html | media URL 鉴权/评论通知 |
 
 ## Baseline
 

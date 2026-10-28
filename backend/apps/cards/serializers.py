@@ -1,28 +1,11 @@
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from .models import Card, CardComment, CardRevision, Notification, plain_text
+from apps.common.tiptap import MAX_BODY_DEPTH, json_depth, plain_text
 
-# Tiptap documents in practice nest a handful of levels (doc > list > item >
-# paragraph > text). Anything past this is not an editor document.
-MAX_BODY_DEPTH = 64
+from .models import Card, CardComment, CardRevision, Notification
 
-
-def json_depth(node: object) -> int:
-    """Iterative maximum container nesting depth of a JSON value."""
-    deepest = 0
-    stack: list[tuple[object, int]] = [(node, 1)]
-    while stack:
-        current, depth = stack.pop()
-        if depth > deepest:
-            deepest = depth
-            if deepest > MAX_BODY_DEPTH:
-                return deepest
-        if isinstance(current, dict):
-            stack.extend((value, depth + 1) for value in current.values())
-        elif isinstance(current, list):
-            stack.extend((value, depth + 1) for value in current)
-    return deepest
+RESERVED_CARD_SLUGS = {"cards", "edit"}
 
 
 class CardListSerializer(serializers.ModelSerializer):
@@ -85,9 +68,18 @@ class CardDetailSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("正文嵌套层级过深")
         return value
 
+    def validate_slug(self, value: str) -> str:
+        if value in RESERVED_CARD_SLUGS:
+            raise serializers.ValidationError("这个 slug 保留给世界索引")
+        return value
+
     def _unique_slug(self, world, title: str, current: str = "") -> str:
         base = slugify(title) or "card"
+        if base in RESERVED_CARD_SLUGS:
+            base = f"{base}-card"
         slug = current or base
+        if slug in RESERVED_CARD_SLUGS:
+            slug = f"{slug}-card"
         index = 2
         qs = Card.all_objects.filter(world=world).exclude(pk=self.instance.pk if self.instance else None)
         while qs.filter(slug=slug).exists():

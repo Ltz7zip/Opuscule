@@ -26,7 +26,6 @@ interface SiteHeaderProps {
 export function SiteHeader({
   worldName,
   worldSlug,
-  sections = [],
   active,
   session,
   onLogout,
@@ -68,14 +67,10 @@ export function SiteHeader({
           </a>
         </div>
         <nav className="site-nav-links" aria-label="世界页面">
-          <a className={active === "wiki" ? "active" : undefined} href={homeHref}>首页</a>
-          {sections.slice(0, 6).map((section) => (
-            <a key={section.slug} href={`${homeHref}#${section.slug}`}>
-              {section.name}
-            </a>
-          ))}
-          <a className={active === "map" ? "active" : undefined} href={`/w/${worldSlug}/map`}>地图</a>
+          <a className={active === "world" ? "active" : undefined} href={homeHref}>世界</a>
+          <a className={active === "cards" ? "active" : undefined} href={`${homeHref}/cards`}>设定</a>
           <a className={active === "timeline" ? "active" : undefined} href={`/w/${worldSlug}/timeline`}>时间线</a>
+          <a className={active === "map" ? "active" : undefined} href={`/w/${worldSlug}/map`}>地图</a>
           {session?.authenticated && (
             <a className={active === "workspace" ? "active" : undefined} href={`/w/${worldSlug}`}>工作区</a>
           )}

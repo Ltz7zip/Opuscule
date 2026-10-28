@@ -1,6 +1,7 @@
 import { Mark, mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 
+import { ColumnListViewHost } from "./ColumnListViewHost";
 import { GalleryHost } from "./GalleryHost";
 
 export const Callout = Node.create({
@@ -119,6 +120,34 @@ export const CardEmbed = Node.create({
   },
 });
 
+export const WorldTimeline = Node.create({
+  name: "worldTimeline",
+  group: "block",
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      slug: { default: "" },
+      name: { default: "" },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-world-timeline]" }];
+  },
+  renderHTML({ node }) {
+    return [
+      "div",
+      {
+        "data-world-timeline": "",
+        "data-slug": node.attrs.slug,
+        class: "tiptap-timeline-embed",
+      },
+      ["small", {}, "世界时间线"],
+      ["strong", {}, node.attrs.name || node.attrs.slug],
+    ];
+  },
+});
+
 export const NestedBlock = Node.create({
   name: "nestedBlock",
   group: "block",
@@ -227,5 +256,111 @@ export const CommentAnchor = Mark.create({
   },
   renderHTML({ HTMLAttributes }) {
     return ["span", mergeAttributes(HTMLAttributes, { class: "tiptap-comment-anchor" }), 0];
+  },
+});
+
+export const Column = Node.create({
+  name: "column",
+  group: "column",
+  content: "block+",
+  defining: true,
+  parseHTML() {
+    return [{ tag: "div[data-column]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-column": "", class: "tiptap-column" }), 0];
+  },
+});
+
+export const ColumnList = Node.create({
+  name: "columnList",
+  group: "block",
+  content: "column{2,4}",
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return {
+      layout: {
+        default: 2,
+        parseHTML: (element) => {
+          const value = Number(element.getAttribute("data-columns"));
+          return Number.isFinite(value) ? Math.min(4, Math.max(2, value)) : 2;
+        },
+        renderHTML: (attributes) => ({ "data-columns": attributes.layout }),
+      },
+      preset: {
+        default: "equal",
+        parseHTML: (element) => element.getAttribute("data-preset") || "equal",
+        renderHTML: (attributes) => ({ "data-preset": attributes.preset }),
+      },
+      widths: {
+        default: null,
+        parseHTML: (element) => {
+          const raw = element.getAttribute("data-widths");
+          if (!raw) return null;
+          try {
+            const value = JSON.parse(raw);
+            return Array.isArray(value) ? value.map(Number) : null;
+          } catch {
+            return null;
+          }
+        },
+        renderHTML: (attributes) => {
+          if (!Array.isArray(attributes.widths) || attributes.widths.length === 0) return {};
+          return { "data-widths": JSON.stringify(attributes.widths) };
+        },
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-column-list]" }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ColumnListViewHost);
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const layout = Math.min(4, Math.max(2, Number(node.attrs.layout) || 2));
+    const widths = Array.isArray(node.attrs.widths) && node.attrs.widths.length === layout
+      ? node.attrs.widths.map(Number)
+      : null;
+    const template = widths && widths.every((width) => Number.isFinite(width) && width > 0)
+      ? widths.map((width) => `minmax(0, ${width}fr)`).join(" ")
+      : null;
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, {
+        "data-column-list": "",
+        "data-columns": String(layout),
+        "data-preset": node.attrs.preset,
+        class: `tiptap-columns cols-${layout}`,
+        ...(template ? { style: `--column-template: ${template}` } : {}),
+      }),
+      0,
+    ];
+  },
+});
+
+export const PlaceholderBlock = Node.create({
+  name: "placeholderBlock",
+  group: "block",
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      label: { default: "未完成功能" },
+      detail: { default: "该内容类型尚未实现。" },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-placeholder-block]" }];
+  },
+  renderHTML({ node }) {
+    return [
+      "div",
+      { "data-placeholder-block": "", class: "tiptap-placeholder" },
+      ["small", {}, "占位 · 尚未实现"],
+      ["strong", {}, node.attrs.label],
+      ["p", {}, node.attrs.detail],
+    ];
   },
 });

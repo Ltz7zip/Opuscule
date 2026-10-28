@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import {
   runViewTransition,
@@ -6,6 +6,7 @@ import {
   useVtTarget,
 } from "../lib/viewTransition";
 import type { CardSummary, TiptapDoc, TiptapNode } from "../types";
+import { WorldTimelineBlock } from "./WorldTimelineBlock";
 
 function safeHref(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -19,6 +20,8 @@ type RichContext = {
   cards: CardSummary[];
   worldSlug: string;
   currentSlug?: string;
+  autoLink: boolean;
+  mentionMode: "inline" | "reading";
   /** Incremented in document order so heading ids match the TOC. */
   headingIndex: number;
   /** Stable id for the thumbnail -> lightbox shared element. */
@@ -130,6 +133,7 @@ function Lightbox({
 }
 
 function linkifyText(text: string, key: string, context: RichContext): ReactNode {
+  if (!context.autoLink) return text;
   const targets = context.cards
     .filter((card) => card.slug !== context.currentSlug && !card.is_auxiliary)
     .flatMap((card) => [card.title.trim(), card.slug.trim()].filter((name) => name.length >= 2).map((name) => ({ name, slug: card.slug })))
@@ -197,8 +201,8 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
   if (node.type === "horizontalRule") return <hr key={key} />;
   if (node.type === "paragraph") return <p key={key}>{renderChildren(node, context)}</p>;
   if (node.type === "heading") {
-    const level = Math.min(3, Math.max(1, Number(node.attrs?.level ?? 2)));
-    const Tag = (`h${level}` as "h1" | "h2" | "h3");
+    const level = Math.min(6, Math.max(1, Number(node.attrs?.level ?? 2)));
+    const Tag = (`h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6");
     context.headingIndex += 1;
     return <Tag id={`sec-${context.headingIndex}`} key={key}>{renderChildren(node, context)}</Tag>;
   }
@@ -206,6 +210,35 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
   if (node.type === "orderedList") return <ol key={key}>{renderChildren(node, context)}</ol>;
   if (node.type === "listItem") return <li key={key}>{renderChildren(node, context)}</li>;
   if (node.type === "blockquote") return <blockquote key={key}>{renderChildren(node, context)}</blockquote>;
+  if (node.type === "columnList") {
+    const layout = Math.min(4, Math.max(2, Number(node.attrs?.layout ?? 2)));
+    const rawWidths = node.attrs?.widths;
+    const widths = Array.isArray(rawWidths) && rawWidths.length === layout ? rawWidths.map(Number) : null;
+    const template = widths && widths.every((width) => Number.isFinite(width) && width > 0)
+      ? widths.map((width) => `minmax(0, ${width}fr)`).join(" ")
+      : null;
+    return (
+      <div
+        className={`rich-columns cols-${layout}`}
+        data-columns={layout}
+        data-preset={String(node.attrs?.preset ?? "equal")}
+        style={template ? ({ "--column-template": template } as CSSProperties) : undefined}
+        key={key}
+      >
+        {renderChildren(node, context)}
+      </div>
+    );
+  }
+  if (node.type === "column") return <div className="rich-column" key={key}>{renderChildren(node, context)}</div>;
+  if (node.type === "placeholderBlock") {
+    return (
+      <div className="rich-placeholder" key={key}>
+        <small>占位 · 尚未实现</small>
+        <strong>{String(node.attrs?.label ?? "未完成功能")}</strong>
+        <p>{String(node.attrs?.detail ?? "该内容类型尚未实现。")}</p>
+      </div>
+    );
+  }
   if (node.type === "codeBlock") return <pre key={key}><code>{renderChildren(node, context)}</code></pre>;
   if (node.type === "image") {
     const src = safeHref(node.attrs?.src);
@@ -242,7 +275,20 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
     const [mentionWorld, mentionSlug] = String(node.attrs?.id ?? "").split("/");
     const label = String(node.attrs?.label ?? mentionSlug ?? "");
     if (!/^[A-Za-z0-9_-]+$/.test(mentionWorld) || !/^[A-Za-z0-9_-]+$/.test(mentionSlug)) {
-      return <span className="rich-mention" key={key}>@{label}</span>;
+      return <span className="rich-mention" key={key}>{context.mentionMode === "reading" ? label : `@${label}`}</span>;
+    }
+    if (context.mentionMode === "reading") {
+      const card = context.cards.find(
+        (item) => item.slug === mentionSlug && !item.is_auxiliary,
+      );
+      if (!card) {
+        return <span className="rich-mention rich-mention-plain" key={key}>{label}</span>;
+      }
+      return (
+        <a className="rich-mention rich-mention-reading" key={key} href={`/w/${mentionWorld}/wiki/${mentionSlug}`}>
+          {label}<sup aria-hidden="true">↗</sup>
+        </a>
+      );
     }
     return <a className="rich-mention" key={key} href={`/w/${mentionWorld}/wiki/${mentionSlug}`}>@{label}</a>;
   }
@@ -305,6 +351,18 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
       </a>
     );
   }
+  if (node.type === "worldTimeline") {
+    const timelineSlug = String(node.attrs?.slug ?? "");
+    if (!timelineSlug) return null;
+    return (
+      <WorldTimelineBlock
+        key={key}
+        worldSlug={context.worldSlug}
+        timelineSlug={timelineSlug}
+        name={String(node.attrs?.name ?? "")}
+      />
+    );
+  }
   if (node.type === "cardEmbed") {
     const worldSlug = String(node.attrs?.worldSlug ?? "");
     const slug = String(node.attrs?.slug ?? "");
@@ -319,11 +377,13 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
   return <Fragment key={key}>{renderChildren(node, context)}</Fragment>;
 }
 
-export function RichText({ doc, cards = [], worldSlug = "", currentSlug }: {
+export function RichText({ doc, cards = [], worldSlug = "", currentSlug, autoLink = true, mentionMode = "inline" }: {
   doc: TiptapDoc | null | undefined;
   cards?: CardSummary[];
   worldSlug?: string;
   currentSlug?: string;
+  autoLink?: boolean;
+  mentionMode?: "inline" | "reading";
 }) {
   const [image, setImage] = useState<ImageTarget | null>(null);
   const [vtId, setVtId] = useState<string | null>(null);
@@ -346,6 +406,8 @@ export function RichText({ doc, cards = [], worldSlug = "", currentSlug }: {
     cards,
     worldSlug,
     currentSlug,
+    autoLink,
+    mentionMode,
     headingIndex: 0,
     imageIndex: 0,
     onOpenImage: openImage,

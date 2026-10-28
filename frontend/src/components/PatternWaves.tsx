@@ -156,6 +156,9 @@ const RIPPLE_CELL = 8;
 const RIPPLE_RATE = 60;
 const PIXEL_BUDGET = 4.5e6;
 const INTRO_SECONDS = 2;
+const LOW_POWER_FPS = 30;
+const LOW_POWER_SCALE = 0.75;
+const INTERACTIVE_FPS = 60;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -677,15 +680,27 @@ const PatternWaves = ({
     });
 
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    const cores = navigator.hardwareConcurrency ?? 8;
+    const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+    // High-end desktops keep the native resolution and refresh rate. Phones,
+    // tablets and low-core machines render the soft ambient field at 30fps and
+    // 0.75x internally; text, UI and reduced-motion snapshots stay native.
+    const lowPower = coarsePointer || cores <= 8 || memory <= 4;
+    const renderScale = lowPower ? LOW_POWER_SCALE : 1;
+    const ambientFps = lowPower ? LOW_POWER_FPS : 0;
 
     let width = 1;
     let height = 1;
     let raf = 0;
     let last = performance.now();
+    let lastPaint = 0;
     let time = 0;
     let introClock = 0;
     let visible = true;
     let alive = true;
+    let focused = true;
+    let pageHidden = document.hidden;
     let dirty = true;
     let rippleUntil = 0;
     let rippleLive = false;
@@ -728,8 +743,15 @@ const PatternWaves = ({
     const resize = () => {
       width = Math.max(1, container.clientWidth);
       height = Math.max(1, container.clientHeight);
-      renderer.dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(PIXEL_BUDGET / (width * height)));
+      // Render the ambient surface at a slightly lower internal resolution and
+      // let CSS upscale it. Text and UI stay native; the soft dot field is a
+      // good candidate for this because it has no high-frequency detail.
+      const qualityScale = reducedMotion ? 1 : renderScale;
+      const budgetDpr = Math.sqrt(PIXEL_BUDGET / (width * height));
+      renderer.dpr = Math.max(0.5, Math.min(window.devicePixelRatio || 1, 2, budgetDpr) * qualityScale);
       renderer.setSize(width, height);
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
       buildRipple();
       dirty = true;
       start();
@@ -762,19 +784,11 @@ const PatternWaves = ({
 
     const frame = (now: number) => {
       raf = 0;
-      if (!alive) return;
+      if (!alive || !visible || !focused || pageHidden) return;
       const s = settingsRef.current;
-      const dt = Math.min(0.05, Math.max(1 / 240, (now - last) / 1000));
-      last = now;
       if (!s) return;
 
       const moving = !s.paused && !reducedMotion && s.speed !== 0;
-      if (moving) time += dt * s.speed;
-      introClock = s.intro && !reducedMotion ? Math.min(1, introClock + dt / INTRO_SECONDS) : 1;
-      const appear = 1 - Math.pow(1 - clamp(introClock / 0.75, 0, 1), 3);
-      const rise = clamp((introClock - 0.1) / 0.9, 0, 1);
-      const amp = rise * rise * (3 - 2 * rise);
-
       const rippling = s.interactive && !reducedMotion && !!ripple && s.cursorStrength > 0;
       if (rippling && pointer.inside && !pointer.placed) {
         pointer.lastX = pointer.x;
@@ -783,6 +797,25 @@ const PatternWaves = ({
       }
       if (rippling && (pointer.inside || pointer.burst > 0)) rippleUntil = now + 5000;
       const rippleActive = rippling && now < rippleUntil;
+      const animating = moving || introClock < 1 || rippleActive || dirty;
+      const frameInterval = ambientFps ? 1000 / (rippleActive ? INTERACTIVE_FPS : ambientFps) : 0;
+      // Ambient motion is slow enough for 30fps; pointer ripples get 60fps.
+      // Skipped frames still advance real time because `last` only moves on a
+      // painted frame.
+      if (animating && now - lastPaint < frameInterval) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
+      const dt = Math.min(0.05, Math.max(1 / 240, (now - last) / 1000));
+      last = now;
+      lastPaint = now;
+      if (moving) time += dt * s.speed;
+      introClock = s.intro && !reducedMotion ? Math.min(1, introClock + dt / INTRO_SECONDS) : 1;
+      const appear = 1 - Math.pow(1 - clamp(introClock / 0.75, 0, 1), 3);
+      const rise = clamp((introClock - 0.1) / 0.9, 0, 1);
+      const amp = rise * rise * (3 - 2 * rise);
+
       if (rippleActive && ripple) {
         stepRipple(ripple, s, dt);
         rippleLive = true;
@@ -852,8 +885,9 @@ const PatternWaves = ({
     };
 
     const start = () => {
-      if (raf || !visible || !alive) return;
+      if (raf || !visible || !alive || !focused || pageHidden) return;
       last = performance.now();
+      lastPaint = 0;
       raf = requestAnimationFrame(frame);
     };
 
@@ -901,7 +935,22 @@ const PatternWaves = ({
     };
 
     const onVisibility = () => {
-      if (!document.hidden) start();
+      pageHidden = document.hidden;
+      if (pageHidden) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        return;
+      }
+      start();
+    };
+    const onBlur = () => {
+      focused = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const onFocus = () => {
+      focused = true;
+      start();
     };
 
     window.addEventListener('pointermove', onPointerMove, { passive: true });
@@ -909,13 +958,19 @@ const PatternWaves = ({
     window.addEventListener('pointerout', onPointerOut, { passive: true });
     window.addEventListener('pointerup', onPointerUp, { passive: true });
     window.addEventListener('blur', onPointerLeave);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
 
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
     const intersectionObserver = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
-      start();
+      if (visible) start();
+      else if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
     });
     intersectionObserver.observe(container);
 
@@ -936,6 +991,8 @@ const PatternWaves = ({
       window.removeEventListener('pointerout', onPointerOut);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('blur', onPointerLeave);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       wakeRef.current = null;
       if (ripple) {

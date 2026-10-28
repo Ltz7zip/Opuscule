@@ -6,11 +6,13 @@ import {
   createCollection,
   fetchCard,
   fetchWorld,
+  fetchWorldConceptEdit,
   updateWorld,
   type ApiError,
 } from "../api";
-import type { CardDetail, CardSummary, SessionState, WorldDetail } from "../types";
+import type { CardDetail, CardSummary, SessionState, WorldConcept, WorldConceptEdit, WorldDetail } from "../types";
 import { CardEditor } from "./CardEditor";
+import { ConceptEditor } from "./ConceptEditor";
 import { CardEraDialog } from "./CardEraDialog";
 import { CommandPalette } from "./CommandPalette";
 import { TrashDialog } from "./TrashDialog";
@@ -31,11 +33,13 @@ interface WorkspaceProps {
   worldSlug: string;
   session: SessionState | null;
   onLogout: () => void;
+  conceptMode?: boolean;
 }
 
-export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
+export function Workspace({ worldSlug, session, onLogout, conceptMode = false }: WorkspaceProps) {
   const [world, setWorld] = useState<WorldDetail | null>(null);
   const [card, setCard] = useState<CardDetail | null>(null);
+  const [concept, setConcept] = useState<WorldConceptEdit | null>(null);
   const [loading, setLoading] = useState(true);
   const [cardLoading, setCardLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -101,6 +105,10 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
 
   const selectCard = useCallback(
     async (summary: CardSummary, options?: { animate?: boolean }) => {
+      if (conceptMode) {
+        window.location.assign(`/w/${worldSlug}?card=${summary.id}`);
+        return;
+      }
       const animate = options?.animate ?? true;
       setCardLoading(true);
       setError(null);
@@ -139,7 +147,7 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
         setCardLoading(false);
       }
     },
-    [worldSlug],
+    [conceptMode, worldSlug],
   );
 
   useEffect(() => {
@@ -147,15 +155,22 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
     setLoading(true);
     setError(null);
     fetchWorld(worldSlug)
-      .then((nextWorld) => {
+      .then(async (nextWorld) => {
         if (cancelled) return;
         setWorld(nextWorld);
+        if (conceptMode) {
+          const nextConcept = await fetchWorldConceptEdit(worldSlug);
+          if (cancelled) return;
+          setConcept(nextConcept);
+          setCard(null);
+          return;
+        }
         const queryCard = Number(new URLSearchParams(window.location.search).get("card"));
         const initial = nextWorld.cards.find((item) => item.id === queryCard) ?? nextWorld.cards[0];
         if (initial) void selectCard(initial, { animate: false });
       })
       .catch((cause: ApiError) => {
-        if (!cancelled) setError(cause.message ?? "世界加载失败");
+        if (!cancelled) setError(cause.message ?? (conceptMode ? "概念加载失败" : "世界加载失败"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -163,11 +178,40 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectCard, worldSlug]);
+  }, [conceptMode, selectCard, worldSlug]);
 
   useEffect(() => {
-    document.title = world ? `${world.name} · 工作区` : "Opuscule · 工作区";
-  }, [world]);
+    document.title = world
+      ? conceptMode
+        ? `世界概念 · ${world.name}`
+        : `${world.name} · 工作区`
+      : "Opuscule · 工作区";
+  }, [conceptMode, world]);
+
+  const handleSavedConcept = (updated: WorldConceptEdit) => {
+    setConcept(updated);
+  };
+
+  const handlePublishedConcept = (published: WorldConcept) => {
+    setConcept((current) =>
+      current
+        ? {
+            ...current,
+            exists: true,
+            draft_json: published.body_json,
+            draft_text: published.body_text,
+            body_json: published.body_json,
+            body_text: published.body_text,
+            published_at: published.published_at,
+            created_at: published.created_at,
+            updated_at: published.updated_at,
+            revision: published.revision,
+            created_by: published.created_by,
+            updated_by: published.updated_by,
+          }
+        : current,
+    );
+  };
 
   const togglePublish = async () => {
     if (!world || world.role !== "owner" || publishing) return;
@@ -318,6 +362,9 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
         <Sidebar
           world={world}
           selectedCardId={card?.id ?? null}
+          conceptActive={conceptMode}
+          conceptStatus={!concept || !concept.exists ? "none" : concept.published_at ? "published" : "draft"}
+          onSelectConcept={() => window.location.assign(`/w/${worldSlug}/wiki/edit`)}
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           onSelectCard={(summary) => void selectCard(summary)}
@@ -413,14 +460,26 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
             </div>
           )}
 
-          {!loading && world && cardLoading && (
+          {!loading && world && conceptMode && concept && (
+            <ConceptEditor
+              worldSlug={worldSlug}
+              world={world}
+              concept={concept}
+              onSaved={handleSavedConcept}
+              onPublished={handlePublishedConcept}
+              onStatus={setSaveState}
+              readOnly={!world.can_edit}
+            />
+          )}
+
+          {!loading && world && !conceptMode && cardLoading && (
             <div className="loading">
               <Loader2 size={16} className="spin" />
               正在载入卡片…
             </div>
           )}
 
-          {!loading && world && !cardLoading && card && (
+          {!loading && world && !conceptMode && !cardLoading && card && (
             <>
               {!world.can_edit && (
                 <div className="readonly-banner" role="status">
@@ -443,7 +502,7 @@ export function Workspace({ worldSlug, session, onLogout }: WorkspaceProps) {
             </>
           )}
 
-          {!loading && world && !cardLoading && !card && !error && (
+          {!loading && world && !conceptMode && !cardLoading && !card && !error && (
             <EmptyState worldSlug={world.slug} onNewCard={() => void handleNewCard()} />
           )}
         </main>

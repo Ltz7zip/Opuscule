@@ -469,64 +469,6 @@ class SearchPaginationTests(APITestCase):
         self.assertEqual(self.client.get("/api/search/?q=雾&limit=x").status_code, 400)
 
 
-class CardImageUploadTests(APITestCase):
-    def setUp(self):
-        import tempfile
-
-        from django.test import override_settings
-        from django.contrib.auth import get_user_model
-
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tempdir.cleanup)
-        self.override = override_settings(MEDIA_ROOT=self.tempdir.name)
-        self.override.enable()
-        self.addCleanup(self.override.disable)
-        from apps.worlds.models import World, WorldMembership
-
-        self.owner = get_user_model().objects.create_user(username="image_owner", password="secret")
-        self.editor = get_user_model().objects.create_user(username="image_editor", password="secret")
-        self.world = World.objects.create(slug="image-world", name="图片世界", is_public_read=True)
-        WorldMembership.objects.create(world=self.world, user=self.owner, role=WorldMembership.Role.OWNER)
-        WorldMembership.objects.create(world=self.world, user=self.editor, role=WorldMembership.Role.EDITOR)
-        self.card = Card.objects.create(world=self.world, title="图片卡", slug="image-card")
-
-    def _upload(self, content=b"\x89PNG\r\n\x1a\n" + b"x" * 20, content_type="image/png"):
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        return self.client.post(
-            f"/api/worlds/image-world/cards/{self.card.id}/images/",
-            {"file": SimpleUploadedFile("photo.png", content, content_type=content_type)},
-            format="multipart",
-        )
-
-    def test_owner_uploads_and_deletes_image(self):
-        self.client.force_authenticate(self.owner)
-        uploaded = self._upload()
-        self.assertEqual(uploaded.status_code, 201, uploaded.data)
-        self.assertIn("/media/card-images/", uploaded.data["url"])
-        self.assertEqual(self.card.images.count(), 1)
-        deleted = self.client.delete(
-            f"/api/worlds/image-world/cards/{self.card.id}/images/{uploaded.data['id']}/"
-        )
-        self.assertEqual(deleted.status_code, 204)
-        self.assertEqual(self.card.images.count(), 0)
-
-    def test_editor_can_upload_but_invalid_images_are_rejected(self):
-        self.client.force_authenticate(self.editor)
-        self.assertEqual(self._upload().status_code, 201)
-        self.assertEqual(self._upload(content=b"not-an-image").status_code, 400)
-        self.assertEqual(self._upload(content_type="text/plain").status_code, 400)
-
-    def test_owner_lists_uploaded_images(self):
-        self.client.force_authenticate(self.owner)
-        uploaded = self._upload()
-        response = self.client.get(f"/api/worlds/image-world/cards/{self.card.id}/images/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["id"], uploaded.data["id"])
-        self.assertIn("/media/card-images/", response.data[0]["url"])
-
-
 class CardCommentApiTests(APITestCase):
     def setUp(self):
         from django.contrib.auth import get_user_model
@@ -733,3 +675,29 @@ class Api404ShapeTests(APITestCase):
         response = self.client.get("/definitely-not-a-page")
         self.assertEqual(response.status_code, 404)
         self.assertIn(b"<html", response.content.lower())
+
+
+class CardReservedSlugTests(APITestCase):
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user(username="slug_owner", password="secret")
+        self.world = World.objects.create(slug="slug-world", name="Slug World")
+        WorldMembership.objects.create(world=self.world, user=self.owner, role=WorldMembership.Role.OWNER)
+        self.client.force_authenticate(self.owner)
+
+    def test_generated_slug_avoids_route_reserved_words(self):
+        response = self.client.post(
+            "/api/worlds/slug-world/cards/",
+            {"title": "Cards"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertNotIn(response.data["slug"], {"cards", "edit"})
+        self.assertEqual(response.data["slug"], "cards-card")
+
+    def test_user_supplied_reserved_slug_is_rejected(self):
+        response = self.client.post(
+            "/api/worlds/slug-world/cards/",
+            {"title": "正常标题", "slug": "edit"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)

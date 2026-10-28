@@ -12,12 +12,69 @@
 
 .tiptap > * + *,
 .rich-text > * + * { margin-top: 0.85em; }
-.tiptap h1, .tiptap h2, .tiptap h3,
-.rich-text h1, .rich-text h2, .rich-text h3 { letter-spacing: -0.02em; line-height: 1.25; margin: 1.1em 0 0.35em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6,
+.rich-text h1, .rich-text h2, .rich-text h3, .rich-text h4, .rich-text h5, .rich-text h6 { letter-spacing: -0.02em; line-height: 1.25; margin: 1.1em 0 0.35em; }
 .tiptap h1, .rich-text h1 { font-size: 1.85em; }
 .tiptap h2, .rich-text h2 { font-size: 1.35em; }
 .tiptap h3, .rich-text h3 { font-size: 1.12em; }
+.tiptap h4, .rich-text h4 { font-size: 1.02em; }
+.tiptap h5, .rich-text h5 { font-size: 0.95em; }
+.tiptap h6, .rich-text h6 { font-size: 0.88em; }
 .tiptap p, .rich-text p { margin: 0; }
+
+.tiptap-columns, .rich-columns {
+  --column-count: 2;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--column-template, repeat(var(--column-count), minmax(0, 1fr)));
+  align-items: start;
+  gap: clamp(1.5rem, 3.2vw, 2.5rem);
+  margin: 1.1em 0;
+}
+.tiptap-columns[data-preset="aside"], .rich-columns[data-preset="aside"] {
+  --column-template: minmax(88px, 0.2fr) minmax(0, 1fr);
+}
+.tiptap-columns[data-columns="3"], .rich-columns[data-columns="3"] { --column-count: 3; }
+.tiptap-columns[data-columns="4"], .rich-columns[data-columns="4"] { --column-count: 4; }
+.tiptap-columns-content, .tiptap-columns [data-node-view-content-react] { display: contents; }
+.tiptap-column, .rich-column { min-width: 0; line-height: 1.75; }
+.tiptap-column > :first-child, .rich-column > :first-child { margin-top: 0; }
+.tiptap-column > :last-child, .rich-column > :last-child { margin-bottom: 0; }
+.tiptap .tiptap-column > p + p, .rich-text .rich-column > p + p { margin-top: 0.75em; }
+.tiptap-column-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  opacity: .55;
+  touch-action: none;
+}
+.tiptap-column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--foreground);
+  opacity: .32;
+}
+.tiptap-columns:hover .tiptap-column-resizer,
+.tiptap-column-resizer:focus-visible,
+.tiptap-column-resizer:active { opacity: 1; }
+.tiptap-column-resizer:hover::after,
+.tiptap-column-resizer:active::after { opacity: .9; }
+.tiptap-column-resizer:focus-visible { outline: none; }
+.tiptap-column-resizer:focus-visible::after { opacity: 1; width: 2px; }
+
 .tiptap ul, .tiptap ol,
 .rich-text ul, .rich-text ol { padding-left: 1.35em; margin: 0.55em 0; }
 .tiptap li, .rich-text li { margin: 0.18em 0; }
@@ -44,4 +101,60 @@
 
 .rich-text { margin-top: 24px; }
 
-.rich-text :is(h1, h2, h3) { scroll-margin-top: 96px; }
+.rich-text :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 96px; }
+
+.tiptap-placeholder,
+.rich-placeholder {
+  margin: 1.1em 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--muted-foreground);
+}
+.tiptap-placeholder small,
+.rich-placeholder small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.tiptap-placeholder strong,
+.rich-placeholder strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.tiptap-placeholder p,
+.rich-placeholder p {
+  margin: 4px 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.65;
+}
+
+
+@media (max-width: 720px) {
+  .tiptap-columns,
+  .rich-columns { grid-template-columns: 1fr; gap: var(--space-4); }
+  .tiptap-column-resizer { display: none; }
+}
+
+.editor-column-drop-line {
+  position: fixed;
+  z-index: 20;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: var(--foreground);
+  box-shadow: 0 0 0 2px var(--background);
+  pointer-events: none;
+}
+
+/* Public article typography sets h2/h3 margins at higher specificity. */
+.site-article-body .rich-text .rich-column > :first-child,
+.wiki-page .wiki-article .rich-text .rich-column > :first-child { margin-top: 0; }
+.site-article-body .rich-text .rich-column > :last-child,
+.wiki-page .wiki-article .rich-text .rich-column > :last-child { margin-bottom: 0; }

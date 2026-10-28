@@ -1,13 +1,14 @@
 interface WorldNavProps {
   worldSlug: string;
   worldName?: string;
-  active?: "wiki" | "map" | "timeline";
+  active?: "wiki" | "cards" | "map" | "timeline";
 }
 
 const TABS = [
-  { key: "wiki", label: "条目", path: "wiki" },
-  { key: "map", label: "地图", path: "map" },
+  { key: "wiki", label: "世界", path: "wiki" },
+  { key: "cards", label: "设定", path: "wiki/cards" },
   { key: "timeline", label: "时间线", path: "timeline" },
+  { key: "map", label: "地图", path: "map" },
 ] as const;
 
 /** One click between a world's public surfaces. Without this, the map and the

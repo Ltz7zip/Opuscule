@@ -12,11 +12,13 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.core.validators import validate_slug
 from django.db import transaction
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.cards.models import Card, plain_text
 from apps.collections.models import Collection
 
-from .models import World, WorldMembership
+from .models import World, WorldConcept, WorldConceptRevision, WorldMembership
 from .services import _unique_slug
 
 MAX_ZIP_BYTES = 10 * 1024 * 1024
@@ -89,6 +91,81 @@ def _slug(value: object, field: str, limit: int) -> str:
     except DjangoValidationError as exc:
         raise WorldImportError(f"{field} 只能包含字母、数字、下划线或连字符") from exc
     return slug
+
+
+def _timestamp(value: object, field: str):
+    """Parse an optional ISO timestamp from the archive, rejecting junk."""
+    if value in (None, ""):
+        return None
+    parsed = parse_datetime(str(value))
+    if parsed is None:
+        raise WorldImportError(f"{field} 不是有效时间")
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.UTC)
+    return parsed
+
+
+def _import_concept(world: World, owner, raw: object) -> None:
+    """Restore the world concept and its published revision snapshots."""
+    if raw in (None, {}):
+        return
+    if not isinstance(raw, dict):
+        raise WorldImportError("concept 无效")
+    draft_json = raw.get("draft_json") or {}
+    body_json = raw.get("body_json") or {}
+    if not isinstance(draft_json, dict) or not isinstance(body_json, dict):
+        raise WorldImportError("concept 文档无效")
+    published_at = _timestamp(raw.get("published_at"), "concept.published_at")
+    if not draft_json and not body_json:
+        return
+    try:
+        revision = int(raw.get("revision") or 0)
+    except (TypeError, ValueError) as exc:
+        raise WorldImportError("concept.revision 无效") from exc
+    revision = max(revision, 0)
+    concept = WorldConcept.objects.create(
+        world=world,
+        draft_json=draft_json,
+        # Text indexes search and the read page; derive it instead of trusting
+        # archived text that could disagree with the document.
+        draft_text=plain_text(draft_json),
+        body_json=body_json,
+        body_text=plain_text(body_json),
+        published_at=published_at if body_json else None,
+        revision=revision if body_json else 0,
+        created_by=owner,
+        updated_by=owner,
+    )
+    seen: set[int] = set()
+    for item in raw.get("revisions") or []:
+        if not isinstance(item, dict):
+            raise WorldImportError("concept.revisions 项无效")
+        try:
+            number = int(item.get("revision"))
+        except (TypeError, ValueError) as exc:
+            raise WorldImportError("concept.revisions.revision 无效") from exc
+        if number < 1 or number in seen:
+            continue
+        snapshot_json = item.get("body_json") or {}
+        if not isinstance(snapshot_json, dict) or not snapshot_json:
+            continue
+        snapshot_at = _timestamp(item.get("published_at"), "concept.revisions.published_at")
+        if snapshot_at is None:
+            continue
+        seen.add(number)
+        WorldConceptRevision.objects.create(
+            concept=concept,
+            revision=number,
+            body_json=snapshot_json,
+            body_text=plain_text(snapshot_json),
+            published_at=snapshot_at,
+            created_by=owner,
+        )
+    if seen:
+        highest = max(seen)
+        if concept.revision < highest:
+            concept.revision = highest
+            concept.save(update_fields=["revision", "updated_at"])
 
 
 def _assert_acyclic(parent_of: dict[str, str]) -> None:
@@ -224,4 +301,6 @@ def import_world(*, owner, upload) -> World:
             y=y,
             created_by=owner,
         )
+
+    _import_concept(world, owner, data.get("concept"))
     return world

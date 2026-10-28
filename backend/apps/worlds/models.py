@@ -89,6 +89,121 @@ class WorldMembership(TimeStampedModel):
         return f"{self.world.slug}:{self.user} ({self.role})"
 
 
+class WorldMedia(TimeStampedModel):
+    """One world-wide media asset shared by cards and the concept editor."""
+
+    world = models.ForeignKey(World, on_delete=models.CASCADE, related_name="media")
+    file = models.FileField(upload_to="world-media/")
+    name = models.CharField(max_length=240, blank=True, default="")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="uploaded_world_media",
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["world", "-created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.world.slug}: {self.name or self.file.name}"
+
+
+class WorldConcept(TimeStampedModel):
+    """The single world-level concept document; never a Card."""
+
+    world = models.OneToOneField(World, on_delete=models.CASCADE, related_name="concept")
+    draft_json = models.JSONField(default=dict, blank=True)
+    draft_text = models.TextField(blank=True, default="")
+    body_json = models.JSONField(default=dict, blank=True)
+    body_text = models.TextField(blank=True, default="")
+    published_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_world_concepts",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="updated_world_concepts",
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.world.slug}: concept"
+
+
+class WorldConceptRevision(models.Model):
+    """An immutable published snapshot of the world concept."""
+
+    concept = models.ForeignKey(WorldConcept, on_delete=models.CASCADE, related_name="revisions")
+    revision = models.PositiveIntegerField()
+    body_json = models.JSONField(default=dict, blank=True)
+    body_text = models.TextField(blank=True, default="")
+    published_at = models.DateTimeField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_world_concept_revisions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-revision"]
+        constraints = [
+            models.UniqueConstraint(fields=["concept", "revision"], name="unique_world_concept_revision")
+        ]
+        indexes = [models.Index(fields=["concept", "-revision"])]
+
+    def __str__(self) -> str:
+        return f"{self.concept.world.slug}: concept r{self.revision}"
+
+
+class WorldConceptComment(TimeStampedModel):
+    """A member annotation on the world concept, optionally tied to a quote."""
+
+    concept = models.ForeignKey(
+        WorldConcept,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="world_concept_comments",
+    )
+    body = models.TextField(max_length=2000)
+    quote = models.TextField(blank=True, default="")
+    anchor_id = models.CharField(max_length=64, blank=True, default="")
+    resolved = models.BooleanField(default=False)
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="replies",
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.concept.world.slug}: {self.body[:40]}"
+
+
 def invite_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -158,6 +273,8 @@ class WorldAuditEvent(models.Model):
         INVITE_ACCEPTED = "invite.accepted", "邀请接受"
         IMPORTED = "world.imported", "世界导入"
         TERRAIN_UPLOADED = "terrain.uploaded", "地形由本地生成上传"
+        CONCEPT_PUBLISHED = "concept.published", "世界概念发布"
+        MEDIA_DELETED = "media.deleted", "共享媒体删除"
 
     world = models.ForeignKey(World, on_delete=models.CASCADE, related_name="audit_events")
     actor = models.ForeignKey(

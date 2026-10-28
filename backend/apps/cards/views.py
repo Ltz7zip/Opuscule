@@ -4,15 +4,14 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.identity.models import UserProfile
 from apps.worlds.access import get_world_for_read, get_world_for_write
-from apps.worlds.models import World, WorldMembership
+from apps.worlds.models import World, WorldConcept, WorldMembership
 
-from .models import Card, CardComment, CardImage, CardRevision, Notification, plain_text
+from .models import Card, CardComment, CardRevision, Notification, plain_text
 from .serializers import (
     CardCommentSerializer,
     CardDetailSerializer,
@@ -203,7 +202,15 @@ class SearchView(APIView):
         query = (request.query_params.get("q") or "").strip()[:80]
         if not query:
             response = Response(
-                {"query": "", "worlds": [], "users": [], "results": [], "total": 0, "has_more": False}
+                {
+                    "query": "",
+                    "worlds": [],
+                    "users": [],
+                    "concepts": [],
+                    "results": [],
+                    "total": 0,
+                    "has_more": False,
+                }
             )
             response["Cache-Control"] = "public, max-age=30"
             return response
@@ -270,6 +277,29 @@ class SearchView(APIView):
         ).distinct().order_by("-updated_at")[:8]
         if world_slug:
             profiles = profiles.none()
+        concepts = (
+            WorldConcept.objects.filter(
+                published_at__isnull=False,
+                world__is_public_read=True,
+                world__deleted_at__isnull=True,
+            )
+            .select_related("world")
+            .filter(Q(body_text__icontains=query) | Q(world__name__icontains=query))
+            .order_by("-published_at")[:8]
+        )
+        if world_slug:
+            concepts = concepts.none()
+        concept_results = [
+            {
+                "world_slug": concept.world.slug,
+                "world_name": concept.world.name,
+                "title": "世界概念",
+                "snippet": _snippet(concept.body_text, query),
+                "revision": concept.revision,
+                "published_at": concept.published_at,
+            }
+            for concept in concepts
+        ]
         user_results = [
             {
                 "username": profile.user.username,
@@ -305,6 +335,7 @@ class SearchView(APIView):
                 "query": query,
                 "worlds": world_results,
                 "users": user_results,
+                "concepts": concept_results,
                 "results": results,
                 "total": total,
                 "has_more": offset + len(results) < total,
@@ -312,64 +343,6 @@ class SearchView(APIView):
         )
         response["Cache-Control"] = "public, max-age=30"
         return response
-
-
-class CardImageUploadView(APIView):
-    parser_classes = [MultiPartParser]
-
-    MAX_BYTES = 4 * 1024 * 1024
-    SIGNATURES = {
-        "image/png": (b"\x89PNG\r\n\x1a\n",),
-        "image/jpeg": (b"\xff\xd8\xff",),
-        "image/webp": (b"RIFF",),
-    }
-
-    def _card(self, request, world_slug: str, pk: int):
-        world = get_world_for_write(request, world_slug)
-        return get_object_or_404(Card, pk=pk, world=world)
-
-    def get(self, request, world_slug: str, pk: int):
-        card = self._card(request, world_slug, pk)
-        return Response(
-            [
-                {
-                    "id": image.id,
-                    "url": request.build_absolute_uri(image.file.url),
-                    "name": image.file.name.rsplit("/", 1)[-1],
-                    "created_at": image.created_at,
-                }
-                for image in card.images.all()
-            ]
-        )
-
-    def post(self, request, world_slug: str, pk: int):
-        card = self._card(request, world_slug, pk)
-        upload = request.FILES.get("file")
-        if upload is None:
-            return Response({"detail": "请选择图片"}, status=status.HTTP_400_BAD_REQUEST)
-        if upload.size > self.MAX_BYTES:
-            return Response({"detail": "图片不能超过 4 MB"}, status=status.HTTP_400_BAD_REQUEST)
-        prefixes = self.SIGNATURES.get(upload.content_type)
-        head = upload.read(12)
-        upload.seek(0)
-        if prefixes is None or not any(head.startswith(prefix) for prefix in prefixes):
-            return Response({"detail": "仅支持 PNG/JPEG/WebP 图片"}, status=status.HTTP_400_BAD_REQUEST)
-        image = CardImage.objects.create(card=card, file=upload, created_by=request.user)
-        return Response(
-            {
-                "id": image.id,
-                "url": request.build_absolute_uri(image.file.url),
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-    def delete(self, request, world_slug: str, pk: int, image_id: int):
-        card = self._card(request, world_slug, pk)
-        image = get_object_or_404(CardImage, pk=image_id, card=card)
-        image.file.delete(save=False)
-        image.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
 
 
 class CardCommentListCreateView(generics.ListCreateAPIView):

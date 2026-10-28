@@ -202,10 +202,20 @@ export interface SearchUserResult {
   headline: string;
 }
 
+export interface SearchConceptResult {
+  world_slug: string;
+  world_name: string;
+  title: string;
+  snippet: string;
+  revision: number;
+  published_at: string;
+}
+
 export interface SearchResponse {
   query: string;
   worlds: SearchWorldResult[];
   users: SearchUserResult[];
+  concepts: SearchConceptResult[];
   results: SearchResult[];
   total: number;
   has_more: boolean;
@@ -320,11 +330,75 @@ export interface CardComment {
   updated_at: string;
 }
 
-export interface CardImageAsset {
+export type WorldMediaReferenceKind = "card" | "concept";
+
+export interface WorldMediaReference {
+  kind: WorldMediaReferenceKind;
+  id: number;
+  title: string;
+  field: string;
+}
+
+/** A world-wide image asset shared by the card and concept editors. */
+export interface WorldMediaAsset {
   id: number;
   url: string;
   name: string;
+  created_at?: string;
+  /** Number of content references that would block deletion. */
+  usage?: number;
+  references?: WorldMediaReference[];
+}
+
+export interface WorldConcept {
+  body_json: TiptapDoc;
+  body_text: string;
+  published_at: string | null;
   created_at: string;
+  updated_at: string;
+  revision: number;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface WorldConceptComment {
+  id: number;
+  body: string;
+  quote: string;
+  anchor_id: string;
+  resolved: boolean;
+  parent: number | null;
+  author_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorldConceptEdit {
+  exists: boolean;
+  draft_json: TiptapDoc;
+  draft_text: string;
+  body_json: TiptapDoc | null;
+  body_text: string;
+  published_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  revision: number;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface WorldConceptRevisionSummary {
+  revision: number;
+  published_at: string;
+  created_at: string;
+  created_by: string | null;
+  char_count: number;
+  is_current: boolean;
+}
+
+export interface WorldConceptRevisionDetail extends WorldConceptRevisionSummary {
+  body_json: TiptapDoc;
+  body_text: string;
 }
 
 export interface TimelineEra {

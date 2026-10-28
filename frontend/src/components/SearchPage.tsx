@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
+import { BookOpen } from "lucide-react";
 
 import { searchCards } from "../api";
-import type { SearchResult, SearchUserResult, SearchWorldResult, SessionState } from "../types";
+import type {
+  SearchConceptResult,
+  SearchResult,
+  SearchUserResult,
+  SearchWorldResult,
+  SessionState,
+} from "../types";
 import { typeLabel } from "../lib/labels";
 import { useDocumentMeta } from "../lib/meta";
 import { useSharedSource } from "../lib/viewTransition";
@@ -52,6 +59,29 @@ function SearchHit({ result, query }: { result: SearchResult; query: string }) {
   );
 }
 
+function ConceptHit({ result, query }: { result: SearchConceptResult; query: string }) {
+  return (
+    <li className="site-hit">
+      <a className="site-hit-name site-hit-main" href={`/w/${result.world_slug}/wiki`}>
+        <span className="site-hit-icon" aria-hidden="true">
+          <BookOpen size={16} />
+        </span>
+        <span className="site-hit-text">
+          <span className="site-hit-title">
+            <Highlight text={`${result.world_name} · ${result.title}`} query={query} />
+          </span>
+          <span className="site-hit-meta">世界概念 · 第 {result.revision} 版</span>
+          {result.snippet && (
+            <span className="site-hit-snippet">
+              <Highlight text={result.snippet} query={query} />
+            </span>
+          )}
+        </span>
+      </a>
+    </li>
+  );
+}
+
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <>{text}</>;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -73,6 +103,7 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [worlds, setWorlds] = useState<SearchWorldResult[]>([]);
   const [users, setUsers] = useState<SearchUserResult[]>([]);
+  const [concepts, setConcepts] = useState<SearchConceptResult[]>([]);
   const [searched, setSearched] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -101,6 +132,7 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
       setResults([]);
       setWorlds([]);
       setUsers([]);
+      setConcepts([]);
       setActiveQuery("");
       setSearched(false);
       setHasMore(false);
@@ -115,6 +147,10 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
         : data.results;
       setWorlds(worldSlug ? [] : data.worlds ?? []);
       setUsers(worldSlug ? [] : data.users ?? []);
+      const conceptHits = worldSlug
+        ? (data.concepts ?? []).filter((item) => item.world_slug === worldSlug)
+        : (data.concepts ?? []);
+      setConcepts(conceptHits);
       setResults(scoped);
       setHasMore(data.has_more && !worldSlug);
       setActiveQuery(data.query);
@@ -156,7 +192,7 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
     void runSearch(q);
   };
 
-  const total = results.length + worlds.length + users.length;
+  const total = results.length + worlds.length + users.length + concepts.length;
 
   return (
     <div className="site-page search-page">
@@ -256,6 +292,21 @@ export function SearchPage({ session, onLogout }: SearchPageProps) {
                     </a>
                   ))}
                 </div>
+              </section>
+            )}
+
+            {concepts.length > 0 && (
+              <section className="site-section" aria-label="世界概念">
+                <h2>世界概念</h2>
+                <ul className="site-hit-list">
+                  {concepts.map((result) => (
+                    <ConceptHit
+                      key={`${result.world_slug}:concept`}
+                      result={result}
+                      query={activeQuery}
+                    />
+                  ))}
+                </ul>
               </section>
             )}
 
