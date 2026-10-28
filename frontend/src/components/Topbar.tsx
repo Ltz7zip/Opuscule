@@ -115,7 +115,7 @@ export function Topbar({
           {isWorkspace && (
             <>
               <ThemeToggle />
-              <a className="nav-link" href="/">
+              <a className="nav-link" href={worldSlug ? `/w/${worldSlug}/wiki` : "/"}>
                 公开页
               </a>
               {session?.authenticated && (
