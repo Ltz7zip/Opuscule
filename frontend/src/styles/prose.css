@@ -158,3 +158,11 @@
 .wiki-page .wiki-article .rich-text .rich-column > :first-child { margin-top: 0; }
 .site-article-body .rich-text .rich-column > :last-child,
 .wiki-page .wiki-article .rich-text .rich-column > :last-child { margin-bottom: 0; }
+
+/* Typeset math (\( … \) inline, \[ … \] display) in published text and in the
+   editor. KaTeX and its stylesheet load only on pages that contain a formula. */
+.rich-math-inline { display:inline; }
+.rich-math-block { display:block; margin:14px 0; overflow-x:auto; overflow-y:hidden; }
+.rich-math-inline .katex { font-size:1.02em; }
+.rich-math-block .katex-display { margin:0; }
+.rich-math-pending { padding:0 var(--space-1); border-radius: var(--radius-xs); background:var(--muted); color:var(--muted-foreground); font-family: var(--font-mono); font-size:.92em; white-space:pre-wrap; word-break:break-word; }

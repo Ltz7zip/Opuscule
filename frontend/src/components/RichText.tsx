@@ -5,7 +5,9 @@ import {
   useSharedSource,
   useVtTarget,
 } from "../lib/viewTransition";
+import { hasMath, splitMath } from "../lib/math";
 import type { CardSummary, TiptapDoc, TiptapNode } from "../types";
+import { MathFormula } from "./MathFormula";
 import { WorldTimelineBlock } from "./WorldTimelineBlock";
 
 function safeHref(value: unknown): string | null {
@@ -168,8 +170,31 @@ function linkifyText(text: string, key: string, context: RichContext): ReactNode
   return parts;
 }
 
+/**
+ * Render a text run, typesetting `\(…\)` / `\[…\]` formulas. Code marks keep
+ * their source verbatim, so a formula inside inline code stays code.
+ */
+function renderInlineText(text: string, key: string, context: RichContext, linkify: boolean): ReactNode {
+  if (!hasMath(text)) return linkify ? linkifyText(text, key, context) : text;
+  return (
+    <Fragment key={key}>
+      {splitMath(text).map((segment, index) =>
+        segment.kind === "text" ? (
+          <Fragment key={`${key}-${index}`}>
+            {linkify ? linkifyText(segment.value, `${key}-${index}`, context) : segment.value}
+          </Fragment>
+        ) : (
+          <MathFormula key={`${key}-${index}`} tex={segment.value} display={segment.kind === "block"} />
+        ),
+      )}
+    </Fragment>
+  );
+}
+
 function renderText(node: TiptapNode, key: string, context: RichContext): ReactNode {
-  let content: ReactNode = node.marks?.length ? (node.text ?? "") : linkifyText(node.text ?? "", key, context);
+  const marks = node.marks ?? [];
+  const isCode = marks.some((mark) => mark.type === "code");
+  let content: ReactNode = renderInlineText(node.text ?? "", key, context, marks.length === 0 && !isCode);
   for (const mark of node.marks ?? []) {
     const type = mark.type;
     if (type === "bold") content = <strong>{content}</strong>;
@@ -188,6 +213,19 @@ function renderText(node: TiptapNode, key: string, context: RichContext): ReactN
     }
   }
   return <Fragment key={key}>{content}</Fragment>;
+}
+
+/** Verbatim text of a subtree: code blocks never typeset or link their content. */
+function nodePlainText(node: TiptapNode): string {
+  const parts: string[] = [];
+  const stack: TiptapNode[] = [node];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current) continue;
+    if (typeof current.text === "string") parts.push(current.text);
+    if (Array.isArray(current.content)) stack.push(...[...current.content].reverse());
+  }
+  return parts.join("");
 }
 
 function renderChildren(node: TiptapNode, context: RichContext): ReactNode {
@@ -239,7 +277,7 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
       </div>
     );
   }
-  if (node.type === "codeBlock") return <pre key={key}><code>{renderChildren(node, context)}</code></pre>;
+  if (node.type === "codeBlock") return <pre key={key}><code>{nodePlainText(node)}</code></pre>;
   if (node.type === "image") {
     const src = safeHref(node.attrs?.src);
     if (!src) return null;
