@@ -3,6 +3,10 @@ export const typeLabels: Record<string, string> = {
   place: "地点",
   event: "事件",
   note: "笔记",
+  faction: "势力",
+  item: "器物",
+  bestiary: "博物",
+  route: "航路",
   tool: "工具",
 };
 

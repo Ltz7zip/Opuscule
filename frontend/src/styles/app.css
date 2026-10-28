@@ -1202,6 +1202,9 @@ a.avatar:hover { border-color: var(--border-strong); color: var(--foreground); }
 .editor-table-bar button { padding: var(--space-1) var(--space-2); border:0; border-radius: var(--radius-sm); background:transparent; color:var(--muted-foreground); font-size: var(--text-xs); }
 .editor-table-bar button:hover { background:var(--muted); color:var(--foreground); }
 .rich-table { width:100%; margin:18px 0; border-collapse:collapse; table-layout:fixed; }
+.rich-table-wrap { margin:18px 0; overflow-x:auto; }
+.rich-table-wrap .rich-table { margin: 0; }
+@media (max-width: 640px) { .rich-table-wrap .rich-table { min-width: 520px; } }
 .rich-table td, .rich-table th { padding: var(--space-2) var(--space-2); border:1px solid var(--border-strong); vertical-align:top; }
 .rich-table th { background:var(--muted); text-align:left; }
 .tiptap-mention { display:inline; padding: 1px var(--space-1); border-radius: 0; background:var(--ink-link-soft); color:var(--ink-link); text-decoration:none; }

@@ -39,7 +39,11 @@ export function WorldTimelineBlock({
     };
   }, [timelineSlug, worldSlug]);
 
-  const entries = (data?.entries ?? []).slice().sort((a, b) => a.year - b.year).slice(0, 12);
+  const all = (data?.entries ?? [])
+    .slice()
+    .sort((a, b) => a.year - b.year || (a.month ?? 0) - (b.month ?? 0));
+  const entries = all.slice(0, 20);
+  const hidden = all.length - entries.length;
   const label = data?.timeline?.name || name || timelineSlug;
 
   return (
@@ -69,6 +73,9 @@ export function WorldTimelineBlock({
             </li>
           ))}
         </ol>
+      )}
+      {hidden > 0 && (
+        <p className="rich-timeline-empty">还有 {hidden} 条未显示，见时间线页。</p>
       )}
     </section>
   );

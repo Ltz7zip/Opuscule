@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ArrowUpRight, BookOpen, Clock3, MessageSquare, PenLine } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Clock3, MessageSquare, PenLine } from "lucide-react";
 
 import { fetchWorld, fetchWorldConcept, type ApiError } from "../api";
 import { collectConceptMentions, CONCEPT_TOP_SECTION } from "../lib/conceptMentions";
@@ -42,6 +42,9 @@ export function WorldConceptPage({
   const [error, setError] = useState<string | null>(null);
   const [peekSlug, setPeekSlug] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const articleRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (initialWorld && initialConcept) return;
@@ -98,6 +101,16 @@ export function WorldConceptPage({
     [publicCards, stats],
   );
   const totalMentions = stats.totalMentions;
+  const typeStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const card of publicCards) {
+      counts.set(card.type_key, (counts.get(card.type_key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 5)
+      .map(([key, count]) => ({ label: typeLabel(key), count }));
+  }, [publicCards]);
   const uncited = Math.max(0, publicCards.length - citations.length);
   const peekAppeared = peekSlug ? (stats.sectionsBySlug[peekSlug] ?? []) : [];
   const charCount = concept?.body_text.replace(/\s/g, "").length ?? 0;
@@ -125,6 +138,42 @@ export function WorldConceptPage({
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
+
+  useEffect(() => {
+    const node = articleRef.current;
+    if (!node) return;
+    const update = () => {
+      const headings = Array.from(node.querySelectorAll<HTMLElement>("h2[id], h3[id]"));
+      let active: string | null = null;
+      for (const heading of headings) {
+        if (heading.getBoundingClientRect().top <= 130) active = heading.id;
+        else break;
+      }
+      setActiveId((prev) => (prev === active ? prev : active));
+      const rect = node.getBoundingClientRect();
+      const span = Math.max(rect.height - window.innerHeight * 0.6, 1);
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      const percent = Math.round(((-rect.top + 140) / span) * 100);
+      const next = atEnd ? 100 : Math.min(100, Math.max(0, percent));
+      setProgress((prev) => (prev === next ? prev : next));
+    };
+    let ticking = false;
+    const schedule = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        ticking = false;
+        update();
+      });
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [concept]);
 
   if (loading) {
     return (
@@ -167,8 +216,12 @@ export function WorldConceptPage({
       )}
       <main id="main-content" className="concept-main">
         <header className="concept-hero">
+          <div className="concept-cover" aria-hidden="true">
+            <ContourPlate seed={world.slug} />
+            <span className="concept-cover-glyph">{world.name.trim().slice(0, 1)}</span>
+          </div>
           <div className="concept-hero-copy">
-            <p className="concept-overline">WORLD CONCEPT · {world.is_public_read ? "OPEN" : "PRIVATE"} WORLD</p>
+            <p className="concept-overline">世界概念 · {world.is_public_read ? "公开世界" : "私有世界"}</p>
             <h1>{world.name}</h1>
             {world.description && <p className="concept-lede">{world.description}</p>}
             <div className="concept-meta">
@@ -196,11 +249,6 @@ export function WorldConceptPage({
               </div>
             )}
           </div>
-          <div className="concept-cover" aria-hidden="true">
-            <ContourPlate seed={world.slug} />
-            <span className="concept-cover-glyph">{world.name.trim().slice(0, 1)}</span>
-            <span className="concept-cover-label">A WORLD, READ AS ONE PAGE</span>
-          </div>
         </header>
 
         <div className="concept-columns">
@@ -211,19 +259,29 @@ export function WorldConceptPage({
             ) : (
               <ol>
                 {toc.map((item) => (
-                  <li key={item.id} className={`level-${item.level}`}>
-                    <a href={`#${item.id}`}>{item.text}</a>
+                  <li
+                    key={item.id}
+                    className={`level-${item.level}${activeId === item.id ? " is-active" : ""}`}
+                  >
+                    <a href={`#${item.id}`} aria-current={activeId === item.id ? "location" : undefined}>
+                      {item.text}
+                    </a>
                   </li>
                 ))}
               </ol>
             )}
             <div className="concept-toc-foot">
-              <BookOpen size={14} />
-              <span>世界概念不是卡片；它是这个世界的第一篇连续叙事。</span>
+              <a className="concept-toc-index" href={`/w/${worldSlug}/wiki/cards`}>
+                设定集 · {publicCards.length} 个词条 →
+              </a>
+              <span className="concept-toc-note">
+                {citations.length} 个词条被本文引用
+                {uncited > 0 ? `，其余 ${uncited} 个留在设定集里` : ""}。
+              </span>
             </div>
           </nav>
 
-          <article className="concept-article" onClick={onArticleClick}>
+          <article className="concept-article" onClick={onArticleClick} ref={articleRef}>
             <RichText
               doc={concept.body_json}
               cards={publicCards}
@@ -232,48 +290,28 @@ export function WorldConceptPage({
               mentionMode="reading"
             />
 
-            <section className="concept-citations" aria-labelledby="concept-citations-title">
-              <div className="concept-citations-head">
-                <p className="concept-rail-label" id="concept-citations-title">本页引用</p>
-                <span>{citations.length} 个词条 · {totalMentions} 处提及</span>
-              </div>
-              {citations.length === 0 ? (
-                <p className="concept-citations-empty">这篇概念还没有引用卡片。在编辑器里输入 @ 可以引用世界中的设定。</p>
-              ) : (
-                <>
-                  <ul>
-                    {citations.map((card) => (
-                      <li key={card.id}>
-                        <button
-                          type="button"
-                          className="concept-cited-chip"
-                          onClick={() => setPeekSlug(card.slug)}
-                        >
-                          <span>{card.title}</span>
-                          <small>
-                            {typeLabel(card.type_key)} · {stats.mentionCounts[card.slug]} 处
-                          </small>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  {uncited > 0 && (
-                    <p className="concept-citations-more">
-                      还有 {uncited} 个词条没有被概念引用；它们仍在设定集里。
-                    </p>
-                  )}
-                </>
-              )}
-            </section>
-
             <footer className="concept-article-foot">
-              <span>{charCount.toLocaleString("zh-CN")} 字</span>
-              <span>最后发布 {formatDate(concept.published_at)}</span>
-              <a href={`/w/${worldSlug}/wiki/cards`}>浏览设定索引 →</a>
+              <span>{charCount.toLocaleString("zh-CN")} 字 · 第 {concept.revision} 版</span>
+              <span>更新于 {formatDate(concept.updated_at)}</span>
+              <a href={`/w/${worldSlug}/wiki/cards`}>设定索引 →</a>
             </footer>
           </article>
 
-          <aside className="concept-rail" aria-label="概念信息">
+          <aside className="concept-rail" aria-label="世界统计与引用">
+            <p className="concept-rail-label">这座世界</p>
+            <div className="concept-stat-grid">
+              <div className="concept-stat">
+                <b>{publicCards.length}</b>
+                <span>词条</span>
+              </div>
+              {typeStats.map((item) => (
+                <div key={item.label} className="concept-stat">
+                  <b>{item.count}</b>
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+
             <div className="concept-rail-block">
               <p className="concept-rail-label">
                 本页引用 <span className="concept-rail-count">{citations.length} / {publicCards.length}</span>
@@ -281,30 +319,38 @@ export function WorldConceptPage({
               {citations.length === 0 ? (
                 <p className="concept-rail-empty">暂无引用</p>
               ) : (
-                <ul>
-                  {citations.slice(0, 6).map((card) => (
-                    <li key={card.id}>
-                      <button
-                        type="button"
-                        className="concept-rail-cited"
-                        onClick={() => setPeekSlug(card.slug)}
-                      >
-                        {card.title}
-                        <small>{stats.mentionCounts[card.slug]}</small>
-                      </button>
-                    </li>
+                <div className="concept-rail-refs">
+                  {citations.map((card) => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className="concept-rail-ref"
+                      onClick={() => setPeekSlug(card.slug)}
+                      title={`${typeLabel(card.type_key)} · ${stats.mentionCounts[card.slug]} 处`}
+                    >
+                      {card.title}
+                    </button>
                   ))}
-                </ul>
+                </div>
               )}
+              <p className="concept-rail-note">{totalMentions} 处提及 · 点词条可在原位侧窥</p>
             </div>
+
             <div className="concept-rail-block">
-              <p className="concept-rail-label">世界</p>
-              <p className="concept-rail-world">{world.name}</p>
-              <p className="concept-rail-sub">{publicCards.length} 份公开文档 · 最近发布 {formatDate(concept.published_at)}</p>
+              <p className="concept-rail-label">
+                阅读进度 <span className="concept-rail-count">{progress}%</span>
+              </p>
+              <div
+                className="concept-progress"
+                role="progressbar"
+                aria-label="阅读进度"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+              >
+                <span style={{ width: `${progress}%` }} />
+              </div>
             </div>
-            <a className="concept-rail-link" href={`/w/${worldSlug}/wiki/cards`}>
-              进入设定集 <ArrowUpRight size={14} />
-            </a>
           </aside>
         </div>
       </main>

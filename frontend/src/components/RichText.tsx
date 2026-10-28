@@ -328,7 +328,13 @@ function renderNode(node: TiptapNode, key: string, context: RichContext): ReactN
     );
   }
   if (node.type === "table") {
-    return <table className="rich-table" key={key}><tbody>{renderChildren(node, context)}</tbody></table>;
+    return (
+      <div className="rich-table-wrap" key={key}>
+        <table className="rich-table">
+          <tbody>{renderChildren(node, context)}</tbody>
+        </table>
+      </div>
+    );
   }
   if (node.type === "tableRow") return <tr key={key}>{renderChildren(node, context)}</tr>;
   if (node.type === "tableCell") return <td key={key}>{renderChildren(node, context)}</td>;
