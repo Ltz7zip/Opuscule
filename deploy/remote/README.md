@@ -57,3 +57,19 @@ sudo bash /srv/opuscule/deploy/remote/update.sh
 
 服务器**不跑** 12 秒的地形生成：在本地用 `manage.py terrain_push` 推上去即可
 （见 `docs/plans/20261026-local-terrain-upload.md`）。
+
+## 内容同步（某个世界的正文）
+
+代码部署不会带上数据库里的内容。要把本地某个世界（概念、卡片、时间线、纪元、地图标记）
+推到服务器，用 `world_snapshot`：
+
+```bash
+# 本地导出（不含用户/成员/评论/媒体）
+cd backend && .venv/bin/python manage.py world_snapshot --slug wuhai --out /tmp/wuhai.json
+scp /tmp/wuhai.json opuscule:/tmp/
+
+# 服务器载入（按 slug 原地更新，保留评论与主键；默认不删除服务器上多出的内容）
+ssh opuscule "cd /srv/opuscule/backend && sudo -u opuscule .venv/bin/python manage.py world_snapshot --slug wuhai --in /tmp/wuhai.json"
+```
+
+需要让服务器与快照完全一致时再加 `--prune`（会删掉快照里没有的卡片与时间线条目）。
